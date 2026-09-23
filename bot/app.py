@@ -19,6 +19,7 @@ import os
 import re
 import shlex
 import subprocess
+import sys
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from typing import Any
@@ -43,6 +44,15 @@ DEFAULT_HUB_PORT = 8765
 DEFAULT_BIND_HOST = "0.0.0.0"  # nosec: B104
 
 
+class BotConfigurationError(ValueError):
+    """Raised when one or more required bot configuration settings are missing or invalid."""
+
+    def __init__(self, issues: list[tuple[str, str, str]]) -> None:
+        message = "; ".join(f"{name}: {desc}" for name, desc, _ in issues)
+        super().__init__(message)
+        self.issues = issues
+
+
 @dataclass
 class BotConfig:
     commands_config_path: str = DEFAULT_COMMANDS_CONFIG
@@ -55,6 +65,30 @@ class BotConfig:
     agent_token: str = ""
     slack_bot_token: str = ""
     slack_app_token: str = ""
+
+    def validate(self) -> None:
+        """Perform preflight checks on critical configuration."""
+        issues: list[tuple[str, str, str]] = []
+        if not self.slack_bot_token:
+            issues.append((
+                "SLACK_BOT_TOKEN",
+                "Slack Bot User OAuth Token is required",
+                "Set SLACK_BOT_TOKEN environment variable (starts with 'xoxb-')",
+            ))
+        if not self.slack_app_token:
+            issues.append((
+                "SLACK_APP_TOKEN",
+                "Slack App-Level Token is required for Socket Mode",
+                "Set SLACK_APP_TOKEN environment variable (starts with 'xapp-')",
+            ))
+        if self.hub_enabled and self.hub_port <= 0:
+            issues.append((
+                "HUB_PORT",
+                f"Invalid HUB_PORT '{self.hub_port}'",
+                "Must be a valid TCP port number (e.g. 8765)",
+            ))
+        if issues:
+            raise BotConfigurationError(issues)
 
     @classmethod
     def from_env(cls) -> BotConfig:
@@ -363,12 +397,38 @@ def create_bot_app(config: BotConfig | None = None) -> tuple[AsyncApp, Hub | Non
 # Main Entry Point
 # ---------------------------------------------------------------------------
 
+def format_bot_preflight_error(issues: list[tuple[str, str, str]]) -> str:
+    """Format bot configuration issues into a clean, professional diagnostic report."""
+    width = 76
+    sep = "=" * width
+    lines = [
+        sep,
+        "[SHANGO-BOT] PREFLIGHT CONFIGURATION CHECK FAILED".center(width),
+        sep,
+        "The bot cannot start because required configuration parameters are missing",
+        "or invalid. Please review the following issues:",
+        "",
+    ]
+    for name, desc, fix in issues:
+        lines.append(f"  * {name}:")
+        lines.append(f"      Problem:    {desc}")
+        lines.append(f"      Resolution: {fix}")
+        lines.append("")
+
+    lines.extend([
+        "Slack App Setup Checklist:",
+        "  1. Go to https://api.slack.com/apps and select your app.",
+        "  2. Install app to workspace to obtain SLACK_BOT_TOKEN (xoxb-...).",
+        "  3. Enable Socket Mode and generate SLACK_APP_TOKEN (xapp-...) with 'connections:write'.",
+        "  4. Set environment variables or supply them via .env / docker-compose.yml.",
+        sep,
+    ])
+    return "\n".join(lines)
+
+
 async def main() -> None:
     config = BotConfig.from_env()
-    if not config.slack_bot_token:
-        raise ValueError("SLACK_BOT_TOKEN environment variable is required")
-    if not config.slack_app_token:
-        raise ValueError("SLACK_APP_TOKEN environment variable is required")
+    config.validate()
 
     app, hub, _ = create_bot_app(config)
     tasks: list[asyncio.Task] = []
@@ -381,5 +441,20 @@ async def main() -> None:
     await asyncio.gather(*tasks)
 
 
+def run_main() -> None:
+    """Entry point for shango-bot with preflight error handling and clean exit."""
+    try:
+        asyncio.run(main())
+    except BotConfigurationError as exc:
+        print(format_bot_preflight_error(exc.issues), file=sys.stderr)
+        sys.exit(2)
+    except KeyboardInterrupt:
+        log.info("Bot stopped by user (Ctrl+C).")
+        sys.exit(0)
+    except Exception as exc:  # noqa: BLE001
+        log.critical("Fatal bot runtime error: %s", exc)
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_main()

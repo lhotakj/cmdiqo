@@ -16,6 +16,37 @@ def run_cmd(cmd: list[str], check: bool = True) -> None:
     subprocess.run(cmd, cwd=str(ROOT), check=check)
 
 
+def sign_windows_binary(exe_path: Path) -> None:
+    """Digitally sign the Windows executable using Authenticode and export certificate."""
+    cer_path = exe_path.parent / "shango-agent.cer"
+    ps_cmd = (
+        "$cert = Get-ChildItem Cert:\\CurrentUser\\My -CodeSigningCert | Select-Object -First 1; "
+        "if (-not $cert) { "
+        "$cert = New-SelfSignedCertificate -Type CodeSigningCert "
+        "-Subject 'CN=ShangoHub, O=ShangoHub, OU=Verified Build' "
+        "-CertStoreLocation 'Cert:\\CurrentUser\\My' "
+        "-HashAlgorithm SHA256 "
+        "-NotAfter (Get-Date).AddYears(5) "
+        "}; "
+        f"Export-Certificate -Cert $cert -FilePath '{cer_path}' | Out-Null; "
+        f"$sig = Set-AuthenticodeSignature -FilePath '{exe_path}' -Certificate $cert -TimestampServer 'http://timestamp.digicert.com' -HashAlgorithm SHA256; "
+        "if ($sig.SignatureType -ne 'Authenticode') { "
+        f"Set-AuthenticodeSignature -FilePath '{exe_path}' -Certificate $cert -HashAlgorithm SHA256 | Out-Null "
+        "}; "
+        f"Get-AuthenticodeSignature '{exe_path}' | Format-List Status, StatusMessage, SignerCertificate, TimeStamperCertificate"
+    )
+    print("\n[*] Digitally signing Windows executable...")
+    try:
+        res = subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, text=True, check=False)
+        if "SignerCertificate" in res.stdout:
+            print(f"[+] Successfully signed {exe_path.name}")
+            print(f"[+] Public certificate exported to {cer_path}")
+        else:
+            print(f"[-] Code signing warning: {res.stderr or res.stdout}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[-] Code signing skipped: {exc}")
+
+
 def main() -> None:
     system = platform.system().lower()
     machine = platform.machine().lower()
@@ -68,9 +99,12 @@ def main() -> None:
     if dist_path.exists():
         size_mb = dist_path.stat().st_size / (1024 * 1024)
         print(f"\n[+] Success! Built standalone binary: {dist_path} ({size_mb:.1f} MB)")
+        if system == "windows":
+            sign_windows_binary(dist_path)
     else:
         print("\n[-] Build finished but output binary was not found in dist/")
 
 
 if __name__ == "__main__":
     main()
+

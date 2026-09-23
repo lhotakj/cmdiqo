@@ -6,7 +6,16 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.agent import AgentConfig, build_argv, connect, execute, handle
+from agent.agent import (
+    AgentConfig,
+    ConfigurationError,
+    build_argv,
+    connect,
+    execute,
+    format_preflight_error,
+    handle,
+    main,
+)
 
 
 def test_agent_config_missing_env(monkeypatch):
@@ -18,6 +27,34 @@ def test_agent_config_missing_env(monkeypatch):
     monkeypatch.setenv("HUB_URL", "ws://localhost:8765")
     with pytest.raises(ValueError, match="AGENT_TOKEN"):
         AgentConfig.from_env()
+
+
+def test_agent_config_invalid_scheme(monkeypatch):
+    monkeypatch.setenv("HUB_URL", "http://localhost:8765")
+    monkeypatch.setenv("AGENT_TOKEN", "test-token")
+    with pytest.raises(ConfigurationError, match="Invalid WebSocket scheme"):
+        AgentConfig.from_env()
+
+
+def test_agent_config_nonexistent_file(monkeypatch):
+    monkeypatch.delenv("HUB_URL", raising=False)
+    monkeypatch.delenv("AGENT_TOKEN", raising=False)
+    with pytest.raises(ConfigurationError, match="Configuration file not found"):
+        AgentConfig.load(args=["--config", "nonexistent_file_path_123.json"])
+
+
+def test_agent_config_malformed_json(tmp_path, monkeypatch):
+    bad_cfg = tmp_path / "bad.json"
+    bad_cfg.write_text("{not valid json", encoding="utf-8")
+    with pytest.raises(ConfigurationError, match="Failed to read/parse JSON"):
+        AgentConfig.load(args=["--config", str(bad_cfg)])
+
+
+def test_agent_config_invalid_delay(monkeypatch):
+    monkeypatch.setenv("HUB_URL", "ws://localhost:8765")
+    monkeypatch.setenv("AGENT_TOKEN", "test-token")
+    with pytest.raises(ConfigurationError, match="RECONNECT_DELAY"):
+        AgentConfig.load(args=["--reconnect-delay", "-5.0"])
 
 
 def test_agent_config_success(monkeypatch):
@@ -172,3 +209,60 @@ async def test_agent_handle_invalid_message():
     await handle(mock_ws, "not-json")
     await handle(mock_ws, json.dumps({"type": "not_exec"}))
     mock_ws.send.assert_not_awaited()
+
+
+def test_format_preflight_error():
+    issues = [
+        ("TEST_VAR", "Test variable is required", "Provide via TEST_VAR"),
+    ]
+    formatted = format_preflight_error(issues)
+    assert "[SHANGO-AGENT] PREFLIGHT CONFIGURATION CHECK FAILED" in formatted
+    assert "* TEST_VAR:" in formatted
+    assert "Problem:    Test variable is required" in formatted
+    assert "Resolution: Provide via TEST_VAR" in formatted
+    assert "Quick setup alternatives:" in formatted
+
+
+def test_agent_main_configuration_error(capsys, monkeypatch):
+    monkeypatch.delenv("HUB_URL", raising=False)
+    monkeypatch.delenv("AGENT_TOKEN", raising=False)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(argv=[])
+    assert exc_info.value.code == 2
+
+    captured = capsys.readouterr()
+    assert "[SHANGO-AGENT] PREFLIGHT CONFIGURATION CHECK FAILED" in captured.err
+    assert "HUB_URL" in captured.err
+    assert "AGENT_TOKEN" in captured.err
+
+
+def test_agent_main_keyboard_interrupt(monkeypatch):
+    monkeypatch.setenv("HUB_URL", "ws://localhost:8765")
+    monkeypatch.setenv("AGENT_TOKEN", "token")
+
+    def mock_run(coro):
+        coro.close()
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(asyncio, "run", mock_run)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(argv=[])
+    assert exc_info.value.code == 0
+
+
+def test_agent_main_unhandled_exception(monkeypatch):
+    monkeypatch.setenv("HUB_URL", "ws://localhost:8765")
+    monkeypatch.setenv("AGENT_TOKEN", "token")
+
+    def mock_run(coro):
+        coro.close()
+        raise RuntimeError("simulated crash")
+
+    monkeypatch.setattr(asyncio, "run", mock_run)
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(argv=[])
+    assert exc_info.value.code == 1
+

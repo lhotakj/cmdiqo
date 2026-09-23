@@ -9,13 +9,16 @@ import pytest
 
 from bot.app import (
     BotConfig,
+    BotConfigurationError,
     _run_python,
     _run_shell_local,
     create_bot_app,
     execute_command,
+    format_bot_preflight_error,
     handle_command,
     help_text,
     reply_output,
+    run_main,
 )
 
 
@@ -361,3 +364,69 @@ async def test_main_missing_tokens(monkeypatch):
     monkeypatch.delenv("SLACK_APP_TOKEN", raising=False)
     with pytest.raises(ValueError, match="SLACK_APP_TOKEN"):
         await main()
+
+
+def test_bot_config_validate_invalid_port():
+    cfg = BotConfig(
+        slack_bot_token="xoxb-test",
+        slack_app_token="xapp-test",
+        hub_enabled=True,
+        hub_port=0,
+    )
+    with pytest.raises(BotConfigurationError, match="HUB_PORT"):
+        cfg.validate()
+
+
+def test_format_bot_preflight_error():
+    issues = [
+        ("SLACK_BOT_TOKEN", "Slack Bot User OAuth Token is required", "Set SLACK_BOT_TOKEN"),
+    ]
+    formatted = format_bot_preflight_error(issues)
+    assert "[SHANGO-BOT] PREFLIGHT CONFIGURATION CHECK FAILED" in formatted
+    assert "* SLACK_BOT_TOKEN:" in formatted
+    assert "Slack App Setup Checklist:" in formatted
+
+
+def test_run_main_configuration_error(capsys, monkeypatch):
+    monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("SLACK_APP_TOKEN", raising=False)
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_main()
+    assert exc_info.value.code == 2
+
+    captured = capsys.readouterr()
+    assert "[SHANGO-BOT] PREFLIGHT CONFIGURATION CHECK FAILED" in captured.err
+    assert "SLACK_BOT_TOKEN" in captured.err
+
+
+def test_run_main_keyboard_interrupt(monkeypatch):
+    import asyncio
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+    monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-test")
+
+    def mock_run(coro):
+        coro.close()
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(asyncio, "run", mock_run)
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_main()
+    assert exc_info.value.code == 0
+
+
+def test_run_main_unhandled_exception(monkeypatch):
+    import asyncio
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+    monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-test")
+
+    def mock_run(coro):
+        coro.close()
+        raise RuntimeError("simulated bot crash")
+
+    monkeypatch.setattr(asyncio, "run", mock_run)
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_main()
+    assert exc_info.value.code == 1

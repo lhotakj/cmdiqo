@@ -37,10 +37,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
@@ -59,14 +59,7 @@ jobs:
       - name: Build Standalone Binary with Maximum PyInstaller & UPX Compression
         shell: bash
         run: |
-          EXTRA_FLAGS="--optimize 2 --exclude-module tkinter --exclude-module unittest --exclude-module pydoc --exclude-module test --exclude-module sqlite3"
-          if [[ "${{ matrix.os }}" != "windows"* ]]; then
-            EXTRA_FLAGS="$EXTRA_FLAGS --strip"
-          fi
-          if [ -f "agent/version_info.txt" ] && [[ "${{ matrix.os }}" == "windows"* ]]; then
-            EXTRA_FLAGS="$EXTRA_FLAGS --version-file agent/version_info.txt"
-          fi
-          pyinstaller --onefile --clean --name shango-agent $EXTRA_FLAGS agent/agent.py
+          python scripts/build_agent.py
 
       - name: Sign Windows Binary (Authenticode)
         if: matrix.os == 'windows-latest'
@@ -86,22 +79,44 @@ jobs:
               [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable
             )
           } else {
-            Write-Host "[*] Generating dedicated ShangoHub GitHub Actions code-signing certificate..."
-            $cert = New-SelfSignedCertificate -Type CodeSigningCert `
-              -Subject "CN=ShangoHub (GitHub Actions), O=ShangoHub, OU=Verified Build" `
-              -CertStoreLocation "Cert:\CurrentUser\My" `
-              -HashAlgorithm SHA256 `
-              -NotAfter (Get-Date).AddYears(5)
+            Write-Host "[*] Using dedicated ShangoHub code-signing certificate..."
+            $cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Select-Object -First 1
+            if (-not $cert) {
+              $cert = New-SelfSignedCertificate -Type CodeSigningCert `
+                -Subject "CN=ShangoHub (GitHub Actions), O=ShangoHub, OU=Verified Build" `
+                -CertStoreLocation "Cert:\CurrentUser\My" `
+                -HashAlgorithm SHA256 `
+                -NotAfter (Get-Date).AddYears(5)
+            }
           }
 
           # Export public certificate for users to verify or install
           Export-Certificate -Cert $cert -FilePath "shango-agent.cer"
 
-          # Sign executable with RFC3161 timestamp server
-          Set-AuthenticodeSignature -FilePath "${{ matrix.binary_src }}" `
-            -Certificate $cert `
-            -TimestampServer "http://timestamp.digicert.com" `
-            -HashAlgorithm SHA256
+          # Sign executable with RFC3161 timestamp server with fallback
+          $tsServers = @("http://timestamp.digicert.com", "http://timestamp.sectigo.com")
+          $signed = $false
+          foreach ($ts in $tsServers) {
+            try {
+              $sig = Set-AuthenticodeSignature -FilePath "${{ matrix.binary_src }}" `
+                -Certificate $cert `
+                -TimestampServer $ts `
+                -HashAlgorithm SHA256
+              if ($sig.SignatureType -eq "Authenticode") {
+                $signed = $true
+                Write-Host "[+] Successfully signed with timestamp server: $ts"
+                break
+              }
+            } catch {
+              Write-Warning "Timestamp server $ts failed: $_"
+            }
+          }
+          if (-not $signed) {
+            Write-Host "[*] Signing without external timestamp server..."
+            Set-AuthenticodeSignature -FilePath "${{ matrix.binary_src }}" `
+              -Certificate $cert `
+              -HashAlgorithm SHA256
+          }
 
           Write-Host "[+] Verification of signed binary:"
           Get-AuthenticodeSignature "${{ matrix.binary_src }}" | Format-List
@@ -113,7 +128,7 @@ jobs:
           chmod +x ${{ matrix.binary_dest }} || true
 
       - name: Upload Binary Artifact (for direct download)
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: |

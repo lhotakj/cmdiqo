@@ -34,6 +34,15 @@ log = logging.getLogger("shango-agent")
 IS_WINDOWS = platform.system().lower() == "windows"
 
 
+class ConfigurationError(ValueError):
+    """Raised when one or more required configuration settings are missing or invalid."""
+
+    def __init__(self, issues: list[tuple[str, str, str]]) -> None:
+        message = "; ".join(f"{name}: {desc}" for name, desc, _ in issues)
+        super().__init__(message)
+        self.issues = issues
+
+
 @dataclass
 class AgentConfig:
     hub_url: str
@@ -68,29 +77,75 @@ class AgentConfig:
         if parsed.log_level:
             logging.getLogger().setLevel(parsed.log_level.upper())
 
+        issues: list[tuple[str, str, str]] = []
         file_cfg: dict[str, Any] = {}
         config_path = parsed.config or os.environ.get("AGENT_CONFIG")
-        if config_path and os.path.exists(config_path):
-            with open(config_path, "r", encoding="utf-8") as f:
-                file_cfg = json.load(f)
 
+        # 1. Preflight check: Config file
+        if config_path:
+            if not os.path.exists(config_path):
+                issues.append((
+                    "CONFIG_FILE",
+                    f"Configuration file not found at '{config_path}'",
+                    "Ensure file exists or check path passed via --config / AGENT_CONFIG",
+                ))
+            else:
+                try:
+                    with open(config_path, "r", encoding="utf-8") as f:
+                        file_cfg = json.load(f)
+                except (json.JSONDecodeError, OSError) as exc:
+                    issues.append((
+                        "CONFIG_FILE",
+                        f"Failed to read/parse JSON in '{config_path}': {exc}",
+                        "Check file permissions and ensure the file is valid JSON",
+                    ))
+
+        # 2. Preflight check: Hub URL
         hub_url = parsed.hub_url or os.environ.get("HUB_URL") or file_cfg.get("hub_url")
         if not hub_url:
-            raise ValueError("HUB_URL is required (via --hub-url, HUB_URL env var, or config file)")
+            issues.append((
+                "HUB_URL",
+                "Hub WebSocket URL is required",
+                "Provide via --hub-url, HUB_URL environment variable, or in config file",
+            ))
+        elif not hub_url.startswith(("ws://", "wss://")):
+            issues.append((
+                "HUB_URL",
+                f"Invalid WebSocket scheme for '{hub_url}'",
+                "Must begin with ws:// (unencrypted) or wss:// (encrypted), e.g. ws://192.168.1.10:8765",
+            ))
 
+        # 3. Preflight check: Shared secret token
         token = parsed.token or os.environ.get("AGENT_TOKEN") or file_cfg.get("token")
         if not token:
-            raise ValueError("AGENT_TOKEN is required (via --token, AGENT_TOKEN env var, or config file)")
+            issues.append((
+                "AGENT_TOKEN",
+                "Shared secret token is required",
+                "Provide via --token, AGENT_TOKEN environment variable, or in config file",
+            ))
 
-        name = parsed.name or os.environ.get("AGENT_NAME") or file_cfg.get("name") or socket.gethostname()
-
+        # 4. Preflight check: Reconnect delay
         delay_val = (
             parsed.reconnect_delay
             if parsed.reconnect_delay is not None
             else os.environ.get("RECONNECT_DELAY", file_cfg.get("reconnect_delay", 5.0))
         )
-        reconnect_delay = float(delay_val)
+        try:
+            reconnect_delay = float(delay_val)
+            if reconnect_delay <= 0:
+                raise ValueError("delay must be positive")
+        except (ValueError, TypeError):
+            issues.append((
+                "RECONNECT_DELAY",
+                f"Invalid reconnect delay value '{delay_val}'",
+                "Must be a positive number of seconds (e.g. 5.0)",
+            ))
+            reconnect_delay = 5.0
 
+        if issues:
+            raise ConfigurationError(issues)
+
+        name = parsed.name or os.environ.get("AGENT_NAME") or file_cfg.get("name") or socket.gethostname()
         return cls(hub_url=hub_url, token=token, name=name, reconnect_delay=reconnect_delay)
 
 
@@ -207,5 +262,49 @@ async def run_agent(config: AgentConfig | None = None) -> None:
             delay = min(60.0, delay * 1.5)  # exponential backoff with ceiling
 
 
+def format_preflight_error(issues: list[tuple[str, str, str]]) -> str:
+    """Format configuration issues into a clean, professional diagnostic report."""
+    width = 76
+    sep = "=" * width
+    lines = [
+        sep,
+        "[SHANGO-AGENT] PREFLIGHT CONFIGURATION CHECK FAILED".center(width),
+        sep,
+        "The agent cannot start because required configuration parameters are missing",
+        "or invalid. Please review the following issues:",
+        "",
+    ]
+    for name, desc, fix in issues:
+        lines.append(f"  * {name}:")
+        lines.append(f"      Problem:    {desc}")
+        lines.append(f"      Resolution: {fix}")
+        lines.append("")
+
+    lines.extend([
+        "Quick setup alternatives:",
+        "  - CLI:  shango-agent --hub-url ws://<HUB_IP>:8765 --token <AGENT_TOKEN>",
+        "  - Env:  set HUB_URL=ws://<HUB_IP>:8765 && set AGENT_TOKEN=<AGENT_TOKEN>",
+        "  - Help: shango-agent --help",
+        sep,
+    ])
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Main entry point for shango-agent with robust error handling and preflight checks."""
+    try:
+        config = AgentConfig.load(args=argv)
+        asyncio.run(run_agent(config))
+    except ConfigurationError as exc:
+        print(format_preflight_error(exc.issues), file=sys.stderr)
+        sys.exit(2)
+    except KeyboardInterrupt:
+        log.info("Agent stopped by user (Ctrl+C).")
+        sys.exit(0)
+    except Exception as exc:  # noqa: BLE001
+        log.critical("Fatal agent runtime error: %s", exc)
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    asyncio.run(run_agent())
+    main()
