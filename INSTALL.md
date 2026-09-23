@@ -330,13 +330,7 @@ To verify and ensure the `.exe` is authentic and safe:
      - *File Description*: ShangoHub LAN Remote Agent
      - *Company*: ShangoHub
      - *Original Filename*: shango-agent.exe
-3. **Verify Cryptographic GitHub Attestation (Sigstore Provenance)**:
-   GitHub automatically generates a cryptographic attestation for the binary. You can verify it in PowerShell with the GitHub CLI:
-   ```bash
-   gh attestation verify shango-agent.exe --owner your-github-username
-   ```
-   GitHub CLI will confirm: `✓ Verification succeeded! Built by GitHub Actions on your repository`.
-4. **Permanent SmartScreen Trust**:
+3. **Permanent SmartScreen Trust**:
    When you run `install-service.ps1` as Administrator (below), it **automatically imports the digital certificate into your Windows Trusted Publishers store**, permanently silencing SmartScreen warnings on that machine.
 
 ---

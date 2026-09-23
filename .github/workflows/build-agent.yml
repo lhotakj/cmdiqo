@@ -17,8 +17,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
-  attestations: write
 
 jobs:
   build-binaries:
@@ -113,12 +111,6 @@ jobs:
         run: |
           mv ${{ matrix.binary_src }} ${{ matrix.binary_dest }}
           chmod +x ${{ matrix.binary_dest }} || true
-
-      - name: Generate GitHub Artifact Attestation (Sigstore Provenance)
-        uses: actions/attest-build-provenance@v2
-        if: github.event_name != 'pull_request'
-        with:
-          subject-path: ${{ matrix.binary_dest }}
 
       - name: Upload Binary Artifact (for direct download)
         uses: actions/upload-artifact@v7

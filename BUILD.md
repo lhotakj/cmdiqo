@@ -103,7 +103,7 @@ In `.github/workflows/build-agent.yml`, the build job creates the standalone `sh
 
 #### If you DO NOT have a commercial certificate (Default):
 - **Do nothing!** You don't need any secrets.
-- The workflow automatically generates a dedicated self-signed Authenticode certificate (`CN=ShangoHub (GitHub Actions)`), digitally signs the `.exe` with SHA256, timestamps it with DigiCert's RFC 3161 timestamp server, and generates a cryptographic **Sigstore GitHub Artifact Attestation**.
+- The workflow automatically generates a dedicated self-signed Authenticode certificate (`CN=ShangoHub (GitHub Actions)`), digitally signs the `.exe` with SHA256, and timestamps it with DigiCert's official RFC 3161 timestamp server (`http://timestamp.digicert.com`).
 
 #### If you DO own a commercial Authenticode `.pfx` certificate:
 If you have purchased a commercial code-signing certificate (from Sectigo, DigiCert, GlobalSign, etc.):
@@ -119,16 +119,15 @@ If you have purchased a commercial code-signing certificate (from Sectigo, DigiC
 
 ---
 
-## 4. Required GitHub Repository Workflow Permissions
+## 4. GitHub Repository Permissions
 
-For GitHub to generate cryptographic **Artifact Attestations** (proving that the binary was legitimately created by your repository), verify this setting once:
+Standard read permissions are all that's required for the workflow to build and save your binary artifacts.
 
+If you ever see a permission warning:
 1. In your GitHub repository, click **Settings** (gear icon).
 2. In the left sidebar, click **Actions** $\rightarrow$ **General**.
-3. Scroll down to **Workflow permissions**.
-4. Select: **Read and write permissions**.
-5. Check the box: **Allow GitHub Actions to create and approve pull requests**.
-6. Click **Save**.
+3. Under **Workflow permissions**, ensure **Read and write permissions** is selected.
+4. Click **Save**.
 
 ---
 
