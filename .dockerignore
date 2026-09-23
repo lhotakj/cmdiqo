@@ -1,0 +1,14 @@
+.git
+.github
+.agents
+__pycache__
+*.pyc
+.env
+README.md
+SKILL.md
+config/*.local.yaml
+tests
+coverage.xml
+.coverage
+.pytest_cache
+requirements-dev.txt

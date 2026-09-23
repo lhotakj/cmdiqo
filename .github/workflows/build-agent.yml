@@ -1,0 +1,66 @@
+name: Build Agent Binaries (Windows & Linux x64)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "agent/**"
+      - "scripts/**"
+      - ".github/workflows/build-agent.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "agent/**"
+      - "scripts/**"
+      - ".github/workflows/build-agent.yml"
+  workflow_dispatch:
+
+jobs:
+  build-binaries:
+    name: Build ${{ matrix.os }} Standalone Binary
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: shango-agent-linux-x64
+            binary_src: dist/shango-agent
+            binary_dest: shango-agent-linux-x64
+          - os: windows-latest
+            artifact_name: shango-agent-windows-x64
+            binary_src: dist/shango-agent.exe
+            binary_dest: shango-agent-windows-x64.exe
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies & PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller -r agent/requirements.txt
+
+      - name: Build Standalone Binary with PyInstaller
+        run: |
+          pyinstaller --onefile --clean --name shango-agent agent/agent.py
+
+      - name: Prepare binary artifact
+        shell: bash
+        run: |
+          mv ${{ matrix.binary_src }} ${{ matrix.binary_dest }}
+          chmod +x ${{ matrix.binary_dest }} || true
+
+      - name: Upload Binary Artifact (for direct download)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.binary_dest }}
+          retention-days: 90
+          if-no-files-found: error

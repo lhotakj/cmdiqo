@@ -1,0 +1,67 @@
+# ============================================================================
+# shango-bot command definitions
+# ----------------------------------------------------------------------------
+# Each entry:
+#   name        unique identifier (shown in logs/replies)
+#   trigger     what you type in Slack; {placeholders} capture a single word
+#   description shown in the built-in help (type "/lan" with no arguments)
+#   kind        "python" | "shell" | "ps1"
+#               - python: calls a function inside the container
+#               - shell : bash locally, or on a Linux/macOS agent if target is set
+#               - ps1   : PowerShell on a Windows agent (requires target)
+#   target      OPTIONAL agent name to run the command on. May use {placeholders}.
+#               Without target, shell/python run inside the bot container.
+#   run         command line; may use {placeholder} values
+#   cwd         OPTIONAL working directory (container path, or agent path if target set)
+#   timeout     OPTIONAL seconds, default: env SHELL_TIMEOUT (120)
+#   handler     (kind: python) "module.submodule:function" inside the bot package
+#
+# Built-in command (not defined here): /lan agents list
+# ============================================================================
+
+commands:
+  # ---- local to the bot container (no target) ------------------------------
+  - name: lan-devices-list
+    trigger: "/lan devices list"
+    description: "List all devices seen on the local network (ARP scan)"
+    kind: python
+    handler: "commands.devices:list_devices"
+
+  - name: home-docker-restart
+    trigger: "/home docker restart {service}"
+    description: "Restart a docker compose project (docker compose restart)"
+    kind: shell
+    run: "docker compose restart {service}"
+    cwd: "/docker/{service}"
+    timeout: 300
+
+  - name: home-docker-ps
+    trigger: "/home docker ps"
+    description: "List running docker containers"
+    kind: shell
+    run: "docker ps --format '{{{{.Names}}}} | {{{{.Image}}}} | {{{{.Status}}}}'"
+
+  # ---- executed on a Linux agent -------------------------------------------
+  - name: nas-disk
+    trigger: "/home nas disk"
+    description: "Disk usage on NAS (linux agent)"
+    kind: shell
+    target: nas
+    run: "df -h"
+
+  # ---- executed on Windows agents -------------------------------------------
+  - name: win-updates
+    trigger: "/home win updates {pc}"
+    description: "Installed Windows hotfixes on a PC (ps1 on agent {pc})"
+    kind: ps1
+    target: "{pc}"
+    run: "Get-CimInstance Win32_QuickFixEngineering | Sort-Object InstalledOn -Descending | Select-Object -First 10 HotFixID, InstalledOn | Format-Table -AutoSize"
+    timeout: 180
+
+  - name: win-reboot
+    trigger: "/home win reboot {pc}"
+    description: "Reboot a Windows PC after 10 seconds warning"
+    kind: ps1
+    target: "{pc}"
+    run: "shutdown /r /t 10 /c 'Reboot requested from Slack'"
+    timeout: 60

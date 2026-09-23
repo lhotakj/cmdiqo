@@ -1,0 +1,40 @@
+services:
+  shango-bot:
+    image: ${DOCKERHUB_USER:-your-dockerhub-user}/shango-bot:latest
+    build: .
+    container_name: shango-bot
+    restart: unless-stopped
+
+    # REQUIRED for LAN scanning (arp-scan) to see your real network, and so
+    # agents can reach the hub on the host's IP. (With host networking the
+    # `ports` mapping below is ignored - the hub port is bound on the host.)
+    network_mode: host
+
+    # Only used if you switch back to bridge networking:
+    ports:
+      - "${HUB_PORT:-8765}:8765"
+
+    environment:
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:?set SLACK_BOT_TOKEN in .env}
+      SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:?set SLACK_APP_TOKEN in .env}
+      # Comma-separated Slack user IDs allowed to run commands (highly recommended).
+      # Get an ID: Slack -> right click a user -> "Copy member ID" (Developer Mode).
+      # ALLOWED_USERS: "U0123ABCDEF,U0456GHIJKL"
+      # Restrict which channels the bot answers in (channel IDs, start with C...):
+      # ALLOWED_CHANNELS: "C0123CHANNEL"
+      # Hub / agent proxy:
+      # AGENT_TOKEN: "change-me-long-random-string"   # shared secret for agents
+      # HUB_PORT: "8765"
+      # HUB_ENABLED: "true"
+      # SHELL_TIMEOUT: "120"
+      # LOG_LEVEL: "INFO"
+
+    volumes:
+      # Needed for /home docker ... commands (docker compose on the host).
+      # Note: If your host docker.sock requires root/docker group access, you can add
+      # `user: "0:0"` or pass the host docker GID via `group_add: [998]`.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Needed if your cwd paths (e.g. /docker/{service}) live on the host.
+      - /docker:/docker
+      # Mount your own command config here to customize without rebuilding.
+      - ./config:/app/config:ro
