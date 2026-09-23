@@ -310,11 +310,38 @@ Install `shango-agent.exe` on Windows 10/11 or Windows Server so you can run Pow
 2. Click the **Actions** tab.
 3. Click on the latest run named **Build Agent Binaries (Windows & Linux x64)**.
 4. Scroll to the bottom to **Artifacts** and click **`shango-agent-windows-x64`**.
-5. Extract the downloaded `.zip` file to get `shango-agent.exe`.
+5. Extract the downloaded `.zip` file to get `shango-agent.exe` (and optionally `shango-agent.cer`).
 
 ---
 
-### Step 5.2: Run the PowerShell Installer as Administrator
+### Step 5.2: Digital Signature, SmartScreen & Safety Verification
+
+> [!TIP]
+> **Why does Windows show "Windows protected your PC"?**
+> When you download any newly compiled `.exe` from the web, Microsoft Defender SmartScreen flags it because it hasn't gathered download reputation on Microsoft servers yet.
+
+To verify and ensure the `.exe` is authentic and safe:
+
+1. **Check the Embedded Digital Signature**:
+   - Right-click `shango-agent.exe` $\rightarrow$ **Properties** $\rightarrow$ **Digital Signatures** tab.
+   - You will see the signature from `ShangoHub (GitHub Actions)` with a secure SHA256 digest and official timestamp.
+2. **Check Publisher Metadata**:
+   - In **Properties** $\rightarrow$ **Details**, you will see:
+     - *File Description*: ShangoHub LAN Remote Agent
+     - *Company*: ShangoHub
+     - *Original Filename*: shango-agent.exe
+3. **Verify Cryptographic GitHub Attestation (Sigstore Provenance)**:
+   GitHub automatically generates a cryptographic attestation for the binary. You can verify it in PowerShell with the GitHub CLI:
+   ```bash
+   gh attestation verify shango-agent.exe --owner your-github-username
+   ```
+   GitHub CLI will confirm: `✓ Verification succeeded! Built by GitHub Actions on your repository`.
+4. **Permanent SmartScreen Trust**:
+   When you run `install-service.ps1` as Administrator (below), it **automatically imports the digital certificate into your Windows Trusted Publishers store**, permanently silencing SmartScreen warnings on that machine.
+
+---
+
+### Step 5.3: Run the PowerShell Installer as Administrator
 1. Press the **Windows Key**, type **PowerShell**, right-click **Windows PowerShell**, and select **Run as Administrator**.
 2. Navigate to the folder containing `install-service.ps1` and `shango-agent.exe`:
    ```powershell

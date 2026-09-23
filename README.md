@@ -2,7 +2,9 @@
 
 Control your home network from Slack — **works behind NAT with zero open ports**.
 
-> 📖 **First time setting up?** Check out the beginner-friendly step-by-step guide: **[INSTALL.md](INSTALL.md)** covering click-by-click Slack setup, secrets management, Windows/Linux background service installation, and health checks.
+> 📖 **First time setting up?** Check out the beginner-friendly guides:
+> - **[INSTALL.md](INSTALL.md)**: Click-by-click Slack setup, secrets management, Windows/Linux background service installation, and health checks.
+> - **[BUILD.md](BUILD.md)**: Beginner tutorial on GitHub Actions, GitHub Secrets, binary builds, and digital code-signing.
 
 A small Python bot (built on [Slack Bolt](https://slack.dev/bolt-python/) with **Socket Mode**)
 that turns Slack messages into commands on your local network. Think of it as a

@@ -90,6 +90,28 @@ if (Test-Path $ExeDist) {
     Write-Host "[+] Installed executable to $DestExe" -ForegroundColor Green
     $RunCommand = "`"$DestExe`""
     $RunArgs = "--config `"$ConfigFile`""
+}
+
+if (Test-Path $DestExe) {
+    # Register digital certificate in Trusted Root and Trusted Publishers if signed
+    $sig = Get-AuthenticodeSignature $DestExe
+    if ($sig.SignerCertificate) {
+        Write-Host "[*] Found Authenticode Signature: $($sig.SignerCertificate.Subject)" -ForegroundColor Cyan
+        try {
+            $rootStore = New-Object System.Security.Cryptography.X509Certificates.X509Store "Root", "LocalMachine"
+            $rootStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+            $rootStore.Add($sig.SignerCertificate)
+            $rootStore.Close()
+
+            $pubStore = New-Object System.Security.Cryptography.X509Certificates.X509Store "TrustedPublisher", "LocalMachine"
+            $pubStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+            $pubStore.Add($sig.SignerCertificate)
+            $pubStore.Close()
+            Write-Host "[+] Registered code-signing certificate in LocalMachine Root and TrustedPublisher stores." -ForegroundColor Green
+        } catch {
+            Write-Verbose "Could not automatically import certificate into system store: $_"
+        }
+    }
 } else {
     # Fallback to Python runtime
     Write-Host "[*] No pre-built shango-agent.exe found. Using system Python..." -ForegroundColor Yellow

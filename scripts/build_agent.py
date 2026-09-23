@@ -32,6 +32,7 @@ def main() -> None:
     bin_name = "shango-agent"
 
     # 3. Build single-file executable
+    version_file = AGENT_DIR / "version_info.txt"
     pyinstaller_cmd = [
         sys.executable,
         "-m",
@@ -40,8 +41,11 @@ def main() -> None:
         "--clean",
         "--name",
         bin_name,
-        str(AGENT_SCRIPT),
     ]
+    if system == "windows" and version_file.exists():
+        pyinstaller_cmd.extend(["--version-file", str(version_file)])
+
+    pyinstaller_cmd.append(str(AGENT_SCRIPT))
 
     run_cmd(pyinstaller_cmd)
 
