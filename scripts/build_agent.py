@@ -31,7 +31,7 @@ def main() -> None:
     # 2. Determine target binary name
     bin_name = "shango-agent"
 
-    # 3. Build single-file executable
+    # 3. Build single-file executable with maximum compression
     version_file = AGENT_DIR / "version_info.txt"
     pyinstaller_cmd = [
         sys.executable,
@@ -39,9 +39,24 @@ def main() -> None:
         "PyInstaller",
         "--onefile",
         "--clean",
+        "--optimize",
+        "2",
+        "--exclude-module",
+        "tkinter",
+        "--exclude-module",
+        "unittest",
+        "--exclude-module",
+        "pydoc",
+        "--exclude-module",
+        "test",
+        "--exclude-module",
+        "sqlite3",
         "--name",
         bin_name,
     ]
+    if system != "windows":
+        pyinstaller_cmd.append("--strip")
+
     if system == "windows" and version_file.exists():
         pyinstaller_cmd.extend(["--version-file", str(version_file)])
 

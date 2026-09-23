@@ -47,17 +47,26 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install dependencies & PyInstaller
+      - name: Install dependencies, UPX & PyInstaller
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller -r agent/requirements.txt
+          if [[ "${{ matrix.os }}" == "ubuntu"* ]]; then
+            sudo apt-get update && sudo apt-get install -y upx
+          elif [[ "${{ matrix.os }}" == "windows"* ]]; then
+            choco install upx -y || true
+          fi
 
-      - name: Build Standalone Binary with PyInstaller
+      - name: Build Standalone Binary with Maximum PyInstaller & UPX Compression
         shell: bash
         run: |
-          EXTRA_FLAGS=""
+          EXTRA_FLAGS="--optimize 2 --exclude-module tkinter --exclude-module unittest --exclude-module pydoc --exclude-module test --exclude-module sqlite3"
+          if [[ "${{ matrix.os }}" != "windows"* ]]; then
+            EXTRA_FLAGS="$EXTRA_FLAGS --strip"
+          fi
           if [ -f "agent/version_info.txt" ] && [[ "${{ matrix.os }}" == "windows"* ]]; then
-            EXTRA_FLAGS="--version-file agent/version_info.txt"
+            EXTRA_FLAGS="$EXTRA_FLAGS --version-file agent/version_info.txt"
           fi
           pyinstaller --onefile --clean --name shango-agent $EXTRA_FLAGS agent/agent.py
 
