@@ -47,6 +47,20 @@ def parse_ip_neigh_output(output: str) -> list[tuple[str, str, str]]:
     return rows
 
 
+def resolve_hostname(ip: str, timeout: float = 0.5) -> str:
+    """Resolve an IP address to a host name via reverse DNS with a strict timeout."""
+    import socket
+
+    old_timeout = socket.getdefaulttimeout()
+    try:
+        socket.setdefaulttimeout(timeout)
+        return socket.getnameinfo((ip, 0), socket.NI_NAMEREQD)[0]
+    except Exception:  # noqa: BLE001
+        return "(unknown)"
+    finally:
+        socket.setdefaulttimeout(old_timeout)
+
+
 def format_device_table(rows: list[tuple[str, str, str]]) -> str:
     """Format discovered devices into a clean ASCII table."""
     if not rows:
@@ -55,7 +69,7 @@ def format_device_table(rows: list[tuple[str, str, str]]) -> str:
             "If arp-scan failed, run the container with `network_mode: host` "
             "(see README) or check the bot logs."
         )
-    header = ("IP ADDRESS", "MAC ADDRESS", "VENDOR / INFO")
+    header = ("IP ADDRESS", "MAC ADDRESS", "HOST NAME")
     data = [header] + sorted(set(rows))
     widths = [max(len(r[i]) for r in data) for i in range(3)]
     lines = [
@@ -68,22 +82,35 @@ def format_device_table(rows: list[tuple[str, str, str]]) -> str:
 def list_devices(
     params: dict[str, str] | None = None,
     runner: Callable[[list[str]], str] = _run,
+    resolver: Callable[[str], str] = resolve_hostname,
 ) -> str:
     """List devices on the local network.
 
     Strategy: full ARP scan via arp-scan (best). Fallback: the kernel
     neighbour table (`ip neigh`) which only shows recently seen devices.
+    Hostnames are resolved via reverse DNS lookups.
     """
-    rows: list[tuple[str, str, str]] = []
+    from concurrent.futures import ThreadPoolExecutor
+
+    raw_rows: list[tuple[str, str, str]] = []
 
     if shutil.which("arp-scan"):
         out = runner(["arp-scan", "-l", "--localnet", "--ignoredups", "--timeout=300"])
-        rows = parse_arp_scan_output(out)
+        raw_rows = parse_arp_scan_output(out)
 
-    if not rows and shutil.which("ip"):
+    if not raw_rows and shutil.which("ip"):
         out = runner(["ip", "neigh", "show"])
-        rows = parse_ip_neigh_output(out)
+        raw_rows = parse_ip_neigh_output(out)
 
+    if not raw_rows:
+        return format_device_table([])
+
+    # Resolve hostnames concurrently for all discovered IPs
+    ips = [ip for ip, _, _ in raw_rows]
+    with ThreadPoolExecutor(max_workers=min(32, max(len(ips), 1))) as executor:
+        hostnames = list(executor.map(resolver, ips))
+
+    rows = [(ip, mac, host) for (ip, mac, _), host in zip(raw_rows, hostnames)]
     return format_device_table(rows)
 
 

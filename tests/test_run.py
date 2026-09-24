@@ -113,3 +113,34 @@ def test_run_both_premature_hub_exit(mock_sleep, mock_popen):
 
     code = run.run_both([])
     assert code == 1
+
+
+@patch("run.run_single")
+def test_main_sim(mock_run_single):
+    mock_run_single.return_value = 0
+    with (
+        patch("sys.argv", ["run.py", "sim", "-c", "/help"]),
+        pytest.raises(SystemExit) as exc,
+    ):
+        run.main()
+    assert exc.value.code == 0
+    mock_run_single.assert_called_once()
+    args, _ = mock_run_single.call_args
+    assert "slacksim.py" in str(args[0])
+    assert args[1] == "SlackSim"
+    assert args[2] == ["-c", "/help"]
+
+
+@patch("run.run_single")
+def test_main_slacksim_alias(mock_run_single):
+    mock_run_single.return_value = 0
+    with (
+        patch("sys.argv", ["run.py", "slacksim"]),
+        pytest.raises(SystemExit) as exc,
+    ):
+        run.main()
+    assert exc.value.code == 0
+    mock_run_single.assert_called_once()
+    args, _ = mock_run_single.call_args
+    assert "slacksim.py" in str(args[0])
+

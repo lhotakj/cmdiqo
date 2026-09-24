@@ -249,6 +249,29 @@ The bot should reply with the list of available commands.
 
 ---
 
+### Step 3.4: Local Command Testing Without Slack (`slacksim`)
+
+If you want to verify your commands or debug agent connections before configuring Slack credentials or Socket Mode, run the built-in Slack simulator:
+
+```bash
+# Launch interactive Slack console emulator:
+python run.py sim
+# or:
+python -m slacksim
+# or:
+python slacksim/slacksim.py
+```
+
+Type any slash command directly at the prompt:
+```text
+slack [#general] @U_ADMIN > /help
+slack [#general] @U_ADMIN > /lan agents list
+slack [#general] @U_ADMIN > /host AMD uptime
+```
+`slacksim` renders Slack mrkdwn, emojis, and code blocks in your terminal while hosting the WebSocket Hub on port `8765`, allowing connected agents to execute live commands without needing `SLACK_BOT_TOKEN` or `SLACK_APP_TOKEN`. Use **Up / Down arrows** for command history navigation, and press **Esc** to instantly clear/delete the current message draft.
+
+---
+
 ## 4. How to Install the Linux Service (`shango-agent`)
 
 Install `shango-agent` on your Linux machines (e.g., Raspberry Pi, Ubuntu NAS, home server) so you can execute shell commands on them remotely from Slack.

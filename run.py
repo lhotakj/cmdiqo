@@ -115,15 +115,18 @@ Usage:
     python run.py [COMMAND] [OPTIONS...]
 
 Commands:
-    {COLOR_GREEN}(none){COLOR_RESET}     Start both Hub (bot) and Agent concurrently
-    {COLOR_GREEN}hub{COLOR_RESET}        Start the Shango Bot & WebSocket Hub only
-    {COLOR_GREEN}agent{COLOR_RESET}      Start the Shango Remote Agent only
-    {COLOR_GREEN}-h, --help{COLOR_RESET} Show this help message and exit
+    {COLOR_GREEN}(none){COLOR_RESET}         Start both Hub (bot) and Agent concurrently
+    {COLOR_GREEN}hub{COLOR_RESET}            Start the Shango Bot & WebSocket Hub only
+    {COLOR_GREEN}agent{COLOR_RESET}          Start the Shango Remote Agent only
+    {COLOR_GREEN}sim, slacksim{COLOR_RESET}  Start the interactive Slack emulator (no Slack tokens needed)
+    {COLOR_GREEN}-h, --help{COLOR_RESET}     Show this help message and exit
 
 Examples:
     python run.py                  # Launch both services with graceful Ctrl+C shutdown
     python run.py hub              # Run bot only
     python run.py agent            # Run agent only
+    python run.py sim              # Start interactive Slack console emulator
+    python run.py sim -c "/help"   # Execute command non-interactively in simulator
     python run.py agent --help     # Pass options directly to agent
 
 Termination:
@@ -248,12 +251,16 @@ def main() -> None:
         sys.exit(run_single(ROOT / "bot" / "app.py", "Hub", remaining))
     elif cmd == "agent":
         sys.exit(run_single(ROOT / "agent" / "agent.py", "Agent", remaining))
+    elif cmd in ("sim", "slacksim"):
+        sys.exit(run_single(ROOT / "slacksim" / "slacksim.py", "SlackSim", remaining))
     else:
         # Unknown command or flags passed directly to run_both
         if cmd.startswith("-"):
             sys.exit(run_both(args))
         else:
-            log_err(f"Unknown command '{cmd}'. Available commands: 'hub', 'agent'")
+            log_err(
+                f"Unknown command '{cmd}'. Available commands: 'hub', 'agent', 'sim'"
+            )
             print_usage()
             sys.exit(1)
 

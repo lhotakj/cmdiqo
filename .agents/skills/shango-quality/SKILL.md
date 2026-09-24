@@ -67,9 +67,18 @@ python -m pytest -v --cov=bot --cov=agent --cov-report=term-missing --cov-report
 - `tests/test_hub.py`: Asynchronous WebSocket server tests, token validation, agent registry, command dispatch, and disconnect cleanup.
 - `tests/test_agent.py`: Agent execution engine (`execute`), platform argv generation (`build_argv`), timeout handling, and result schema.
 - `tests/test_app.py`: Slack message authorization, help formatting, Windows/Linux dispatch routing, and `format_params` safety.
+- `tests/test_slacksim.py`: Slack console emulator, mrkdwn ANSI formatting (bold, italics, code blocks in light gray, emojis), and CLI options.
+- `tests/test_line_reader.py`: Terminal line reader with Up/Down command history, Esc line deletion, and cross-platform key parsing.
 - `tests/test_parental.py`: Cross-platform hosts file editing, domain filtering, and DNS cache flushing workflows (Windows & Linux).
 - `tests/test_run.py`: Multi-process supervisor and signal termination lifecycle.
 - `tests/test_version.py`: Dynamic semver resolution, GitHub CI run numbers, hex timestamp dev versioning, and Windows PE version manifests.
+
+### Interactive Verification via `slacksim`
+Run commands in the terminal emulator before deploying:
+```bash
+python run.py sim                     # Interactive console REPL (Up/Down history, Esc clear)
+python run.py sim -c "/host AMD uptime" # Non-interactive single-command execution
+```
 
 ---
 

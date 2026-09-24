@@ -52,6 +52,9 @@ python run.py hub
 
 # Start Agent only:
 python run.py agent
+
+# Start interactive Slack console emulator:
+python run.py sim
 ```
 > Pressing `Ctrl+C` cleanly shuts down all child processes without leaving background tasks running.
 

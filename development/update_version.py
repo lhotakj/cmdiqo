@@ -28,6 +28,7 @@ VERSION_TXT = ROOT / "version.txt"
 SHORT_VERSION_TXT = ROOT / "short_version.txt"
 AGENT_VERSION_PY = ROOT / "agent" / "_version.py"
 BOT_VERSION_PY = ROOT / "bot" / "_version.py"
+SLACKSIM_VERSION_PY = ROOT / "slacksim" / "_version.py"
 AGENT_VERSION_INFO = ROOT / "agent" / "version_info.txt"
 
 
@@ -125,6 +126,7 @@ def update_versions(
     )
     AGENT_VERSION_PY.write_text(py_content, encoding="utf-8")
     BOT_VERSION_PY.write_text(py_content, encoding="utf-8")
+    SLACKSIM_VERSION_PY.write_text(py_content, encoding="utf-8")
 
     # 3. Write Windows PE version_info.txt
     AGENT_VERSION_INFO.write_text(

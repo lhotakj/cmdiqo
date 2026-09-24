@@ -10,16 +10,18 @@ This document details the system architecture, end-to-end execution lifecycle, c
 
 The system consists of three decoupled layers:
 1. **Slack Cloud**: Interacts with users via Socket Mode (outbound WebSocket from the bot).
-2. **shango-bot Container**: Hosts the Slack event dispatcher, local command runner, and the WebSocket **Agent Hub**.
+2. **shango-bot Container & slacksim**: Hosts the Slack event dispatcher, local command runner, and the WebSocket **Agent Hub**. `slacksim` provides an interactive console REPL for local testing and debugging without Slack credentials.
 3. **shango-agent Instances**: Lightweight standalone binaries running on LAN nodes (Windows PCs, Linux servers, NAS units, Raspberry Pis) that maintain persistent outbound WebSocket connections to the Hub.
 
 ```mermaid
 graph TD
     User([Slack User]) <-->|Socket Mode TLS| Slack[Slack Platform]
     Slack <-->|WSS Outbound| BotApp["shango-bot (Slack Bolt)"]
+    DevUser([Developer / Operator]) <-->|Console REPL| SlackSim["slacksim (CLI Emulator)"]
 
-    subgraph BotHost ["Bot Host (Docker Container / LAN Server)"]
+    subgraph BotHost ["Bot Host (Docker Container / Local Server)"]
         BotApp --> Dispatcher["Command Dispatcher\n(Regex & Sanitization)"]
+        SlackSim --> Dispatcher
         Dispatcher -->|Local python / shell| LocalExec["Local Execution\n(ARP scan, Docker CLI)"]
         Dispatcher -->|Remote target| Hub["Agent Hub Server\n(ws://0.0.0.0:8765)"]
     end
@@ -156,15 +158,19 @@ Commands defined in `config/commands.yaml` (under `aliases:` and `commands:`) ar
 | `/lan devices list` | `python` | *(none)* | Bot Container | Internal Python handler (`commands.devices:list_devices`) |
 | `/lan wake {target}` | `python` | *(none)* | Bot Container | UDP Broadcast Magic Packet (`commands.devices:send_wake_on_lan`) |
 | `/lan ping {host}` | `python` | *(none)* | Bot Container | Local ping utility (`commands.devices:ping_host`) |
-| `/host {host} uptime` | `shell` | `{host}` | Host / Agent | Remote or local `uptime` |
-| `/host {host} memory` | `shell` | `{host}` | Host / Agent | Remote or local `free -h` |
-| `/host {host} disk` | `shell` | `{host}` | Host / Agent | Remote `bash -c "df -h"` |
-| `/host {host} docker ps` | `shell` | `{host}` | Host / Agent (local fallback if `home`/`local`) | `bash` or remote agent `docker ps` |
-| `/host {host} docker stats` | `shell` | `{host}` | Host / Agent | Remote or local `docker stats --no-stream ...` |
-| `/host {host} service status {service}` | `shell` | `{host}` | Host / Agent | Remote `systemctl status {service}` |
-| `/host {host} win updates` | `ps1` | `{host}` | Windows Agent (`{host}`) | Remote `powershell.exe` Get-CimInstance |
-| `/host {host} win memory` | `ps1` | `{host}` | Windows Agent (`{host}`) | Remote `powershell.exe` Get-CimInstance |
-| `/host {host} win reboot` | `ps1` | `{host}` | Windows Agent (`{host}`) | Remote `powershell.exe -NoProfile -Command ...` |
+| `/lan agents list` | `internal` | *(none)* | Hub Registry | Lists connected agents, OS platform, and remote addresses |
+| `/host {host} uptime` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `uptime` / Windows `Win32_OperatingSystem` |
+| `/host {host} memory` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `free -h` / Windows `Win32_OperatingSystem` |
+| `/host {host} disk` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `df -h` / Windows `Win32_LogicalDisk` |
+| `/host {host} top` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `ps aux` / Windows `Get-Process` |
+| `/host {host} reboot` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `shutdown -r +1` / Windows `shutdown /r /t 10` |
+| `/host {host} services` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl list-units` / Windows `Get-Service` |
+| `/host {host} service status {service}` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl status` / Windows `Get-Service` |
+| `/host {host} service restart {service}` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl restart` / Windows `Restart-Service` |
+| `/host {host} parental {action}` | `python` | `{host}` | Remote Agent | Cross-platform YouTube/Roblox blocker with DNS flush (Win & Linux) |
+| `/host {host} docker ps` | `shell` | `{host}` | Host / Agent | Linux `docker ps --format ...` |
+| `/host {host} docker stats` | `shell` | `{host}` | Host / Agent | Linux `docker stats --no-stream ...` |
+| `/host {host} win updates` | `ps1` | `{host}` | Windows Agent | Remote `powershell.exe` Get-CimInstance Win32_QuickFixEngineering |
 | `/home <action>` *(alias)* | *n/a* | *n/a* | Alias Resolution | Auto-translates to `/host home <action>` |
 | `/wol <target>` *(alias)* | *n/a* | *n/a* | Alias Resolution | Auto-translates to `/lan wake <target>` |
 

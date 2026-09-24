@@ -49,7 +49,7 @@ commands:
     category: lan
     trigger: "/lan devices list"
     description: "List all devices seen on the local network (ARP scan)"
-    details: "Performs an ARP broadcast scan on the local subnet via arp-scan. Returns IP addresses, MAC addresses, and hardware vendor information. Falls back to kernel neighbour table (ip neigh) if arp-scan is unavailable."
+    details: "Performs an ARP broadcast scan on the local subnet via arp-scan. Returns IP addresses, MAC addresses, and resolved host names. Falls back to kernel neighbour table (ip neigh) if arp-scan is unavailable."
     examples:
       - "/lan devices list"
     kind: python

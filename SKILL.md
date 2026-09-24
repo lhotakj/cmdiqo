@@ -27,6 +27,22 @@ ruff check bot agent development tests
 pytest -v --cov=bot --cov=agent --cov-report=term-missing --cov-report=xml:coverage.xml
 ```
 
+## Testing with the Slack Emulator (`slacksim`)
+
+Test slash commands, parameter validation, and remote agent execution locally without Slack credentials:
+```bash
+# Interactive Slack console emulator:
+python run.py sim
+# or directly:
+python -m slacksim
+# or:
+python slacksim/slacksim.py
+
+# Non-interactive single-command verification:
+python run.py sim -c "/host AMD uptime"
+```
+The interactive simulator supports full line editing: **Up/Down arrows** for history traversal, and **Esc** to instantly clear/delete the current message draft.
+
 ## Build Machinery & Versioning Protocols
 
 All build and maintenance scripts are centralized in `development/`:

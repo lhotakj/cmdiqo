@@ -14,9 +14,9 @@ Python, Docker-ready replacement for Hubot, built specifically for LAN managemen
 Example session in Slack:
 
 You:   /lan devices list
-Bot:   IP ADDRESS     MAC ADDRESS        VENDOR / INFO
-       192.168.1.1    aa:bb:cc:dd:ee:ff  Technicolor ...
-       192.168.1.20   11:22:33:44:55:66  Raspberry Pi Trading Ltd
+Bot:   IP ADDRESS     MAC ADDRESS        HOST NAME
+       192.168.1.1    aa:bb:cc:dd:ee:ff  router.home
+       192.168.1.20   11:22:33:44:55:66  rpi.home
 
 You:   /host home docker restart plex
 Bot:   Container plex  Restarted
@@ -168,11 +168,49 @@ python run.py hub
 # Start the Remote Agent only:
 python run.py agent
 
+# Start the interactive Slack emulator (test commands & live agents without Slack tokens!):
+python run.py sim
+# or directly:
+python -m slacksim
+# or:
+python slacksim/slacksim.py
+
+# Execute a single command non-interactively in simulator:
+python run.py sim -c "/host AMD uptime"
+
 # Pass command-line arguments to the agent:
 python run.py agent --hub-url ws://192.168.1.10:8765 --token my-secret --name PC-01
 ```
 
 > 🛑 **Graceful Shutdown:** Pressing `Ctrl+C` safely shuts down all active services and terminates child process trees, ensuring no orphan processes are left running.
+
+### Interactive Slack Console Simulator (`slacksim`)
+
+`slacksim` is a terminal-based emulator that behaves like the Slack chat environment. It is designed for fast local debugging, command verification, and testing remote agents **without needing Slack credentials, public URLs, or Socket Mode**.
+
+- **Full Command & Response Simulation**: Emulates both the instant acknowledgment (`⏳ Running ...`) and final result output (`✅ ...`) with preformatted blocks in light gray.
+- **ANSI mrkdwn Rendering**: Automatically formats `*bold*`, `_italics_`, `` `inline code` ``, ```` ```pre/code blocks``` ````, bullet lists, and converts Slack emoji shortcodes (`:white_check_mark:` $\rightarrow$ ✅, `:hourglass_flowing_sand:` $\rightarrow$ ⏳, `:computer:` $\rightarrow$ 💻).
+- **Direct Hub Connection & Embedded Hub Integration**: Automatically connects directly to a running Hub server (e.g. launched via `./run.py` or `python run.py hub`) to interact with live connected agents. When running standalone, seamlessly starts an embedded WebSocket Hub server on port `8765`.
+- **Interactive Line Editing & Persistent History**:
+  - Automatically loads and immediately logs every executed command to `~/.shango-history` (creating it if missing).
+  - `↑` (Up Arrow) — Recall previous command from history.
+  - `↓` (Down Arrow) — Navigate forward through history.
+  - `Esc` — Instantly clear/delete the current draft message buffer.
+  - Left / Right arrows, Home, End, Backspace, and Delete for seamless terminal editing.
+- **Dynamic Security Testing**:
+  - `/as <user_id>` — Switch simulated Slack user on the fly to test `ALLOWED_USERS` access restrictions.
+  - `/in <channel_id>` — Switch simulated channel to test `ALLOWED_CHANNELS`.
+  - `/whoami` — Inspect active simulator context and connected agents.
+  - `/clear` — Clear terminal screen.
+
+```text
+slack [#general] @U0123ABCDEF > /host AMD uptime
+  [18:55:01] 🤖 shango-bot: ⏳ Running `/host AMD uptime` on `AMD` ...
+  [18:55:02] 🤖 shango-bot: ✅ `host-uptime`
+  ┌────────────────────────────────────────────────────────────┐
+  │ Uptime: 0d 7h 18m 55s (Booted: 2026-09-24 10:06:01)        │
+  └────────────────────────────────────────────────────────────┘
+```
 
 ## 4. Run with Docker Compose
 

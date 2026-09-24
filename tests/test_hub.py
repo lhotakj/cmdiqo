@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -261,3 +261,115 @@ async def test_hub_handle_hello_timeout():
 
     await hub._handle(mock_ws)
     mock_ws.close.assert_awaited_once_with(code=4002, reason="expected hello")
+
+
+@pytest.mark.asyncio
+async def test_hub_handle_client_hello_and_messages():
+    hub = Hub(token=None)
+    mock_ws = AsyncMock()
+    mock_ws.remote_address = ("127.0.0.1", 54321)
+    mock_ws.request.headers = {}
+    mock_ws.recv.return_value = json.dumps({"type": "hello", "role": "client", "name": "slacksim"})
+
+    # Setup an agent so get_agents returns data
+    agent_ws = AsyncMock()
+    hub.agents["node1"] = {
+        "ws": agent_ws,
+        "version": "1.0.0",
+        "platform": "Linux/6.1",
+        "since": "2026-09-24 10:00:00",
+        "addr": "192.168.1.50:5555",
+    }
+
+    # Simulate client messages iterator
+    async def mock_iter():
+        yield json.dumps({"id": "req-1", "type": "get_agents"})
+        yield json.dumps({"id": "req-2", "type": "exec", "name": "node1", "kind": "shell", "cmd": "hostname"})
+
+    mock_ws.__aiter__.side_effect = mock_iter
+
+    # Simulate agent result response for the exec request
+    async def simulate_agent():
+        await asyncio.sleep(0.01)
+        req_id = next(iter(hub.pending.keys()))
+        await hub._on_message(
+            json.dumps({"id": req_id, "type": "result", "ok": True, "code": 0, "output": "nas-server"})
+        )
+
+    asyncio.create_task(simulate_agent())
+    await hub._handle(mock_ws)
+
+    # Verify mock_ws sent agents_list and exec_result
+    assert mock_ws.send.await_count >= 2
+    sent_msgs = [json.loads(call.args[0]) for call in mock_ws.send.await_args_list]
+    types = [m.get("type") for m in sent_msgs]
+    assert "agents_list" in types
+    assert "exec_result" in types
+
+
+@pytest.mark.asyncio
+async def test_remote_hub_client_start_refresh_and_exec():
+    from bot.hub import RemoteHubClient
+
+    client = RemoteHubClient(url="ws://127.0.0.1:8765", token="secret")
+    mock_ws = AsyncMock()
+
+    msg_queue = asyncio.Queue()
+
+    async def mock_iter():
+        while True:
+            item = await msg_queue.get()
+            if item is None:
+                break
+            yield item
+
+    mock_ws.__aiter__.side_effect = mock_iter
+
+    with patch("websockets.connect", new_callable=AsyncMock) as mock_connect:
+        mock_connect.return_value = mock_ws
+
+        # Start client in background task
+        start_task = asyncio.create_task(client.start(timeout=2.0))
+        await asyncio.sleep(0.01)
+
+        # Feed message for get_agents via queue
+        if client._pending:
+            pending_id = next(iter(client._pending.keys()))
+            await msg_queue.put(
+                json.dumps(
+                    {
+                        "id": pending_id,
+                        "type": "agents_list",
+                        "agents": {"node1": {"platform": "Linux", "version": "1.0.0"}},
+                        "table": "AGENT node1",
+                    }
+                )
+            )
+
+        await start_task
+        assert "node1" in client.agents
+        assert client.agents_table() == "AGENT node1"
+
+        # Test exec
+        async def respond_exec():
+            await asyncio.sleep(0.01)
+            if client._pending:
+                req_id = next(iter(client._pending.keys()))
+                await msg_queue.put(
+                    json.dumps(
+                        {
+                            "id": req_id,
+                            "type": "exec_result",
+                            "ok": True,
+                            "output": "sample output",
+                        }
+                    )
+                )
+
+        asyncio.create_task(respond_exec())
+        res = await client.exec("node1", "shell", "echo test", timeout=2)
+        assert res == "sample output"
+
+        await msg_queue.put(None)
+        await client.stop()
+

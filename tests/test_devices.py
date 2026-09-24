@@ -11,6 +11,7 @@ from bot.commands.devices import (
     parse_arp_scan_output,
     parse_ip_neigh_output,
     ping_host,
+    resolve_hostname,
     send_wake_on_lan,
 )
 
@@ -55,14 +56,33 @@ def test_format_device_table_empty():
 
 def test_format_device_table_content():
     rows = [
-        ("192.168.1.1", "aa:bb:cc:dd:ee:ff", "Router"),
-        ("192.168.1.20", "11:22:33:44:55:66", "Raspberry Pi"),
+        ("192.168.1.1", "aa:bb:cc:dd:ee:ff", "router.local"),
+        ("192.168.1.20", "11:22:33:44:55:66", "raspberrypi"),
     ]
     table = format_device_table(rows)
     assert "IP ADDRESS" in table
     assert "MAC ADDRESS" in table
+    assert "HOST NAME" in table
     assert "192.168.1.1" in table
-    assert "Router" in table
+    assert "router.local" in table
+    assert "raspberrypi" in table
+
+
+def test_resolve_hostname_success(monkeypatch):
+    import socket
+
+    monkeypatch.setattr(socket, "getnameinfo", lambda sockaddr, flags: ("my-host.lan", "0"))
+    assert resolve_hostname("192.168.1.50") == "my-host.lan"
+
+
+def test_resolve_hostname_failure(monkeypatch):
+    import socket
+
+    def mock_getnameinfo(sockaddr, flags):
+        raise OSError("Host not found")
+
+    monkeypatch.setattr(socket, "getnameinfo", mock_getnameinfo)
+    assert resolve_hostname("192.168.1.99") == "(unknown)"
 
 
 def test_run_success():
@@ -92,9 +112,20 @@ def test_list_devices_with_mock_runner(monkeypatch):
     def mock_runner(argv):
         return SAMPLE_ARP_OUTPUT
 
-    result = list_devices(runner=mock_runner)
+    def mock_resolver(ip):
+        names = {
+            "192.168.1.1": "router.home",
+            "192.168.1.20": "rpi.home",
+            "192.168.1.100": "nas.home",
+        }
+        return names.get(ip, "(unknown)")
+
+    result = list_devices(runner=mock_runner, resolver=mock_resolver)
+    assert "IP ADDRESS" in result
+    assert "HOST NAME" in result
     assert "192.168.1.1" in result
-    assert "Technicolor CH7465VF" in result
+    assert "router.home" in result
+    assert "rpi.home" in result
 
 
 def test_list_devices_fallback_ip(monkeypatch):
@@ -106,9 +137,13 @@ def test_list_devices_fallback_ip(monkeypatch):
     def mock_runner(argv):
         return SAMPLE_IP_NEIGH_OUTPUT
 
-    result = list_devices(runner=mock_runner)
+    def mock_resolver(ip):
+        return "device-" + ip.replace(".", "-")
+
+    result = list_devices(runner=mock_runner, resolver=mock_resolver)
     assert "192.168.1.1" in result
-    assert "kernel neighbour table" in result
+    assert "device-192-168-1-1" in result
+    assert "HOST NAME" in result
 
 
 def test_send_wake_on_lan_missing_target():
