@@ -76,18 +76,26 @@ Set-Content -Path $ConfigFile -Value $ConfigData -Encoding UTF8
 Write-Host "[+] Saved configuration to $ConfigFile" -ForegroundColor Green
 
 # 4. Locate or copy binary / script
-$ExeDist = Join-Path $ScriptDir "..\dist\shango-agent.exe"
-$ExeLocal = Join-Path $ScriptDir "shango-agent.exe"
-$DestExe = Join-Path $InstallDir "shango-agent.exe"
+$candidateExes = @(
+    (Join-Path $ScriptDir "shango-agent-windows-x64.exe"),
+    (Join-Path $ScriptDir "shango-agent.exe"),
+    (Join-Path $ScriptDir "..\dist\shango-agent.exe"),
+    (Join-Path $ScriptDir "..\shango-agent-windows-x64.exe"),
+    (Join-Path $ScriptDir "..\dist\shango-agent-windows-x64.exe")
+)
 
-if (Test-Path $ExeDist) {
-    Copy-Item -Path $ExeDist -Destination $DestExe -Force
-    Write-Host "[+] Installed executable to $DestExe" -ForegroundColor Green
-    $RunCommand = "`"$DestExe`""
-    $RunArgs = "--config `"$ConfigFile`""
-} elseif (Test-Path $ExeLocal) {
-    Copy-Item -Path $ExeLocal -Destination $DestExe -Force
-    Write-Host "[+] Installed executable to $DestExe" -ForegroundColor Green
+$SourceExe = $null
+foreach ($cand in $candidateExes) {
+    if (Test-Path $cand) {
+        $SourceExe = $cand
+        break
+    }
+}
+
+if ($SourceExe) {
+    Copy-Item -Path $SourceExe -Destination $DestExe -Force
+    Unblock-File -Path $DestExe -ErrorAction SilentlyContinue
+    Write-Host "[+] Installed executable from $SourceExe to $DestExe" -ForegroundColor Green
     $RunCommand = "`"$DestExe`""
     $RunArgs = "--config `"$ConfigFile`""
 }

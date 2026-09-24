@@ -33,4 +33,5 @@ Thumbs.db
 *.pfx
 *.key
 *.cer
+certs/
 
