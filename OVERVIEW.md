@@ -167,7 +167,7 @@ Commands defined in `config/commands.yaml` (under `aliases:` and `commands:`) ar
 | `/host {host} services` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl list-units` / Windows `Get-Service` |
 | `/host {host} service status {service}` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl status` / Windows `Get-Service` |
 | `/host {host} service restart {service}` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl restart` / Windows `Restart-Service` |
-| `/host {host} parental {action}` | `python` | `{host}` | Remote Agent | Cross-platform YouTube/Roblox blocker with DNS flush (Win & Linux) |
+| `/host {host} parental {action}` | `python` | `{host}` | Remote Agent | Cross-platform YouTube/Roblox/Minecraft/Discord blocker with DNS flush (Win & Linux) |
 | `/host {host} docker ps` | `shell` | `{host}` | Host / Agent | Linux `docker ps --format ...` |
 | `/host {host} docker stats` | `shell` | `{host}` | Host / Agent | Linux `docker stats --no-stream ...` |
 | `/host {host} win updates` | `ps1` | `{host}` | Windows Agent | Remote `powershell.exe` Get-CimInstance Win32_QuickFixEngineering |

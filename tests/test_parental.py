@@ -6,6 +6,8 @@ import pytest
 
 from bot.app import handle_command, load_commands
 from bot.commands.parental import (
+    DISCORD_DOMAINS,
+    MINECRAFT_DOMAINS,
     PARENTAL_DOMAINS,
     ROBLOX_DOMAINS,
     YOUTUBE_DOMAINS,
@@ -18,11 +20,18 @@ from bot.commands.parental import (
 def test_parental_domains():
     assert len(YOUTUBE_DOMAINS) >= 10
     assert len(ROBLOX_DOMAINS) >= 5
+    assert len(MINECRAFT_DOMAINS) >= 30
+    assert len(DISCORD_DOMAINS) >= 10
     assert "youtube.com" in PARENTAL_DOMAINS
     assert "www.youtube.com" in PARENTAL_DOMAINS
     assert "youtubekids.com" in PARENTAL_DOMAINS
     assert "roblox.com" in PARENTAL_DOMAINS
     assert "www.roblox.com" in PARENTAL_DOMAINS
+    assert "minecraft.net" in PARENTAL_DOMAINS
+    assert "mojang.com" in PARENTAL_DOMAINS
+    assert "login.live.com" in PARENTAL_DOMAINS
+    assert "discord.com" in PARENTAL_DOMAINS
+    assert "discord.gg" in PARENTAL_DOMAINS
 
 
 def test_build_parental_script_windows_on():
@@ -104,7 +113,7 @@ async def test_manage_parental_windows_agent_success():
 
     res = await manage_parental({"host": "AMD", "action": "on"}, hub=mock_hub)
     assert "Parental controls ENABLED on `AMD`" in res
-    assert "23 domains" in res
+    assert f"{len(PARENTAL_DOMAINS)} domains" in res
     mock_hub.exec.assert_awaited_once()
     # Ensure kind='ps1' was dispatched for Windows
     assert mock_hub.exec.await_args[1]["kind"] == "ps1"

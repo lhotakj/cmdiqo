@@ -143,8 +143,8 @@ Edit `config/commands.yaml` to define your commands and aliases (see **Adding yo
 | `/host <host> docker restart <svc>`| Restarts docker compose project in `/docker/<svc>`       |
 | `/host <host> docker stats`        | Snapshot of container CPU, RAM, and network usage        |
 | `/host <host> win updates`         | Queries installed Windows hotfixes on Windows agent      |
-| `/host <host> parental on`         | Blocks YouTube & Roblox in hosts, flushes DNS (Win/Linux)|
-| `/host <host> parental off`        | Unblocks YouTube & Roblox in hosts, flushes DNS          |
+| `/host <host> parental on`         | Blocks YouTube, Roblox, Minecraft, & Discord in hosts, flushes DNS (Win/Linux)|
+| `/host <host> parental off`        | Unblocks YouTube, Roblox, Minecraft, & Discord in hosts, flushes DNS          |
 | `/host <host> parental status`     | Displays active parental blocking status (Win/Linux)     |
 | `/wol 00:11:22:33:44:55`           | *(alias)* auto-translates to `/lan wake ...`             |
 | `/home docker ps`                  | *(alias)* auto-translates to `/host home docker ps`      |

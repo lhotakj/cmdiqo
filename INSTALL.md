@@ -507,8 +507,8 @@ Once the bot and agents are running, test everything directly inside Slack:
      - Remote machine reboot: `/host MY-WINDOWS-PC reboot` or `/host nas reboot`
      - Active system services: `/host MY-WINDOWS-PC services` or `/host nas services`
      - Service status & restart: `/host MY-WINDOWS-PC service status Spooler` or `/host nas service restart nginx`
-     - Parental Controls (YouTube & Roblox):
-       - `/host MY-WINDOWS-PC parental on` (blocks YouTube, YouTube Kids, and Roblox in hosts file & flushes DNS).
+     - Parental Controls (YouTube, Roblox, Minecraft & Discord):
+       - `/host MY-WINDOWS-PC parental on` (blocks YouTube, Roblox, Minecraft, and Discord in hosts file & flushes DNS).
        - `/host MY-WINDOWS-PC parental off` (unblocks domains & flushes DNS).
        - `/host MY-WINDOWS-PC parental status` (checks current block status).
    - **Windows-Specific Hotfixes:**

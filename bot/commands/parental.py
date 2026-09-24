@@ -1,4 +1,4 @@
-"""Parental control command handlers: manage YouTube and Roblox domain blocks on remote agents (Windows & Linux)."""
+"""Parental control command handlers: manage YouTube, Roblox, Minecraft, and Discord domain blocks on remote agents (Windows & Linux)."""
 
 from __future__ import annotations
 
@@ -40,7 +40,62 @@ ROBLOX_DOMAINS: list[str] = [
     "robloxlabs.com",
 ]
 
-PARENTAL_DOMAINS: list[str] = sorted(set(YOUTUBE_DOMAINS + ROBLOX_DOMAINS))
+MINECRAFT_DOMAINS: list[str] = [
+    "minecraft.net",
+    "www.minecraft.net",
+    "mojang.com",
+    "www.mojang.com",
+    "mojangapi.com",
+    "minecraftservices.com",
+    "api.minecraftservices.com",
+    "sessionserver.mojang.com",
+    "authserver.mojang.com",
+    "textures.minecraft.net",
+    "launchermeta.mojang.com",
+    "launchercontent.mojang.com",
+    "libraries.minecraft.net",
+    "resources.download.minecraft.net",
+    "dl.mojang.com",
+    "piston-meta.mojang.com",
+    "piston-data.mojang.com",
+    "login.live.com",
+    "login.microsoftonline.com",
+    "xboxlive.com",
+    "www.xboxlive.com",
+    "user.auth.xboxlive.com",
+    "xsts.auth.xboxlive.com",
+    "profile.xboxlive.com",
+    "realms.minecraft.net",
+    "gamedata.minecraft.net",
+    "events.data.microsoft.com",
+    "vortex.data.microsoft.com",
+    "playfabapi.com",
+    "multiplayer.minecraft.net",
+    "clientconfig.minecraft.net",
+    "geo-prod.do.dsp.mp.microsoft.com",
+    "packages.microsoft.com",
+]
+
+DISCORD_DOMAINS: list[str] = [
+    "discord.com",
+    "www.discord.com",
+    "discord.gg",
+    "discordapp.com",
+    "www.discordapp.com",
+    "discord.app",
+    "discord.media",
+    "discord.net",
+    "discordcdn.com",
+    "cdn.discordapp.com",
+    "media.discordapp.net",
+    "router.discord.gg",
+    "gateway.discord.gg",
+    "status.discord.com",
+]
+
+PARENTAL_DOMAINS: list[str] = sorted(
+    set(YOUTUBE_DOMAINS + ROBLOX_DOMAINS + MINECRAFT_DOMAINS + DISCORD_DOMAINS)
+)
 ALL_DOMAINS: list[str] = PARENTAL_DOMAINS
 
 
@@ -230,14 +285,14 @@ async def manage_parental(params: dict[str, str], hub: Hub | None = None) -> str
             return (
                 f":shield: *Parental Controls on `{host}`: ACTIVE*\n"
                 f"• **Target:** {os_label}\n"
-                f"• YouTube & Roblox are currently **BLOCKED** ({count} domains redirected to 0.0.0.0)."
+                f"• YouTube, Roblox, Minecraft, & Discord are currently **BLOCKED** ({count} domains redirected to 0.0.0.0)."
             )
         if "STATUS:OFF" in output:
             count = output.split(":")[-1] if ":" in output else len(PARENTAL_DOMAINS)
             return (
                 f":unlock: *Parental Controls on `{host}`: INACTIVE*\n"
                 f"• **Target:** {os_label}\n"
-                f"• YouTube & Roblox are currently **UNBLOCKED** ({count} domains commented out in hosts)."
+                f"• YouTube, Roblox, Minecraft, & Discord are currently **UNBLOCKED** ({count} domains commented out in hosts)."
             )
         if "STATUS:NOT_CONFIGURED" in output:
             return (
@@ -251,7 +306,7 @@ async def manage_parental(params: dict[str, str], hub: Hub | None = None) -> str
         return (
             f":white_check_mark: :shield: *Parental controls ENABLED on `{host}`!*\n"
             f"• **Target:** {os_label}\n"
-            f"• **Blocked:** {len(PARENTAL_DOMAINS)} domains (YouTube, YouTube Kids, Roblox) redirected to `0.0.0.0`.\n"
+            f"• **Blocked:** {len(PARENTAL_DOMAINS)} domains (YouTube, Roblox, Minecraft, Discord) redirected to `0.0.0.0`.\n"
             f"• **DNS:** Resolver cache flushed successfully."
         )
 

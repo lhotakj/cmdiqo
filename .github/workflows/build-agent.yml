@@ -30,10 +30,12 @@ jobs:
             artifact_name: shango-agent-linux-x64
             binary_src: dist/shango-agent
             binary_dest: shango-agent-linux-x64
+            zip_src: dist/shango-agent-linux-x64.zip
           - os: windows-latest
             artifact_name: shango-agent-windows-x64
             binary_src: dist/shango-agent.exe
             binary_dest: shango-agent-windows-x64.exe
+            zip_src: dist/shango-agent-windows-x64.zip
 
     steps:
       - name: Checkout repository
@@ -77,12 +79,13 @@ jobs:
           mv ${{ matrix.binary_src }} ${{ matrix.binary_dest }}
           chmod +x ${{ matrix.binary_dest }} || true
 
-      - name: Upload Binary Artifact (for direct download)
+      - name: Upload Binary & Zip Artifacts (for direct download)
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: |
             ${{ matrix.binary_dest }}
+            ${{ matrix.zip_src }}
             shango-agent.cer
           retention-days: 90
           if-no-files-found: warn

@@ -298,12 +298,12 @@ commands:
     run: "shutdown /r /t 10 /c 'Reboot requested from Slack'"
     timeout: 60
 
-  # Parental Controls (YouTube & Roblox blocking - Windows & Linux)
+  # Parental Controls (YouTube, Roblox, Minecraft & Discord blocking - Windows & Linux)
   - name: host-parental
     category: services
     trigger: "/host {host} parental {action}"
-    description: "Manage YouTube & Roblox parental blocking on Windows or Linux (on | off | status)"
-    details: "Configures system-level hosts file blocking on target Windows or Linux agent. When 'on', redirects 23 YouTube and Roblox domains to 0.0.0.0 and flushes DNS cache. When 'off', comments out entries and flushes DNS. 'status' reports the current blocking status."
+    description: "Manage YouTube, Roblox, Minecraft & Discord parental blocking on Windows or Linux (on | off | status)"
+    details: "Configures system-level hosts file blocking on target Windows or Linux agent. When 'on', redirects YouTube, Roblox, Minecraft, and Discord domains to 0.0.0.0 and flushes DNS cache. When 'off', comments out entries and flushes DNS. 'status' reports the current blocking status."
     examples:
       - "/host AMD parental on"
       - "/host nas parental on"

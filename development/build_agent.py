@@ -76,6 +76,50 @@ def sign_windows_binary(exe_path: Path) -> None:
         print(f"[-] Code signing skipped: {exc}")
 
 
+import zipfile
+
+
+def package_agent_zip(system: str, dist_path: Path) -> Path:
+    """Pack binary along with install and uninstall scripts into a zip archive."""
+    dist_dir = dist_path.parent
+    if system == "windows":
+        zip_name = "shango-agent-windows-x64.zip"
+        files_to_pack = [
+            (dist_path, "shango-agent.exe"),
+            (AGENT_DIR / "install-service.ps1", "install-service.ps1"),
+            (AGENT_DIR / "uninstall-service.ps1", "uninstall-service.ps1"),
+            (AGENT_DIR / "agent.env.example", "agent.env.example"),
+            (AGENT_DIR / "agent.json.example", "agent.json.example"),
+        ]
+        cer_path = dist_dir / "shango-agent.cer"
+        if cer_path.exists():
+            files_to_pack.append((cer_path, "shango-agent.cer"))
+    else:
+        zip_name = "shango-agent-linux-x64.zip"
+        files_to_pack = [
+            (dist_path, "shango-agent"),
+            (AGENT_DIR / "install-service.sh", "install-service.sh"),
+            (AGENT_DIR / "uninstall-service.sh", "uninstall-service.sh"),
+            (AGENT_DIR / "shango-agent.service", "shango-agent.service"),
+            (AGENT_DIR / "agent.env.example", "agent.env.example"),
+            (AGENT_DIR / "agent.json.example", "agent.json.example"),
+        ]
+
+    zip_path = dist_dir / zip_name
+    print(f"\n[*] Packaging zip archive: {zip_path}")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for src_path, arc_name in files_to_pack:
+            if src_path.exists():
+                zf.write(src_path, arcname=arc_name)
+                print(f"  + Added: {arc_name}")
+            else:
+                print(f"  - Warning: Missing file {src_path} (skipped)")
+
+    zip_size_mb = zip_path.stat().st_size / (1024 * 1024)
+    print(f"[+] Zip package created successfully: {zip_path} ({zip_size_mb:.1f} MB)")
+    return zip_path
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Cross-platform build script for shango-agent"
@@ -174,6 +218,8 @@ def main() -> None:
         if system == "windows" and not args.skip_sign:
             sign_windows_binary(dist_path)
 
+        zip_path = package_agent_zip(system, dist_path)
+
         if args.copy_to:
             dest = Path(args.copy_to)
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -181,6 +227,10 @@ def main() -> None:
 
             shutil.copy2(dist_path, dest)
             print(f"[+] Copied binary to {dest}")
+            if dest.suffix == ".exe" or dest.name == "shango-agent":
+                copy_zip = dest.parent / zip_path.name
+                shutil.copy2(zip_path, copy_zip)
+                print(f"[+] Copied zip package to {copy_zip}")
     else:
         print("\n[-] Build finished but output binary was not found in dist/")
 

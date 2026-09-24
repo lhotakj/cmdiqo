@@ -77,14 +77,19 @@ if ($Target -eq "Agent" -or $Target -eq "All") {
     }
 
     $distExe = "$rootDir\dist\shango-agent.exe"
+    $distZip = "$rootDir\dist\shango-agent-windows-x64.zip"
     if (Test-Path $distExe) {
         Write-Host ""
         Write-Info "=== Artifact Verification ($distExe) ==="
         (Get-Item $distExe).VersionInfo | Format-List FileDescription, FileVersion, ProductName, ProductVersion, LegalCopyright, CompanyName
         Get-AuthenticodeSignature $distExe | Format-List Status, StatusMessage, SignatureType, SignerCertificate, TimeStamperCertificate
         
-        $hash = (Get-FileHash -Path $distExe -Algorithm SHA256).Hash
-        Write-Info "SHA256 Checksum: $hash"
+        $hashExe = (Get-FileHash -Path $distExe -Algorithm SHA256).Hash
+        Write-Info "Binary SHA256 Checksum: $hashExe"
+    }
+    if (Test-Path $distZip) {
+        $hashZip = (Get-FileHash -Path $distZip -Algorithm SHA256).Hash
+        Write-Info "Zip Package ($distZip) SHA256 Checksum: $hashZip"
     }
 }
 
