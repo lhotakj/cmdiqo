@@ -63,11 +63,16 @@ Socket Mode allows the bot to receive Slack events over a secure outbound WebSoc
 1. In the left sidebar, click **OAuth & Permissions** (under *Features*).
 2. Scroll down to **Scopes** → **Bot Token Scopes** and click **Add an OAuth Scope** for each of these:
    - `commands` — allows the bot to handle `/help`, `/lan`, `/host`, `/home`, and `/wol` slash commands.
-   - `chat:write` — allows the bot to post replies in channels and threads.
+   - `chat:write` — allows the bot to post replies and agent connection notifications in channels.
+   - `channels:read` — allows auto-discovering public channels for agent notifications (`users.conversations` / `conversations.list`).
+   - `groups:read` — allows auto-discovering private channels where the bot is invited.
+   - `channels:join` — allows the bot to auto-join public channels to send notifications.
    - `channels:history` — allows the bot to read messages in public channels.
    - `groups:history` — (optional) allows reading messages in private channels.
    - `im:history` — allows the bot to read 1-on-1 direct messages.
    - `im:write` — allows the bot to send 1-on-1 direct messages.
+
+> **Note**: After adding or updating scopes, scroll up and click **Reinstall to Workspace** to apply the new permissions to your Slack workspace.
 
 ---
 

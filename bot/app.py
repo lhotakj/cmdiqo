@@ -86,7 +86,7 @@ class BotConfig:
     agent_token: str = ""
     slack_bot_token: str = ""
     slack_app_token: str = ""
-    agent_connection_notify: bool = False
+    agent_connection_notify: bool = True
 
     def validate(self) -> None:
         """Perform preflight checks on critical configuration."""
@@ -135,9 +135,9 @@ class BotConfig:
 
         env_notify = os.getenv("AGENT_NOTIFICATION_NOTIFY") or os.getenv("AGENT_CONNECTION_NOTIFY")
         if env_notify is not None:
-            agent_notify = env_notify.strip().lower() in ("true", "1", "yes", "on")
+            agent_notify = env_notify.strip().lower() not in ("false", "0", "no", "off")
         else:
-            agent_notify = config_notify
+            agent_notify = config_notify if "agent_connection_notify" in locals() else True
 
         return cls(
             commands_config_path=os.getenv("COMMANDS_CONFIG", DEFAULT_COMMANDS_CONFIG),
@@ -272,15 +272,21 @@ async def _run_python_handler(
 
     import inspect
 
+    merged_params = dict(params) if isinstance(params, dict) else params
+    if isinstance(merged_params, dict) and spec.get("name"):
+        merged_params["_spec_name"] = spec["name"]
+        if spec.get("trigger"):
+            merged_params["_spec_trigger"] = spec["trigger"]
+
     sig = inspect.signature(func)
     kwargs: dict[str, Any] = {}
     if "hub" in sig.parameters:
         kwargs["hub"] = hub
 
     if inspect.iscoroutinefunction(func):
-        res = await func(params, **kwargs)
+        res = await func(merged_params, **kwargs)
     else:
-        res = await asyncio.to_thread(func, params, **kwargs)
+        res = await asyncio.to_thread(func, merged_params, **kwargs)
     return str(res)
 
 
@@ -812,33 +818,82 @@ def create_bot_app(
     token = config.slack_bot_token or "mock-test-bot-token"
     app = AsyncApp(token=token)
 
+    active_channels: set[str] = set()
+
     if hub is not None:
         async def _on_hub_agent_event(event_type: str, name: str, hello: dict[str, Any]) -> None:
             agent_notify = hello.get("agent_connection_notify") if isinstance(hello, dict) else None
-            notify_enabled = (
-                config.agent_connection_notify
-                if agent_notify is None
-                else bool(agent_notify) or config.agent_connection_notify
-            )
-            if not notify_enabled:
+            if agent_notify is False or (agent_notify is None and not config.agent_connection_notify):
                 return
 
             status_text = f"🟢 Agent {name} connected" if event_type == "connected" else f"🔴 Agent {name} just disconnected"
             msg = f"Agent notification: {status_text}"
             log.info("%s", msg)
 
-            if config.allowed_channels:
-                for ch in config.allowed_channels:
+            target_channels = set(config.allowed_channels) if config.allowed_channels else set(active_channels)
+
+            if not target_channels:
+                try:
+                    resp = await app.client.users_conversations(types="public_channel,private_channel", limit=50)
+                    ch_list = []
+                    if hasattr(resp, "data") and isinstance(resp.data, dict):
+                        ch_list = resp.data.get("channels", [])
+                    elif hasattr(resp, "get"):
+                        ch_list = resp.get("channels", [])
+                    elif isinstance(resp, dict):
+                        ch_list = resp.get("channels", [])
+                    for ch_info in ch_list:
+                        if isinstance(ch_info, dict) and "id" in ch_info:
+                            target_channels.add(ch_info["id"])
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("Could not auto-discover Slack channels via users_conversations: %s", exc)
+
+            if not target_channels:
+                try:
+                    resp = await app.client.conversations_list(types="public_channel", limit=20)
+                    ch_list = []
+                    if hasattr(resp, "data") and isinstance(resp.data, dict):
+                        ch_list = resp.data.get("channels", [])
+                    elif hasattr(resp, "get"):
+                        ch_list = resp.get("channels", [])
+                    elif isinstance(resp, dict):
+                        ch_list = resp.get("channels", [])
+                    for ch_info in ch_list:
+                        if isinstance(ch_info, dict) and "id" in ch_info:
+                            target_channels.add(ch_info["id"])
+                            break
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("Could not auto-discover public channels via conversations_list: %s", exc)
+
+            if target_channels:
+                for ch in target_channels:
                     try:
                         await app.client.chat_postMessage(channel=ch, text=msg)
+                        log.info("Successfully posted agent event notification to channel %s: %s", ch, msg)
                     except Exception as exc:  # noqa: BLE001
+                        if "not_in_channel" in str(exc):
+                            try:
+                                await app.client.conversations_join(channel=ch)
+                                await app.client.chat_postMessage(channel=ch, text=msg)
+                                log.info("Auto-joined channel %s and posted agent notification: %s", ch, msg)
+                                continue
+                            except Exception as join_exc:  # noqa: BLE001
+                                log.warning("Could not auto-join channel %s: %s", ch, join_exc)
                         log.warning("Could not post agent event notification to %s: %s", ch, exc)
+            else:
+                log.warning("Could not auto-discover any Slack channel for agent notification. Invite the bot to a channel or specify ALLOWED_CHANNELS.")
 
         hub.on_agent_event = _on_hub_agent_event
+
+    def _record_channel(command: dict[str, Any]) -> None:
+        ch_id = command.get("channel_id", "")
+        if ch_id:
+            active_channels.add(ch_id)
 
     @app.command("/host")
     async def slash_host(ack: Any, command: dict[str, Any], respond: Any) -> None:
         await ack()
+        _record_channel(command)
         await handle_command(
             f"/host {command.get('text', '')}",
             command.get("user_id", ""),
@@ -855,6 +910,7 @@ def create_bot_app(
     @app.command("/lan")
     async def slash_lan(ack: Any, command: dict[str, Any], respond: Any) -> None:
         await ack()
+        _record_channel(command)
         await handle_command(
             f"/lan {command.get('text', '')}",
             command.get("user_id", ""),

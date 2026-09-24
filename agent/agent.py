@@ -73,7 +73,7 @@ class AgentConfig:
     token: str
     name: str
     reconnect_delay: float = 5.0
-    agent_connection_notify: bool = False
+    agent_connection_notify: bool = True
 
     @classmethod
     def from_env(cls) -> AgentConfig:

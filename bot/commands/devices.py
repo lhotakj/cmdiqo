@@ -61,9 +61,9 @@ def resolve_hostname(ip: str, timeout: float = 0.5) -> str:
         socket.setdefaulttimeout(old_timeout)
 
 
-def format_device_table(rows: list[tuple[str, str, str]]) -> str:
+def format_device_table(rows: list[tuple[str, str, str]] | Any) -> str:
     """Format discovered devices into a clean ASCII table."""
-    if not rows:
+    if not isinstance(rows, list) or not rows:
         return (
             "No devices discovered.\n"
             "If arp-scan failed, run the container with `network_mode: host` "

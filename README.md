@@ -84,7 +84,10 @@ nothing to expose, TLS handled for you. Ideal for a home server.
    Copy the `xapp-...` token — this is your `SLACK_APP_TOKEN`.
 3. **OAuth scopes**: *OAuth & Permissions → Bot Token Scopes*, add:
    - `commands` (for slash commands)
-   - `chat:write` (to post replies)
+   - `chat:write` (to post replies and agent connection notifications)
+   - `channels:read` (to auto-discover public channels for agent notifications)
+   - `groups:read` (to auto-discover private channels where the bot is invited)
+   - `channels:join` (to auto-join public channels for notifications)
    - `channels:history` (to read plain messages in channels)
 4. **Slash commands**: *Slash Commands → Create Command* (create `/help`, `/lan`, `/host`, and optional aliases `/home`, `/wol`):
    | Command | Description               | Usage hint                         |

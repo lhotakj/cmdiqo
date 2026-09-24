@@ -191,10 +191,20 @@ async def manage_users(params: dict[str, str], hub: Hub | None = None) -> str:
     # Deduce action based on params or text
     action = params.get("action", "").lower().strip()
     if not action:
-        if not username:
-            action = "users"
-        else:
+        spec_name = params.get("_spec_name", "").lower()
+        spec_trig = params.get("_spec_trigger", "").lower()
+        if "enable" in spec_name or "enable" in spec_trig:
+            action = "enable"
+        elif "disable" in spec_name or "disable" in spec_trig:
+            action = "disable"
+        elif "status" in spec_name or "status" in spec_trig:
             action = "status"
+        elif "users" in spec_name or "users" in spec_trig:
+            action = "users"
+        elif username:
+            action = "status"
+        else:
+            action = "users"
 
     if not host:
         return ":no_entry_sign: Target host is required."
