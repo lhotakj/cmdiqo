@@ -140,7 +140,7 @@ class AgentConfig:
                 )
             else:
                 try:
-                    with open(config_path, "r", encoding="utf-8") as f:
+                    with open(config_path, "r", encoding="utf-8-sig") as f:
                         file_cfg = json.load(f)
                 except (json.JSONDecodeError, OSError) as exc:
                     issues.append(

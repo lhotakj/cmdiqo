@@ -144,6 +144,9 @@ Edit `config/commands.yaml` to define your commands and aliases (see **Adding yo
 | `/host WIN-PC win memory`          | RAM usage on Windows machine                             |
 | `/host WIN-PC win services`        | Running Windows services table                           |
 | `/host WIN-PC win reboot`          | Reboots Windows machine after 10-second warning          |
+| `/host WIN-PC parental on`         | Blocks YouTube & Roblox in hosts, flushes DNS            |
+| `/host WIN-PC parental off`        | Unblocks YouTube & Roblox in hosts, flushes DNS          |
+| `/host WIN-PC parental status`     | Displays active parental blocking status                 |
 | `/wol 00:11:22:33:44:55`           | *(alias)* auto-translates to `/lan wake ...`             |
 | `/home docker ps`                  | *(alias)* auto-translates to `/host home docker ps`      |
 | `/lan` or `/host` (no arguments)   | Built-in help showing commands and configured aliases    |
@@ -433,7 +436,7 @@ The repository includes [`.github/workflows/build-agent.yml`](.github/workflows/
    ```
    The script automatically:
    - Installs `shango-agent.exe` into `C:\Program Files\Shango\Agent\`
-   - Generates configuration and secrets at `C:\ProgramData\Shango\Agent\config.json` (protected ACLs)
+   - Generates configuration at `C:\ProgramData\Shango\Agent\config.json` (accessible for easy editing)
    - Registers a native Windows Service (`ShangoAgent`) running under `NT AUTHORITY\SYSTEM` on boot
    - Starts the service immediately
 

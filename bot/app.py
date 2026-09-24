@@ -242,6 +242,28 @@ def _run_python(spec: dict[str, Any], params: dict[str, str]) -> str:
     return str(func(params))
 
 
+async def _run_python_handler(
+    spec: dict[str, Any], params: dict[str, str], hub: Hub | None = None
+) -> str:
+    """Execute a Python handler function, passing hub if accepted and awaiting if coroutine."""
+    module_name, func_name = spec["handler"].split(":", 1)
+    module = importlib.import_module(f"bot.{module_name}")
+    func = getattr(module, func_name)
+
+    import inspect
+
+    sig = inspect.signature(func)
+    kwargs: dict[str, Any] = {}
+    if "hub" in sig.parameters:
+        kwargs["hub"] = hub
+
+    if inspect.iscoroutinefunction(func):
+        res = await func(params, **kwargs)
+    else:
+        res = await asyncio.to_thread(func, params, **kwargs)
+    return str(res)
+
+
 def split_cmdline(cmdline: str) -> list[str]:
     """Split command-line string into arguments, supporting cross-platform path normalization."""
     if os.name == "nt":
@@ -279,7 +301,8 @@ async def execute_command(
     """Route a command to the container or to an agent when `target` is set."""
     validate_params(params)
     kind = spec["kind"]
-    cmdline = spec["run"].format(**params)
+    raw_cmdline = spec.get("run")
+    cmdline = raw_cmdline.format(**params) if raw_cmdline else ""
     cwd = spec.get("cwd")
     if cwd:
         cwd = cwd.format(**params)
@@ -301,7 +324,10 @@ async def execute_command(
             if kind == "shell":
                 return await asyncio.to_thread(_run_shell_local, cmdline, cwd, timeout)
             if kind == "python":
-                return await asyncio.to_thread(_run_python, spec, params)
+                return await _run_python_handler(spec, params, hub)
+
+        if kind == "python":
+            return await _run_python_handler(spec, params, hub)
 
         if hub is None:
             raise RuntimeError("hub is disabled (HUB_ENABLED=false)")
@@ -311,7 +337,7 @@ async def execute_command(
         return "kind 'ps1' requires a 'target' pointing at a Windows agent"
     if kind == "shell":
         return await asyncio.to_thread(_run_shell_local, cmdline, cwd, timeout)
-    return await asyncio.to_thread(_run_python, spec, params)
+    return await _run_python_handler(spec, params, hub)
 
 
 # ---------------------------------------------------------------------------

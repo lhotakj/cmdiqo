@@ -17,6 +17,7 @@ from bot.app import (
     format_bot_preflight_error,
     handle_command,
     help_text,
+    load_commands,
     reply_output,
     run_main,
 )
@@ -82,10 +83,9 @@ def test_run_shell_local():
 
 @pytest.mark.asyncio
 async def test_execute_command_kinds():
-    # Local python
+    # Local python without 'run' field
     spec_py = {
         "kind": "python",
-        "run": "",
         "handler": "commands.devices:format_device_table",
     }
     out_py = await execute_command(spec_py, {})
@@ -244,6 +244,27 @@ async def test_handle_command_execution(monkeypatch):
     assert post_mock.await_count == 2
     assert "Running `/test {name}`" in post_mock.await_args_list[0][0][0]
     assert "Executed with my-target" in post_mock.await_args_list[1][0][0]
+
+
+@pytest.mark.asyncio
+async def test_handle_command_real_lan_devices_list(monkeypatch):
+    commands = load_commands("config/commands.yaml")
+    monkeypatch.setattr("bot.commands.devices.format_device_table", lambda rows: "MOCK_DEVICE_TABLE")
+    posted = []
+
+    async def post(text: str) -> None:
+        posted.append(text)
+
+    await handle_command(
+        "/lan devices list",
+        user_id="U1",
+        channel_id="C1",
+        post=post,
+        commands=commands,
+    )
+    assert len(posted) == 2
+    assert "Running `/lan devices list`" in posted[0]
+    assert "MOCK_DEVICE_TABLE" in posted[1]
 
 
 def test_create_bot_app_factory():

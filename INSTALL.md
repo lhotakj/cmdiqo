@@ -66,6 +66,8 @@ Socket Mode allows the bot to receive Slack events over a secure outbound WebSoc
    - `chat:write` — allows the bot to post replies in channels and threads.
    - `channels:history` — allows the bot to read messages in public channels.
    - `groups:history` — (optional) allows reading messages in private channels.
+   - `im:history` — allows the bot to read 1-on-1 direct messages.
+   - `im:write` — allows the bot to send 1-on-1 direct messages.
 
 ---
 
@@ -96,20 +98,33 @@ Socket Mode allows the bot to receive Slack events over a secure outbound WebSoc
 2. Toggle **Enable Events** to **On**.
 3. Expand **Subscribe to bot events** and click **Add Bot User Event**.
 4. Add:
-   - `message.channels` — allows the bot to reply to plain text messages in channels.
+   - `message.channels` — allows the bot to reply to messages in public channels.
+   - `message.im` — allows the bot to reply to 1-on-1 direct messages.
 5. Click **Save Changes** at the bottom of the page.
 
 ---
 
-### Step 1.6: Install App to Workspace & Get `SLACK_BOT_TOKEN`
-1. In the left sidebar, click **Install App** (or back to *OAuth & Permissions*).
-2. Click **Install to Workspace** and then click **Allow**.
+### Step 1.6: Enable Messages Tab in App Home (Direct Messaging)
+
+> [!IMPORTANT]
+> If you skip this step, Slack will show: **"Sending messages to this app has been turned off"** when you click on the bot under Apps.
+
+1. In the left sidebar, click **App Home** (under *Features*).
+2. Scroll down to the **Show Tabs** section:
+   - Ensure the **Messages Tab** toggle is turned **ON**.
+   - Check the checkbox: **"Allow users to send Slash commands and messages from the messages tab"**.
+
+---
+
+### Step 1.7: Install (or Reinstall) App to Workspace & Get `SLACK_BOT_TOKEN`
+1. In the left sidebar, click **Install App** (under *Settings*).
+2. Click **Install to Workspace** (or **Reinstall to Workspace** if updating scopes) and then click **Allow**.
 3. Under *OAuth Tokens for Your Workspace*, copy the **Bot User OAuth Token** starting with `xoxb-...`.
    **Save this as your `SLACK_BOT_TOKEN`**.
 
 ---
 
-### Step 1.7: Find Your Slack User ID (For Security)
+### Step 1.8: Find Your Slack User ID (For Security)
 To ensure only **you** can execute commands, find your Slack User ID:
 1. Open the Slack desktop app or browser.
 2. Click your profile picture in the bottom-left / top-right corner → click **Profile**.
@@ -119,11 +134,16 @@ To ensure only **you** can execute commands, find your Slack User ID:
 
 ---
 
-### Step 1.8: Invite the Bot to a Channel
-In any Slack channel where you want to interact with the bot (e.g., `#devops` or `#admin`):
-```text
-/invite @shango-bot
-```
+### Step 1.9: Interact with the Bot
+You can interact with the bot in two ways:
+1. **Direct Message / App Home:**
+   Click **shango-bot** under the **Apps** section in Slack and type `/help` or `/lan`.
+2. **In any Channel:**
+   Invite the bot to a channel (e.g. `#devops` or `#admin`):
+   ```text
+   /invite @shango-bot
+   ```
+   Then type slash commands like `/lan`, `/host`, or `/help`.
 
 ---
 
@@ -135,7 +155,7 @@ Never store tokens or passwords in Git repositories, Dockerfiles, or Slack chat.
 |---|---|---|---|
 | **Bot Server** | `/path/to/Shango/.env` | `chmod 600 .env` | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `AGENT_TOKEN`, `ALLOWED_USERS` |
 | **Linux Agent** | `/etc/shango-agent/agent.env` | `chmod 600` (owned by `root:root`) | `HUB_URL`, `AGENT_TOKEN`, `AGENT_NAME` |
-| **Windows Agent** | `C:\ProgramData\Shango\Agent\config.json` | Protected NTFS ACL (SYSTEM & Administrators only) | `hub_url`, `token`, `name` |
+| **Windows Agent** | `C:\ProgramData\Shango\Agent\config.json` | Config & secrets (Full edit access for Admins & Users) | `hub_url`, `token`, `name` |
 
 ### Generate a Strong `AGENT_TOKEN`
 The `AGENT_TOKEN` is a shared secret between your bot and your agents. Generate a secure random string:
@@ -358,7 +378,7 @@ To verify and ensure the `.exe` is authentic and safe:
 #### What the installer sets up automatically:
 - **Real Windows Service (`ShangoAgent`)**: Registered directly in Windows Service Control Manager (SCM). Visible in `services.msc`.
 - **Pure Python & PowerShell Engine**: Uses Python's native Win32 service dispatcher (`agent/service_windows.py` using standard library `ctypes`) invoked via `shango-agent.exe --service` (zero compiler steps, zero external wrappers).
-- **Protected Secrets in `C:\ProgramData\Shango\Agent\config.json`**: Restricts file permissions (ACLs) so that **only `SYSTEM` and `Administrators`** can read the file, protecting `AGENT_TOKEN` from standard users.
+- **Accessible Config in `C:\ProgramData\Shango\Agent\config.json`**: Grants Full Control to Administrators and the current user (plus Modify to Users) so you can freely view and edit settings in Notepad, VS Code, or any shell without UAC access issues.
 - **Automatic Self-Healing**: Configures SCM failure recovery to automatically restart the service if it ever terminates.
 - **Log Redirection**: Redirects stdout/stderr to `C:\ProgramData\Shango\Agent\logs\service.log`.
 - **Strips Mark-of-the-Web & Trusts Certificate**: Removes download flags and imports the Authenticode certificate into machine stores.
@@ -458,7 +478,12 @@ Once the bot and agents are running, test everything directly inside Slack:
    - Host-agnostic commands:
      - System health: `/host home uptime` or `/host home memory`
      - On Linux: `/host nas disk` (runs `df -h` on the NAS and returns storage usage).
-     - On Windows: `/host MY-WINDOWS-PC win updates` (queries Windows hotfixes).
+     - On Windows:
+       - Hotfixes: `/host MY-WINDOWS-PC win updates` (queries Windows updates).
+       - Parental Controls (YouTube & Roblox):
+         - `/host MY-WINDOWS-PC parental on` (blocks YouTube, YouTube Kids, and Roblox domains).
+         - `/host MY-WINDOWS-PC parental off` (unblocks domains).
+         - `/host MY-WINDOWS-PC parental status` (checks current block status).
    - Via alias:
      - `/home docker ps` (automatically translated to `/host home docker ps`).
 
