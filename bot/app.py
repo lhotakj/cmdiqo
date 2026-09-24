@@ -264,6 +264,20 @@ async def _run_python_handler(
     return str(res)
 
 
+def format_params(template: str, params: dict[str, str]) -> str:
+    """Format template string by substituting only known parameter keys ({name}),
+
+    leaving PowerShell scriptblocks (${...}) and format specifiers ({0}, {1:yyyy...}) intact.
+    """
+    if not template or not params:
+        return template or ""
+    return re.sub(
+        r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}",
+        lambda m: params[m.group(1)] if m.group(1) in params else m.group(0),
+        template,
+    )
+
+
 def split_cmdline(cmdline: str) -> list[str]:
     """Split command-line string into arguments, supporting cross-platform path normalization."""
     if os.name == "nt":
@@ -292,6 +306,69 @@ def _run_shell_local(cmdline: str, cwd: str | None, timeout: int) -> str:
         return f"Error executing command: {exc}"
 
 
+def _run_ps1_local(cmdline: str, cwd: str | None, timeout: int) -> str:
+    exe = "powershell.exe" if os.name == "nt" else "pwsh"
+    try:
+        proc = subprocess.run(
+            [exe, "-NoProfile", "-NonInteractive", "-Command", cmdline],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )  # nosec: B603
+        output = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        return output or f"(finished with exit code {proc.returncode})"
+    except FileNotFoundError as exc:
+        return f"Error: executable not found: {exc}"
+    except subprocess.TimeoutExpired:
+        return f"Error: command timed out after {timeout}s"
+    except OSError as exc:
+        return f"Error executing command: {exc}"
+
+
+WINDOWS_COMMAND_FALLBACKS: dict[str, tuple[str, str]] = {
+    "uptime": (
+        "ps1",
+        (
+            "$b = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime; $u = (Get-Date) - $b; "
+            "'Uptime: {0}d {1}h {2}m {3}s (Booted: {4:yyyy-MM-dd HH:mm:ss})' -f [int]$u.TotalDays, $u.Hours, $u.Minutes, $u.Seconds, $b"
+        ),
+    ),
+    "free -h": (
+        "ps1",
+        (
+            "Get-CimInstance Win32_OperatingSystem | Select-Object "
+            "@{Name='Total_GB';Expression={[math]::Round($_.TotalVisibleMemorySize/1MB,2)}}, "
+            "@{Name='Free_GB';Expression={[math]::Round($_.FreePhysicalMemory/1MB,2)}}, "
+            "@{Name='Used_GB';Expression={[math]::Round(($_.TotalVisibleMemorySize - $_.FreePhysicalMemory)/1MB,2)}}, "
+            "@{Name='UsedPercent';Expression={[math]::Round((($_.TotalVisibleMemorySize - $_.FreePhysicalMemory)/$_.TotalVisibleMemorySize)*100,1)}} "
+            "| Format-Table -AutoSize"
+        ),
+    ),
+    "df -h": (
+        "ps1",
+        (
+            'Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID, VolumeName, '
+            "@{Name='Total_GB';Expression={[math]::Round($_.Size/1GB,2)}}, "
+            "@{Name='Free_GB';Expression={[math]::Round($_.FreeSpace/1GB,2)}}, "
+            "@{Name='Used_GB';Expression={[math]::Round(($_.Size - $_.FreeSpace)/1GB,2)}}, "
+            "@{Name='PercentFree';Expression={[math]::Round(($_.FreeSpace/$_.Size)*100,1)}} "
+            "| Format-Table -AutoSize"
+        ),
+    ),
+    "ps aux --sort=-%cpu | head -n 11": (
+        "ps1",
+        (
+            "Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 Id, ProcessName, "
+            "@{Name='CPU_s';Expression={[math]::Round($_.CPU,2)}}, "
+            "@{Name='RAM_MB';Expression={[math]::Round($_.WorkingSet/1MB,2)}} "
+            "| Format-Table -AutoSize"
+        ),
+    ),
+}
+
+
 async def execute_command(
     spec: dict[str, Any],
     params: dict[str, str],
@@ -302,15 +379,14 @@ async def execute_command(
     validate_params(params)
     kind = spec["kind"]
     raw_cmdline = spec.get("run")
-    cmdline = raw_cmdline.format(**params) if raw_cmdline else ""
     cwd = spec.get("cwd")
     if cwd:
-        cwd = cwd.format(**params)
+        cwd = format_params(cwd, params)
     timeout = int(spec.get("timeout", default_timeout))
 
     target = spec.get("target")
     if target:
-        agent_name = target.format(**params)
+        agent_name = format_params(target, params)
         is_local_target = agent_name.lower() in (
             "local",
             "localhost",
@@ -318,9 +394,20 @@ async def execute_command(
             "self",
         )
         is_home_unregistered = agent_name.lower() == "home" and (
-            hub is None or "home" not in hub.agents
+            hub is None
+            or not isinstance(getattr(hub, "agents", None), dict)
+            or "home" not in hub.agents
         )
         if is_local_target or is_home_unregistered:
+            if os.name == "nt":
+                if spec.get("windows_run"):
+                    raw_cmdline = spec["windows_run"]
+                    kind = spec.get("windows_kind", "ps1")
+                elif raw_cmdline in WINDOWS_COMMAND_FALLBACKS:
+                    kind, raw_cmdline = WINDOWS_COMMAND_FALLBACKS[raw_cmdline]
+            cmdline = format_params(raw_cmdline, params) if raw_cmdline else ""
+            if kind == "ps1":
+                return await asyncio.to_thread(_run_ps1_local, cmdline, cwd, timeout)
             if kind == "shell":
                 return await asyncio.to_thread(_run_shell_local, cmdline, cwd, timeout)
             if kind == "python":
@@ -331,8 +418,24 @@ async def execute_command(
 
         if hub is None:
             raise RuntimeError("hub is disabled (HUB_ENABLED=false)")
+
+        # Target is a remote agent connected to the hub
+        agents_registry = getattr(hub, "agents", None)
+        if isinstance(agents_registry, dict) and agent_name in agents_registry:
+            agent_info = agents_registry[agent_name]
+            platform_str = str(agent_info.get("platform", "")).lower()
+            if "win" in platform_str:
+                if spec.get("windows_run"):
+                    raw_cmdline = spec["windows_run"]
+                    kind = spec.get("windows_kind", "ps1")
+                elif raw_cmdline in WINDOWS_COMMAND_FALLBACKS:
+                    kind, raw_cmdline = WINDOWS_COMMAND_FALLBACKS[raw_cmdline]
+
+        cmdline = format_params(raw_cmdline, params) if raw_cmdline else ""
         return await hub.exec(agent_name, kind, cmdline, cwd=cwd, timeout=timeout)
 
+    # Local command without target
+    cmdline = format_params(raw_cmdline, params) if raw_cmdline else ""
     if kind == "ps1":
         return "kind 'ps1' requires a 'target' pointing at a Windows agent"
     if kind == "shell":
@@ -625,7 +728,7 @@ async def handle_command(
         if m:
             spec = c["spec"]
             tgt = (
-                f" on `{spec['target'].format(**m.groupdict())}`"
+                f" on `{format_params(spec['target'], m.groupdict())}`"
                 if spec.get("target")
                 else ""
             )

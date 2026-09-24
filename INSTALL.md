@@ -232,7 +232,8 @@ docker compose logs -f shango-bot
 
 You should see:
 ```text
-INFO [shango-bot] Loaded 6 command(s) from /app/config/commands.yaml
+INFO [shango-bot] Loaded 19 command(s) from /app/config/commands.yaml
+INFO [shango-bot] Loaded 2 alias(es) from /app/config/commands.yaml
 INFO [shango-bot.hub] Hub listening on ws://0.0.0.0:8765 (agents connect outbound to this)
 INFO [shango-bot] Starting Socket Mode handler (outbound WebSocket only - NAT friendly)
 ```
@@ -475,17 +476,23 @@ Once the bot and agents are running, test everything directly inside Slack:
    The bot broadcasts a magic UDP packet on port 9 to boot the target machine.
 
 4. **Test Remote Command Execution:**
-   - Host-agnostic commands:
-     - System health: `/host home uptime` or `/host home memory`
-     - On Linux: `/host nas disk` (runs `df -h` on the NAS and returns storage usage).
-     - On Windows:
-       - Hotfixes: `/host MY-WINDOWS-PC win updates` (queries Windows updates).
-       - Parental Controls (YouTube & Roblox):
-         - `/host MY-WINDOWS-PC parental on` (blocks YouTube, YouTube Kids, and Roblox domains).
-         - `/host MY-WINDOWS-PC parental off` (unblocks domains).
-         - `/host MY-WINDOWS-PC parental status` (checks current block status).
-   - Via alias:
-     - `/home docker ps` (automatically translated to `/host home docker ps`).
+   - **Cross-Platform Commands (work on Windows & Linux):**
+     - System uptime & boot time: `/host MY-WINDOWS-PC uptime` or `/host nas uptime`
+     - Physical memory: `/host MY-WINDOWS-PC memory` or `/host nas memory`
+     - Disk & drive usage: `/host MY-WINDOWS-PC disk` or `/host nas disk`
+     - Top CPU-consuming processes: `/host MY-WINDOWS-PC top` or `/host nas top`
+     - Remote machine reboot: `/host MY-WINDOWS-PC reboot` or `/host nas reboot`
+     - Active system services: `/host MY-WINDOWS-PC services` or `/host nas services`
+     - Service status & restart: `/host MY-WINDOWS-PC service status Spooler` or `/host nas service restart nginx`
+     - Parental Controls (YouTube & Roblox):
+       - `/host MY-WINDOWS-PC parental on` (blocks YouTube, YouTube Kids, and Roblox in hosts file & flushes DNS).
+       - `/host MY-WINDOWS-PC parental off` (unblocks domains & flushes DNS).
+       - `/host MY-WINDOWS-PC parental status` (checks current block status).
+   - **Windows-Specific Hotfixes:**
+     - `/host MY-WINDOWS-PC win updates` (queries installed Windows quality updates).
+   - **Docker Operations (Linux Host):**
+     - `/host home docker ps` (or shortcut alias `/home docker ps`).
+     - `/host home docker restart plex` or `/host home docker logs plex`.
 
 ---
 

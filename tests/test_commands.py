@@ -74,8 +74,17 @@ def test_load_commands_valid_file():
     assert "/host {host} docker ps" in triggers
     assert "/host {host} uptime" in triggers
     assert "/host {host} memory" in triggers
+    assert "/host {host} reboot" in triggers
+    assert "/host {host} services" in triggers
     # Verify no legacy /home commands remain in commands:
     assert not any(t.startswith("/home") for t in triggers)
+
+    # Verify cross-platform Windows specs
+    specs_by_name = {c["spec"]["name"]: c["spec"] for c in commands}
+    for name in ("host-uptime", "host-memory", "host-disk", "host-top", "host-reboot", "host-services"):
+        assert name in specs_by_name
+        assert "windows_run" in specs_by_name[name]
+        assert specs_by_name[name].get("windows_kind") == "ps1"
 
 
 def test_load_commands_nonexistent_file():

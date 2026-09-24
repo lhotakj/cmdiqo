@@ -13,9 +13,10 @@ import logging
 import os
 import sys
 import threading
+from collections.abc import Callable, Coroutine
 from ctypes import wintypes
 from pathlib import Path
-from typing import Any, Callable, Coroutine
+from typing import Any
 
 log = logging.getLogger("shango-agent.service")
 
@@ -72,7 +73,6 @@ _stop_event = threading.Event()
 
 
 def _set_status(state: int, win32_exit_code: int = NO_ERROR, wait_hint: int = 0) -> None:
-    global _h_status
     if not _h_status:
         return
     controls = (SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN) if state == SERVICE_RUNNING else 0
@@ -164,8 +164,8 @@ def run_as_windows_service(
 
         try:
             asyncio.run(run_coro_fn(_stop_event))
-        except Exception as exc:  # noqa: BLE001
-            log.exception("Exception in Windows service worker loop: %s", exc)
+        except Exception:
+            log.exception("Exception in Windows service worker loop")
         finally:
             log.info("Shango Windows Service terminated; reporting STOPPED to SCM.")
             _set_status(SERVICE_STOPPED)

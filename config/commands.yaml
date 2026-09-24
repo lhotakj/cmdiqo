@@ -83,75 +83,117 @@ commands:
     category: system
     trigger: "/host {host} uptime"
     description: "Show system uptime and load average"
-    details: "Runs the 'uptime' command on the target host, displaying how long the machine has been running, number of active users, and 1, 5, and 15-minute load averages."
+    details: "Displays system uptime. Runs 'uptime' on Linux or queries Win32_OperatingSystem via PowerShell on Windows."
     examples:
       - "/host home uptime"
-      - "/host nas uptime"
+      - "/host AMD uptime"
     kind: shell
     target: "{host}"
     run: "uptime"
+    windows_kind: ps1
+    windows_run: "$b = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime; $u = (Get-Date) - $b; 'Uptime: {0}d {1}h {2}m {3}s (Booted: {4:yyyy-MM-dd HH:mm:ss})' -f [int]$u.TotalDays, $u.Hours, $u.Minutes, $u.Seconds, $b"
 
   - name: host-memory
     category: system
     trigger: "/host {host} memory"
     description: "Show free and used RAM memory"
-    details: "Runs 'free -h' on the target host to display total, used, free, shared, buffer/cache, and available physical and swap memory in human-readable units."
+    details: "Displays total, free, and used physical RAM. Uses 'free -h' on Linux and PowerShell Win32_OperatingSystem on Windows."
     examples:
       - "/host home memory"
-      - "/host nas memory"
+      - "/host AMD memory"
     kind: shell
     target: "{host}"
     run: "free -h"
+    windows_kind: ps1
+    windows_run: "Get-CimInstance Win32_OperatingSystem | Select-Object @{Name='Total_GB';Expression={[math]::Round($_.TotalVisibleMemorySize/1MB,2)}}, @{Name='Free_GB';Expression={[math]::Round($_.FreePhysicalMemory/1MB,2)}}, @{Name='Used_GB';Expression={[math]::Round(($_.TotalVisibleMemorySize - $_.FreePhysicalMemory)/1MB,2)}}, @{Name='UsedPercent';Expression={[math]::Round((($_.TotalVisibleMemorySize - $_.FreePhysicalMemory)/$_.TotalVisibleMemorySize)*100,1)}} | Format-Table -AutoSize"
 
   - name: host-disk
     category: system
     trigger: "/host {host} disk"
     description: "Disk usage on {host}"
-    details: "Executes 'df -h' on the target host to report filesystem sizes, used space, available space, percentage capacity, and mount points."
+    details: "Reports filesystem and drive usage. Runs 'df -h' on Linux or queries Win32_LogicalDisk via PowerShell on Windows."
     examples:
       - "/host home disk"
-      - "/host nas disk"
+      - "/host AMD disk"
     kind: shell
     target: "{host}"
     run: "df -h"
+    windows_kind: ps1
+    windows_run: 'Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID, VolumeName, @{Name=''Total_GB'';Expression={[math]::Round($_.Size/1GB,2)}}, @{Name=''Free_GB'';Expression={[math]::Round($_.FreeSpace/1GB,2)}}, @{Name=''Used_GB'';Expression={[math]::Round(($_.Size - $_.FreeSpace)/1GB,2)}}, @{Name=''PercentFree'';Expression={[math]::Round(($_.FreeSpace/$_.Size)*100,1)}} | Format-Table -AutoSize'
 
   - name: host-top
     category: system
     trigger: "/host {host} top"
     description: "Top CPU-consuming processes on {host}"
-    details: "Inspects running processes sorted by percentage CPU usage, returning the top 10 resource-intensive processes with user, PID, CPU%, MEM%, and command line."
+    details: "Inspects running processes sorted by CPU usage. Uses 'ps aux' on Linux and Get-Process on Windows."
     examples:
       - "/host home top"
-      - "/host nas top"
+      - "/host AMD top"
     kind: shell
     target: "{host}"
     run: "ps aux --sort=-%cpu | head -n 11"
+    windows_kind: ps1
+    windows_run: "Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 Id, ProcessName, @{Name='CPU_s';Expression={[math]::Round($_.CPU,2)}}, @{Name='RAM_MB';Expression={[math]::Round($_.WorkingSet/1MB,2)}} | Format-Table -AutoSize"
+
+  - name: host-reboot
+    category: system
+    trigger: "/host {host} reboot"
+    description: "Reboot remote host after warning"
+    details: "Safely reboots the remote host. Schedules shutdown on Linux or initiates shutdown warning on Windows."
+    examples:
+      - "/host home reboot"
+      - "/host AMD reboot"
+    kind: shell
+    target: "{host}"
+    run: "shutdown -r +1 'Reboot requested from Slack'"
+    windows_kind: ps1
+    windows_run: "shutdown /r /t 10 /c 'Reboot requested from Slack'"
+    timeout: 60
 
   # Service Management
+  - name: host-services
+    category: services
+    trigger: "/host {host} services"
+    description: "List active system services"
+    details: "Lists active running services on the target host. Uses systemctl on Linux and Get-Service on Windows."
+    examples:
+      - "/host home services"
+      - "/host AMD services"
+    kind: shell
+    target: "{host}"
+    run: "systemctl list-units --type=service --state=running --no-pager | head -n 30"
+    windows_kind: ps1
+    windows_run: "Get-Service | Where-Object {$_.Status -eq 'Running'} | Select-Object -First 25 Name, DisplayName | Format-Table -AutoSize"
+    timeout: 60
+
   - name: host-service-status
     category: services
     trigger: "/host {host} service status {service}"
     description: "Check status of a system service"
-    details: "Queries systemd via 'systemctl status {service} --no-pager' to inspect active state, daemon status, PID, memory, and recent journal log output."
+    details: "Queries system service state. Uses systemctl on Linux or Get-Service on Windows."
     examples:
       - "/host nas service status smbd"
-      - "/host home service status nginx"
+      - "/host AMD service status Spooler"
     kind: shell
     target: "{host}"
     run: "systemctl status {service} --no-pager"
+    windows_kind: ps1
+    windows_run: "Get-Service -Name '{service}' | Select-Object Name, DisplayName, Status, StartType | Format-List"
     timeout: 30
 
   - name: host-service-restart
     category: services
     trigger: "/host {host} service restart {service}"
     description: "Restart a system service"
-    details: "Restarts the specified systemd service unit via 'systemctl restart {service}'. Useful for applying configuration updates or recovering stalled daemons."
+    details: "Restarts the specified system service unit. Uses systemctl on Linux or Restart-Service on Windows."
     examples:
       - "/host nas service restart smbd"
-      - "/host home service restart nginx"
+      - "/host AMD service restart Spooler"
     kind: shell
     target: "{host}"
     run: "systemctl restart {service}"
+    windows_kind: ps1
+    windows_run: "Restart-Service -Name '{service}' -Force; Get-Service -Name '{service}' | Select-Object Name, DisplayName, Status"
     timeout: 60
 
   # Docker Management

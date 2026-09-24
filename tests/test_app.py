@@ -8,13 +8,16 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from bot.app import (
+    WINDOWS_COMMAND_FALLBACKS,
     BotConfig,
     BotConfigurationError,
+    _run_ps1_local,
     _run_python,
     _run_shell_local,
     create_bot_app,
     execute_command,
     format_bot_preflight_error,
+    format_params,
     handle_command,
     help_text,
     load_commands,
@@ -79,6 +82,11 @@ def test_run_shell_local():
 
     err_out = _run_shell_local("nonexistent_shell_cmd_123", cwd=None, timeout=5)
     assert "Error:" in err_out
+
+
+def test_run_ps1_local():
+    out = _run_ps1_local("Write-Output 'hello_shango'", cwd=None, timeout=5)
+    assert "hello_shango" in out or "Error:" in out
 
 
 @pytest.mark.asyncio
@@ -653,3 +661,109 @@ async def test_reply_help_chunking():
     large_text = ("Section A\n" + "A" * 2500) + "\n\n" + ("Section B\n" + "B" * 2500)
     await reply_help(post_mock, large_text)
     assert post_mock.await_count == 2
+
+
+def test_format_params_preserves_powershell_braces():
+    # Regular parameter replacement
+    template = "Get-Service -Name '{service}' | Where-Object {$_.Status -eq 'Running'}"
+    formatted = format_params(template, {"service": "wuauserv"})
+    assert formatted == "Get-Service -Name 'wuauserv' | Where-Object {$_.Status -eq 'Running'}"
+
+    # String format specifiers {0}, {1}, {4:yyyy-MM-dd...} are left untouched
+    ps_fmt = "'Uptime: {0}d {1}h (Booted: {4:yyyy-MM-dd HH:mm:ss})' -f $d, $h on {host}"
+    res = format_params(ps_fmt, {"host": "AMD"})
+    assert res == "'Uptime: {0}d {1}h (Booted: {4:yyyy-MM-dd HH:mm:ss})' -f $d, $h on AMD"
+
+    # Edge cases
+    assert format_params("", {"host": "AMD"}) == ""
+    assert format_params("echo test", {}) == "echo test"
+
+
+@pytest.mark.asyncio
+async def test_execute_command_windows_agent_routing():
+    mock_hub = AsyncMock()
+    mock_hub.agents = {
+        "AMD": {"platform": "Windows/11", "ws": MagicMock()},
+        "nas": {"platform": "Linux/6.1.0", "ws": MagicMock()},
+    }
+    mock_hub.exec.return_value = "win_ok"
+
+    # Command with explicit windows_run and windows_kind
+    spec_uptime = {
+        "name": "host-uptime",
+        "kind": "shell",
+        "target": "{host}",
+        "run": "uptime",
+        "windows_kind": "ps1",
+        "windows_run": "$b = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime; 'Uptime: {0}' -f $b",
+    }
+
+    # 1. Routing to Windows agent AMD -> switches to ps1 and windows_run
+    res_win = await execute_command(spec_uptime, {"host": "AMD"}, hub=mock_hub)
+    assert res_win == "win_ok"
+    mock_hub.exec.assert_awaited_with(
+        "AMD",
+        "ps1",
+        "$b = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime; 'Uptime: {0}' -f $b",
+        cwd=None,
+        timeout=120,
+    )
+
+    # 2. Routing to Linux agent nas -> keeps shell and run
+    mock_hub.exec.reset_mock()
+    mock_hub.exec.return_value = "linux_ok"
+    res_linux = await execute_command(spec_uptime, {"host": "nas"}, hub=mock_hub)
+    assert res_linux == "linux_ok"
+    mock_hub.exec.assert_awaited_with(
+        "nas",
+        "shell",
+        "uptime",
+        cwd=None,
+        timeout=120,
+    )
+
+    # 3. Command without windows_run but present in WINDOWS_COMMAND_FALLBACKS (e.g. free -h)
+    spec_fallback = {
+        "name": "host-memory",
+        "kind": "shell",
+        "target": "{host}",
+        "run": "free -h",
+    }
+    mock_hub.exec.reset_mock()
+    await execute_command(spec_fallback, {"host": "AMD"}, hub=mock_hub)
+    expected_kind, expected_cmd = WINDOWS_COMMAND_FALLBACKS["free -h"]
+    mock_hub.exec.assert_awaited_with(
+        "AMD",
+        expected_kind,
+        expected_cmd,
+        cwd=None,
+        timeout=120,
+    )
+
+
+@pytest.mark.asyncio
+async def test_execute_command_windows_service_parameter_routing():
+    mock_hub = AsyncMock()
+    mock_hub.agents = {
+        "AMD": {"platform": "Windows/11", "ws": MagicMock()},
+    }
+    mock_hub.exec.return_value = "service_ok"
+
+    spec_status = {
+        "name": "host-service-status",
+        "kind": "shell",
+        "target": "{host}",
+        "run": "systemctl status {service} --no-pager",
+        "windows_kind": "ps1",
+        "windows_run": "Get-Service -Name '{service}' | Select-Object Name, DisplayName, Status, StartType | Format-List",
+    }
+    res = await execute_command(spec_status, {"host": "AMD", "service": "Spooler"}, hub=mock_hub)
+    assert res == "service_ok"
+    mock_hub.exec.assert_awaited_with(
+        "AMD",
+        "ps1",
+        "Get-Service -Name 'Spooler' | Select-Object Name, DisplayName, Status, StartType | Format-List",
+        cwd=None,
+        timeout=120,
+    )
+

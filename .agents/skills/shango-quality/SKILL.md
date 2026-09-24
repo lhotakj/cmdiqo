@@ -20,6 +20,9 @@ All contributions to Shango must satisfy SonarQube Quality Gates (Zero Vulnerabi
   - Never allow arbitrary shell metacharacters in parameter substitutions.
   - All command triggers must compile placeholder regexes using strict identifier charsets: `(?P<name>[a-zA-Z0-9_\-\.]+)`.
   - Validate parameters with `validate_params(params)` before formatting execution strings.
+- **Safe Parameter Substitution (`format_params`):**
+  - Never use raw Python string `.format(**params)` on command lines that may contain PowerShell string format braces (`{0}`, `{1}`, `{4:yyyy-MM-dd HH:mm:ss}`) or script blocks (`{$_.Status -eq 'Running'}`).
+  - Always use `format_params(template, params)` which substitutes only validated parameter keys (`[a-zA-Z_][a-zA-Z0-9_]*`), preserving PowerShell syntax intact.
 - **Docker Container Non-Root Security (SonarQube S6437):**
   - Production containers must run as a non-root user when possible.
   - When raw network capabilities are required for ARP scanning (`arp-scan`), assign targeted Linux capabilities (`CAP_NET_RAW`, `CAP_NET_ADMIN`) rather than full container root privileges.
@@ -63,7 +66,9 @@ python -m pytest -v --cov=bot --cov=agent --cov-report=term-missing --cov-report
 - `tests/test_devices.py`: Parsing of `arp-scan` and `ip neigh` outputs, ASCII table formatting, and fallback handling.
 - `tests/test_hub.py`: Asynchronous WebSocket server tests, token validation, agent registry, command dispatch, and disconnect cleanup.
 - `tests/test_agent.py`: Agent execution engine (`execute`), platform argv generation (`build_argv`), timeout handling, and result schema.
-- `tests/test_app.py`: Slack message authorization (`ALLOWED_USERS`, `ALLOWED_CHANNELS`), help text formatting, and slash command routing.
+- `tests/test_app.py`: Slack message authorization, help formatting, Windows/Linux dispatch routing, and `format_params` safety.
+- `tests/test_parental.py`: Cross-platform hosts file editing, domain filtering, and DNS cache flushing workflows (Windows & Linux).
+- `tests/test_run.py`: Multi-process supervisor and signal termination lifecycle.
 - `tests/test_version.py`: Dynamic semver resolution, GitHub CI run numbers, hex timestamp dev versioning, and Windows PE version manifests.
 
 ---
@@ -77,10 +82,15 @@ When adding a new command in `config/commands.yaml`:
    - Define custom shortcuts in the top-level `aliases:` section (e.g. mapping `input: "/home"` to `output: "/host home"`).
    - Use `{param}` for dynamic arguments (e.g. `/host {host} docker restart {service}`).
    - **Enrich for Help Engine**: Provide `category` (`lan`, `system`, `services`, `docker`, `windows`), `description` (short one-liner), `details` (operational notes), and `examples` (copy-pasteable examples). These dynamically populate the Slack `/help` and `/help <category>` interactive manual.
-2. **Backend Kind:**
-   - `kind: python`: For internal bot logic. Must define `handler: "module.submodule:function"`. The function receives `params: dict[str, str]` and must return a string.
+2. **Backend Kind & Cross-Platform Execution:**
+   - **Host-Agnostic / Cross-Platform Commands:** When a command can run on both Linux and Windows agents (e.g., uptime, memory, disk, top, reboot, services):
+     - Specify `run: "linux command"` with `kind: shell` (default).
+     - Specify `windows_run: "powershell command"` with `windows_kind: ps1`.
+     - `execute_command()` automatically checks the agent's reported OS platform (`hub.agents[target]["platform"]`) and switches to `windows_run` / `windows_kind` on Windows.
+     - Common Linux commands (`uptime`, `free -h`, `df -h`, `ps aux`) automatically fallback to PowerShell via `WINDOWS_COMMAND_FALLBACKS` even without explicit `windows_run`.
+   - `kind: python`: For internal bot logic. Must define `handler: "module.submodule:function"`. If the function accepts a `hub` keyword argument, the running `Hub` instance is injected automatically.
    - `kind: shell`: Executes locally in the container or on a Linux agent.
-   - `kind: ps1`: Executes PowerShell on a Windows agent. Must specify `target: "agent_name"`.
+   - `kind: ps1`: Executes PowerShell on a Windows agent. Must specify `target: "{host}"`.
 3. **Execution Limits:**
    - Always define an explicit `timeout` in seconds (e.g., `timeout: 180`).
 4. **Validation:**

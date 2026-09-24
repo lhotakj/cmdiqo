@@ -130,23 +130,22 @@ Edit `config/commands.yaml` to define your commands and aliases (see **Adding yo
 | `/lan ping 192.168.1.1`            | Pings a device or IP from the Hub container              |
 | `/lan agents list`                 | Lists connected agents, operating systems, and IPs       |
 | `/lan version`                     | Displays bot version                                     |
-| `/host home uptime`                | System uptime and load averages                          |
-| `/host home memory`                | Free and used RAM memory (`free -h`)                     |
-| `/host nas disk`                   | Disk space usage (`df -h`)                               |
-| `/host home top`                   | Top CPU-consuming processes                              |
-| `/host home docker ps`             | Lists running docker containers                          |
-| `/host home docker logs plex`      | Tails last 50 log lines of a docker container            |
-| `/host home docker restart plex`   | Restarts docker compose project in `/docker/plex`        |
-| `/host home docker stats`          | Snapshot of container CPU, RAM, and network usage        |
-| `/host nas service status smbd`    | Checks systemd service status (`systemctl status`)       |
-| `/host nas service restart nginx`  | Restarts systemd service (`systemctl restart`)           |
-| `/host WIN-PC win updates`         | Queries installed Windows hotfixes on agent `WIN-PC`     |
-| `/host WIN-PC win memory`          | RAM usage on Windows machine                             |
-| `/host WIN-PC win services`        | Running Windows services table                           |
-| `/host WIN-PC win reboot`          | Reboots Windows machine after 10-second warning          |
-| `/host WIN-PC parental on`         | Blocks YouTube & Roblox in hosts, flushes DNS            |
-| `/host WIN-PC parental off`        | Unblocks YouTube & Roblox in hosts, flushes DNS          |
-| `/host WIN-PC parental status`     | Displays active parental blocking status                 |
+| `/host <host> uptime`              | System uptime & boot time (Linux & Windows)              |
+| `/host <host> memory`              | Free and used RAM memory (Linux & Windows)               |
+| `/host <host> disk`                | Disk space and drive usage (Linux & Windows)             |
+| `/host <host> top`                 | Top CPU-consuming processes (Linux & Windows)            |
+| `/host <host> reboot`              | Safely reboots remote machine (Linux & Windows)          |
+| `/host <host> services`            | Lists active running system services (Linux & Windows)   |
+| `/host <host> service status <svc>`| Queries service status (Linux systemd / Windows SCM)     |
+| `/host <host> service restart <svc>`| Restarts system service (Linux systemd / Windows SCM)   |
+| `/host <host> docker ps`           | Lists running docker containers                          |
+| `/host <host> docker logs <svc>`   | Tails last 50 log lines of a docker container            |
+| `/host <host> docker restart <svc>`| Restarts docker compose project in `/docker/<svc>`       |
+| `/host <host> docker stats`        | Snapshot of container CPU, RAM, and network usage        |
+| `/host <host> win updates`         | Queries installed Windows hotfixes on Windows agent      |
+| `/host <host> parental on`         | Blocks YouTube & Roblox in hosts, flushes DNS (Win/Linux)|
+| `/host <host> parental off`        | Unblocks YouTube & Roblox in hosts, flushes DNS          |
+| `/host <host> parental status`     | Displays active parental blocking status (Win/Linux)     |
 | `/wol 00:11:22:33:44:55`           | *(alias)* auto-translates to `/lan wake ...`             |
 | `/home docker ps`                  | *(alias)* auto-translates to `/host home docker ps`      |
 | `/lan` or `/host` (no arguments)   | Built-in help showing commands and configured aliases    |
@@ -253,12 +252,24 @@ commands:
     target: "{host}"
     run: "docker logs --tail 50 {service}"
     timeout: 60
-```
-  kind: shell
-  run: "wakeonlan {mac}"        # install wakeonlan in the image if needed
+
+  # Cross-platform command example (Linux & Windows)
+  - name: host-uptime
+    category: system
+    trigger: "/host {host} uptime"
+    description: "Show system uptime and load average"
+    details: "Displays system uptime. Runs 'uptime' on Linux or queries Win32_OperatingSystem via PowerShell on Windows."
+    examples:
+      - "/host home uptime"
+      - "/host AMD uptime"
+    kind: shell
+    target: "{host}"
+    run: "uptime"
+    windows_kind: ps1
+    windows_run: "$b = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime; $u = (Get-Date) - $b; 'Uptime: {0}d {1}h {2}m {3}s (Booted: {4:yyyy-MM-dd HH:mm:ss})' -f [int]$u.TotalDays, $u.Hours, $u.Minutes, $u.Seconds, $b"
 ```
 
-### Python command
+### Python Command
 
 Point `handler` at `module.function` inside the `bot` package:
 
