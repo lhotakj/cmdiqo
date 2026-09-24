@@ -150,6 +150,8 @@ def main() -> None:
         str(AGENT_DIR),
         "--hidden-import",
         "_version",
+        "--hidden-import",
+        "service_windows",
         "--name",
         bin_name,
     ]

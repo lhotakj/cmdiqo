@@ -20,6 +20,7 @@ import os
 import platform
 import socket
 import sys
+import threading
 from dataclasses import dataclass
 from typing import Any
 
@@ -111,6 +112,11 @@ class AgentConfig:
             "--log-level",
             default=None,
             help="Logging level (DEBUG, INFO, WARNING, ERROR)",
+        )
+        parser.add_argument(
+            "--service",
+            action="store_true",
+            help="Run as native Windows Service under SCM",
         )
 
         parsed, _ = parser.parse_known_args(args if args is not None else sys.argv[1:])
@@ -323,13 +329,16 @@ def connect(url: str, token: str) -> Any:
         )
 
 
-async def run_agent(config: AgentConfig | None = None) -> None:
+async def run_agent(
+    config: AgentConfig | None = None,
+    stop_event: threading.Event | None = None,
+) -> None:
     """Run agent reconnect loop."""
     if config is None:
         config = AgentConfig.load()
 
     delay = config.reconnect_delay
-    while True:
+    while not (stop_event and stop_event.is_set()):
         try:
             async with connect(config.hub_url, config.token) as ws:
                 await ws.send(
@@ -349,16 +358,25 @@ async def run_agent(config: AgentConfig | None = None) -> None:
                     get_version(),
                 )
                 delay = config.reconnect_delay  # reset delay on successful connection
-                async for raw in ws:
-                    await handle(ws, raw)
+                while not (stop_event and stop_event.is_set()):
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=1.0)
+                        await handle(ws, raw)
+                    except asyncio.TimeoutError:
+                        continue
         except (
             websockets.ConnectionClosed,
             OSError,
             TimeoutError,
             asyncio.TimeoutError,
         ) as exc:
+            if stop_event and stop_event.is_set():
+                break
             log.warning("Connection lost: %s; retrying in %.1fs", exc, delay)
-            await asyncio.sleep(delay)
+            slept = 0.0
+            while slept < delay and not (stop_event and stop_event.is_set()):
+                await asyncio.sleep(min(0.5, delay - slept))
+                slept += 0.5
             delay = min(60.0, delay * 1.5)  # exponential backoff with ceiling
 
 
@@ -394,6 +412,23 @@ def format_preflight_error(issues: list[tuple[str, str, str]]) -> str:
 
 def main(argv: list[str] | None = None) -> None:
     """Main entry point for shango-agent with robust error handling and preflight checks."""
+    effective_args = argv if argv is not None else sys.argv[1:]
+    if "--service" in effective_args:
+        if not IS_WINDOWS:
+            print("[ERROR] The --service option is only supported on Windows.", file=sys.stderr)
+            sys.exit(1)
+        try:
+            from agent.service_windows import run_as_windows_service
+        except ImportError:
+            from service_windows import run_as_windows_service
+
+        async def _service_worker(stop_evt: threading.Event) -> None:
+            cfg = AgentConfig.load(args=argv)
+            await run_agent(cfg, stop_event=stop_evt)
+
+        run_as_windows_service("ShangoAgent", _service_worker)
+        return
+
     try:
         config = AgentConfig.load(args=argv)
         asyncio.run(run_agent(config))

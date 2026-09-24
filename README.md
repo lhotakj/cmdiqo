@@ -433,21 +433,22 @@ The repository includes [`.github/workflows/build-agent.yml`](.github/workflows/
    ```
    The script automatically:
    - Installs `shango-agent.exe` into `C:\Program Files\Shango\Agent\`
-   - Generates configuration at `C:\ProgramData\Shango\Agent\config.json`
-   - Registers a Windows Service / Automatic Startup Task running as `NT AUTHORITY\SYSTEM` with highest privileges on boot
+   - Generates configuration and secrets at `C:\ProgramData\Shango\Agent\config.json` (protected ACLs)
+   - Registers a native Windows Service (`ShangoAgent`) running under `NT AUTHORITY\SYSTEM` on boot
    - Starts the service immediately
 
 2. **Managing the Windows Service:**
    ```powershell
    # Check service state
-   Get-ScheduledTask -TaskName "Shango-Agent"
+   Get-Service ShangoAgent
 
-   # Start / Stop service
-   Start-ScheduledTask -TaskName "Shango-Agent"
-   Stop-ScheduledTask -TaskName "Shango-Agent"
+   # Start / Stop / Restart service
+   Start-Service ShangoAgent
+   Stop-Service ShangoAgent
+   Restart-Service ShangoAgent
 
-   # Uninstall service
-   Unregister-ScheduledTask -TaskName "Shango-Agent" -Confirm:$false
+   # Uninstall service completely
+   .\agent\uninstall-service.ps1
    ```
 
 ---

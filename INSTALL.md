@@ -341,47 +341,82 @@ To verify and ensure the `.exe` is authentic and safe:
 
 ---
 
-### Step 5.3: Run the PowerShell Installer as Administrator
+### Step 5.3: Install the Windows Service as Administrator
 1. Press the **Windows Key**, type **PowerShell**, right-click **Windows PowerShell**, and select **Run as Administrator**.
-2. Navigate to the folder containing `install-service.ps1` and `shango-agent.exe`:
+2. Navigate to the `agent` folder in your repository:
    ```powershell
-   cd C:\Users\YourUser\Downloads\Shango\agent
+   cd H:\WORKING\ShangoHub\agent
    ```
 3. Run the installer script, supplying your server IP, token, and a name for this PC:
    ```powershell
    .\install-service.ps1 -HubUrl "ws://192.168.1.10:8765" -Token "your-random-agent-token-here" -Name "MY-WINDOWS-PC"
    ```
 
-#### What the installer does automatically:
-- Copies `shango-agent.exe` into `C:\Program Files\Shango\Agent\`.
-- Writes secret configuration to `C:\ProgramData\Shango\Agent\config.json` with restricted access permissions.
-- Registers an automatic background service named `Shango-Agent` using Windows Task Scheduler (configured to run on computer boot as `NT AUTHORITY\SYSTEM` with highest privileges, surviving user logoffs).
-- Starts the service immediately.
+> [!TIP]
+> The installer automatically detects your downloaded binary (e.g. `shango-agent-windows-x64.exe` from `Downloads` or `dist`). You can also specify `-BinaryPath "C:\path\to\binary.exe"` if needed.
+
+#### What the installer sets up automatically:
+- **Real Windows Service (`ShangoAgent`)**: Registered directly in Windows Service Control Manager (SCM). Visible in `services.msc`.
+- **Pure Python & PowerShell Engine**: Uses Python's native Win32 service dispatcher (`agent/service_windows.py` using standard library `ctypes`) invoked via `shango-agent.exe --service` (zero compiler steps, zero external wrappers).
+- **Protected Secrets in `C:\ProgramData\Shango\Agent\config.json`**: Restricts file permissions (ACLs) so that **only `SYSTEM` and `Administrators`** can read the file, protecting `AGENT_TOKEN` from standard users.
+- **Automatic Self-Healing**: Configures SCM failure recovery to automatically restart the service if it ever terminates.
+- **Log Redirection**: Redirects stdout/stderr to `C:\ProgramData\Shango\Agent\logs\service.log`.
+- **Strips Mark-of-the-Web & Trusts Certificate**: Removes download flags and imports the Authenticode certificate into machine stores.
 
 ---
 
-### Step 5.3: Verify the Windows Agent
-In your Administrator PowerShell window, check that the service task is running:
+### Step 5.4: Verify & Manage the Windows Service
+In your Administrator PowerShell window, check that the Windows Service is running:
 ```powershell
-Get-ScheduledTask -TaskName "Shango-Agent"
+Get-Service -Name "ShangoAgent"
 ```
-The `State` should be `Running`.
+The `Status` should be `Running`:
+```text
+Status   Name               DisplayName
+------   ----               -----------
+Running  ShangoAgent        Shango LAN Remote Agent
+```
 
-#### Service Management Commands on Windows:
+#### Native Windows Service Management Commands:
 ```powershell
-# Stop the agent:
-Stop-ScheduledTask -TaskName "Shango-Agent"
+# Check service status:
+Get-Service ShangoAgent
 
-# Start the agent:
-Start-ScheduledTask -TaskName "Shango-Agent"
+# Restart service:
+Restart-Service ShangoAgent
 
-# Re-configure (edit the config file):
+# Stop service:
+Stop-Service ShangoAgent
+
+# Start service:
+Start-Service ShangoAgent
+
+# View live service logs:
+Get-Content "C:\ProgramData\Shango\Agent\logs\service.log" -Tail 20 -Wait
+
+# Re-configure (edit config file):
 notepad "C:\ProgramData\Shango\Agent\config.json"
-# (Then restart the service)
-
-# Uninstall the service completely:
-Unregister-ScheduledTask -TaskName "Shango-Agent" -Confirm:$false
+Restart-Service ShangoAgent
 ```
+
+---
+
+### Step 5.5: Uninstall the Windows Service
+
+To cleanly stop, unregister, and remove the Windows Service:
+
+```powershell
+# Run in Administrator PowerShell from the agent folder:
+cd H:\WORKING\ShangoHub\agent
+
+# Standard uninstall (stops service, removes SCM registration & binaries, preserves config for upgrades):
+.\uninstall-service.ps1
+
+# Complete purge (removes service, binaries, AND deletes config/secrets in C:\ProgramData\Shango\Agent):
+.\uninstall-service.ps1 -PurgeConfig
+```
+
+*(You can also run `.\install-service.ps1 -Uninstall` for the same result).*
 
 ---
 
