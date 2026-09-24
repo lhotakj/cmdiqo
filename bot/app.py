@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import json
 import logging
 import os
 import re
@@ -130,7 +131,7 @@ class BotConfig:
                         if isinstance(data, dict) and "agent_connection_notify" in data:
                             val = data["agent_connection_notify"]
                             config_notify = str(val).lower() in ("true", "1", "yes", "on")
-                except Exception:
+                except (OSError, json.JSONDecodeError):
                     pass
 
         env_notify = os.getenv("AGENT_NOTIFICATION_NOTIFY") or os.getenv("AGENT_CONNECTION_NOTIFY")
@@ -532,7 +533,7 @@ def help_text(
             "• *`system`* — CPU, RAM, disk, and uptime monitoring (`/help system`)",
             "• *`docker`* — Container inspection, restart, logs, and stats (`/help docker`)",
             "• *`services`* — Systemd service management (`/help services`)",
-            "• *`windows`* — Windows updates, services, memory, and reboot (`/help windows`)",
+            "• *`windows`* — Windows updates, services, memory, reboot, and shutdown (`/help windows`)",
         ]
 
         if aliases:
@@ -838,9 +839,7 @@ def create_bot_app(
                     ch_list = []
                     if hasattr(resp, "data") and isinstance(resp.data, dict):
                         ch_list = resp.data.get("channels", [])
-                    elif hasattr(resp, "get"):
-                        ch_list = resp.get("channels", [])
-                    elif isinstance(resp, dict):
+                    elif hasattr(resp, "get") or isinstance(resp, dict):
                         ch_list = resp.get("channels", [])
                     for ch_info in ch_list:
                         if isinstance(ch_info, dict) and "id" in ch_info:
@@ -854,9 +853,7 @@ def create_bot_app(
                     ch_list = []
                     if hasattr(resp, "data") and isinstance(resp.data, dict):
                         ch_list = resp.data.get("channels", [])
-                    elif hasattr(resp, "get"):
-                        ch_list = resp.get("channels", [])
-                    elif isinstance(resp, dict):
+                    elif hasattr(resp, "get") or isinstance(resp, dict):
                         ch_list = resp.get("channels", [])
                     for ch_info in ch_list:
                         if isinstance(ch_info, dict) and "id" in ch_info:

@@ -164,6 +164,7 @@ Commands defined in `config/commands.yaml` (under `aliases:` and `commands:`) ar
 | `/host {host} disk` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `df -h` / Windows `Win32_LogicalDisk` |
 | `/host {host} top` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `ps aux` / Windows `Get-Process` |
 | `/host {host} reboot` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `shutdown -r +1` / Windows `shutdown /r /t 10` |
+| `/host {host} shutdown` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `shutdown -h +1` / Windows `shutdown /s /t 10` |
 | `/host {host} services` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl list-units` / Windows `Get-Service` |
 | `/host {host} service status {service}` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl status` / Windows `Get-Service` |
 | `/host {host} service restart {service}` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl restart` / Windows `Restart-Service` |

@@ -199,6 +199,21 @@ commands:
     windows_run: "shutdown /r /t 10 /c 'Reboot requested from Slack'"
     timeout: 60
 
+  - name: host-shutdown
+    category: system
+    trigger: "/host {host} shutdown"
+    description: "Shutdown remote host after warning"
+    details: "Safely shuts down the remote host. Schedules power off on Linux or initiates shutdown warning on Windows."
+    examples:
+      - "/host home shutdown"
+      - "/host AMD shutdown"
+    kind: shell
+    target: "{host}"
+    run: "shutdown -h +1 'Shutdown requested from Slack'"
+    windows_kind: ps1
+    windows_run: "shutdown /s /t 10 /c 'Shutdown requested from Slack'"
+    timeout: 60
+
   # Service Management
   - name: host-services
     category: services
@@ -345,6 +360,18 @@ commands:
     kind: ps1
     target: "{host}"
     run: "shutdown /r /t 10 /c 'Reboot requested from Slack'"
+    timeout: 60
+
+  - name: host-win-shutdown
+    category: windows
+    trigger: "/host {host} win shutdown"
+    description: "Shutdown Windows machine after 10 seconds warning"
+    details: "Issues Windows shutdown utility ('shutdown /s /t 10') with a comment banner to safely shut down the remote machine after giving users a 10-second warning."
+    examples:
+      - "/host WIN-PC win shutdown"
+    kind: ps1
+    target: "{host}"
+    run: "shutdown /s /t 10 /c 'Shutdown requested from Slack'"
     timeout: 60
 
   # Parental Controls (YouTube, Roblox, Minecraft & Discord blocking - Windows & Linux)

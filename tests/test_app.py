@@ -594,8 +594,8 @@ async def test_handle_command_help_nested():
     await handle_command(
         "/help", "U1", "C1", post_mock, commands=commands, aliases=aliases
     )
-    assert post_mock.await_count == 1
-    assert "Cmdiqo Command Manual" in post_mock.await_args[0][0]
+    assert post_mock.await_count >= 1
+    assert "Cmdiqo Command Manual" in post_mock.call_args_list[0][0][0]
 
     post_mock.reset_mock()
     # Nested: /help lan

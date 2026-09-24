@@ -138,6 +138,7 @@ Edit `config/commands.yaml` to define your commands and aliases (see **Adding yo
 | `/host <host> disk`                | Disk space and drive usage (Linux & Windows)             |
 | `/host <host> top`                 | Top CPU-consuming processes (Linux & Windows)            |
 | `/host <host> reboot`              | Safely reboots remote machine (Linux & Windows)          |
+| `/host <host> shutdown`            | Safely shuts down remote machine (Linux & Windows)        |
 | `/host <host> services`            | Lists active running system services (Linux & Windows)   |
 | `/host <host> service status <svc>`| Queries service status (Linux systemd / Windows SCM)     |
 | `/host <host> service restart <svc>`| Restarts system service (Linux systemd / Windows SCM)   |
@@ -532,6 +533,13 @@ commands:
     kind: ps1
     target: "{host}"
     run: "shutdown /r /t 10 /c 'Reboot requested from Slack'"
+
+  - name: host-win-shutdown
+    trigger: "/host {host} win shutdown"
+    description: "Shutdown a Windows PC"
+    kind: ps1
+    target: "{host}"
+    run: "shutdown /s /t 10 /c 'Shutdown requested from Slack'"
 ```
 
 Typing `/host PC-OLO win reboot` in Slack runs that PowerShell command on the agent named `PC-OLO` and streams the output back into the Slack thread.

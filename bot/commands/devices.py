@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 from collections.abc import Callable
+from typing import Any
 
 ARP_RE = re.compile(r"^(\d{1,3}(?:\.\d{1,3}){3})\s+([0-9a-fA-F:]{17})\s*(.*)$")
 NEIGH_RE = re.compile(r"^(\d{1,3}(?:\.\d{1,3}){3})\s+.*lladdr\s+([0-9a-fA-F:]{17})")
