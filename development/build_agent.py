@@ -49,41 +49,29 @@ def sign_windows_binary(exe_path: Path) -> None:
         "}; "
         f"Export-Certificate -Cert $cert -FilePath '{cer_dist}' | Out-Null; "
         f"Export-Certificate -Cert $cert -FilePath '{cer_root}' | Out-Null; "
-        "$rootStore = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root', 'CurrentUser'); "
-        "$rootStore.Open('ReadWrite'); "
-        "$rootStore.Add($cert); "
-        "$rootStore.Close(); "
-        "$pubStore = New-Object System.Security.Cryptography.X509Certificates.X509Store('TrustedPublisher', 'CurrentUser'); "
-        "$pubStore.Open('ReadWrite'); "
-        "$pubStore.Add($cert); "
-        "$pubStore.Close(); "
+        "Write-Host '[+] Certificate exported to dist and workspace root'; "
         "$tsServers = @('http://timestamp.digicert.com', 'http://timestamp.sectigo.com'); "
         "$signed = $false; "
         "foreach ($ts in $tsServers) { "
         "  try { "
+        "    Write-Host \"[*] Timestamping via $ts...\"; "
         f"    $sig = Set-AuthenticodeSignature -FilePath '{exe_path}' -Certificate $cert -TimestampServer $ts -HashAlgorithm SHA256; "
         "    if ($sig.SignatureType -eq 'Authenticode') { $signed = $true; break } "
         "  } catch {} "
         "}; "
         "if (-not $signed) { "
+        "  Write-Host '[*] Timestamp failed, signing directly without timestamp...'; "
         f"  Set-AuthenticodeSignature -FilePath '{exe_path}' -Certificate $cert -HashAlgorithm SHA256 | Out-Null; "
         "}; "
         f"Get-AuthenticodeSignature '{exe_path}' | Format-List Status, StatusMessage, SignatureType, SignerCertificate, TimeStamperCertificate"
     )
     print("\n[*] Digitally signing Windows executable...")
     try:
-        res = subprocess.run(
+        subprocess.run(
             ["powershell", "-NoProfile", "-Command", ps_cmd],
-            capture_output=True,
-            text=True,
+            cwd=str(ROOT),
             check=False,
         )
-        if "SignerCertificate" in res.stdout:
-            print(f"[+] Successfully signed {exe_path.name}")
-            print(f"[+] Public certificate exported to {cer_dist} and {cer_root}")
-            print("[+] Certificate registered in Cert:\\CurrentUser\\TrustedPublisher")
-        else:
-            print(f"[-] Code signing warning: {res.stderr or res.stdout}")
     except Exception as exc:  # noqa: BLE001
         print(f"[-] Code signing skipped: {exc}")
 
