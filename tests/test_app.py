@@ -25,17 +25,25 @@ from bot.app import (
 def test_help_text():
     commands = [
         {"spec": {"trigger": "/lan devices list", "description": "List devices"}},
-        {"spec": {"trigger": "/home docker restart {service}", "description": "Restart service"}},
+        {
+            "spec": {
+                "trigger": "/host {host} docker restart {service}",
+                "description": "Restart service",
+            }
+        },
     ]
-    txt = help_text(commands)
-    assert "*Available commands:*" in txt
+    aliases = [{"name": "home", "input": "/home", "output": "/host home"}]
+    txt = help_text(commands, aliases=aliases)
+    assert "*Shango Command Manual*" in txt
     assert "`/lan devices list`" in txt
-    assert "`/home docker restart {service}`" in txt
+    assert "`/host {host} docker restart {service}`" in txt
+    assert "`/home` → `/host home`" in txt
 
-    # Prefix filter
-    prefix_txt = help_text(commands, prefix="/lan")
+    # Prefix / category filter
+    prefix_txt = help_text(commands, prefix="/lan", aliases=aliases)
+    assert "*Shango Help: `lan`*" in prefix_txt
     assert "`/lan devices list`" in prefix_txt
-    assert "`/home docker restart {service}`" not in prefix_txt
+    assert "`/host {host} docker restart {service}`" not in prefix_txt
 
 
 @pytest.mark.asyncio
@@ -110,7 +118,9 @@ async def test_execute_command_target_with_hub(monkeypatch):
     }
     res = await execute_command(spec_target, {"host": "pc1"}, hub=mock_hub)
     assert res == "hub_agent_ok"
-    mock_hub.exec.assert_awaited_once_with("agent-pc1", "shell", "uptime", cwd=None, timeout=120)
+    mock_hub.exec.assert_awaited_once_with(
+        "agent-pc1", "shell", "uptime", cwd=None, timeout=120
+    )
 
 
 @pytest.mark.asyncio
@@ -167,7 +177,7 @@ async def test_handle_command_empty():
         commands=[],
     )
     post_mock.assert_awaited_once()
-    assert "*Available commands:*" in post_mock.await_args[0][0]
+    assert "*Shango Command Manual*" in post_mock.await_args[0][0]
 
 
 @pytest.mark.asyncio
@@ -284,6 +294,7 @@ def test_create_bot_app_default_env(monkeypatch):
 def test_run_shell_local_timeout(monkeypatch):
     def mock_run(*args, **kwargs):
         raise subprocess.TimeoutExpired(cmd="test", timeout=2)
+
     monkeypatch.setattr(subprocess, "run", mock_run)
     res = _run_shell_local("echo hi", cwd=None, timeout=2)
     assert "timed out after 2s" in res
@@ -292,6 +303,7 @@ def test_run_shell_local_timeout(monkeypatch):
 def test_run_shell_local_os_error(monkeypatch):
     def mock_run(*args, **kwargs):
         raise OSError("Permission denied")
+
     monkeypatch.setattr(subprocess, "run", mock_run)
     res = _run_shell_local("echo hi", cwd=None, timeout=2)
     assert "Error executing command: Permission denied" in res
@@ -306,9 +318,11 @@ async def test_execute_command_cwd_formatting():
     }
     with pytest.MonkeyPatch.context() as mp:
         recorded_cwd = []
+
         def mock_shell(cmdline, cwd, timeout):
             recorded_cwd.append(cwd)
             return "ok"
+
         mp.setattr("bot.app._run_shell_local", mock_shell)
         res = await execute_command(spec, {"target": "mybox"})
         assert res == "ok"
@@ -325,6 +339,7 @@ async def test_handle_command_exception_reporting():
         "run": "exit 1",
     }
     from bot.app import trigger_to_regex
+
     commands = [{"spec": spec, "regex": trigger_to_regex(spec["trigger"])}]
 
     async def failing_exec(*args, **kwargs):
@@ -342,19 +357,102 @@ async def test_handle_command_exception_reporting():
 async def test_handle_command_prefix_filtering():
     post_mock = AsyncMock()
     commands = [
-        {"spec": {"name": "c1", "trigger": "/home docker restart {srv}", "description": "restart"}, "regex": re.compile("^$")},
-        {"spec": {"name": "c2", "trigger": "/home docker ps", "description": "ps"}, "regex": re.compile("^$")},
+        {
+            "spec": {
+                "name": "c1",
+                "trigger": "/host {host} docker restart {srv}",
+                "description": "restart",
+            },
+            "regex": re.compile("^$"),
+        },
+        {
+            "spec": {
+                "name": "c2",
+                "trigger": "/host {host} docker ps",
+                "description": "ps",
+            },
+            "regex": re.compile("^$"),
+        },
     ]
-    await handle_command("/home docker", "U1", "C1", post_mock, commands)
+    await handle_command("/host", "U1", "C1", post_mock, commands)
     assert post_mock.await_count == 1
     call_text = post_mock.await_args_list[0][0][0]
-    assert "*Available commands:*" in call_text
-    assert "/home docker ps" in call_text
+    assert "*Shango Help: `host`*" in call_text
+    assert "/host {host} docker ps" in call_text
+
+
+@pytest.mark.asyncio
+async def test_handle_command_with_alias_translation():
+    post_mock = AsyncMock()
+    py = sys.executable.replace("\\", "/")
+    spec = {
+        "name": "host-docker-ps",
+        "trigger": "/host {host} docker ps",
+        "kind": "shell",
+        "run": f"{py} -c \"print('docker_ps_on_' + '{{host}}')\"",
+        "target": "{host}",
+    }
+    from bot.app import trigger_to_regex
+
+    commands = [{"spec": spec, "regex": trigger_to_regex(spec["trigger"])}]
+    aliases = [{"name": "home", "input": "/home", "output": "/host home"}]
+
+    # When user sends "/home docker ps", it should translate to "/host home docker ps"
+    # and execute locally via local fallback when no agent named 'home' is on hub
+    await handle_command(
+        text="/home docker ps",
+        user_id="U123",
+        channel_id="C123",
+        post=post_mock,
+        commands=commands,
+        aliases=aliases,
+    )
+    assert post_mock.await_count == 2
+    assert (
+        "Running `/host {host} docker ps` on `home`"
+        in post_mock.await_args_list[0][0][0]
+    )
+    assert "docker_ps_on_home" in post_mock.await_args_list[1][0][0]
+
+
+@pytest.mark.asyncio
+async def test_execute_command_local_fallback():
+    py = sys.executable.replace("\\", "/")
+    # Local fallback when target='local' or 'container'
+    spec = {
+        "kind": "shell",
+        "run": f"{py} -c \"print('fallback_ok')\"",
+        "target": "local",
+    }
+    out = await execute_command(spec, {}, hub=None)
+    assert "fallback_ok" in out
+
+    # Local fallback when target='home' and agent 'home' is not on hub
+    spec_home = {
+        "kind": "shell",
+        "run": f"{py} -c \"print('home_fallback_ok')\"",
+        "target": "home",
+    }
+    out_home = await execute_command(spec_home, {}, hub=None)
+    assert "home_fallback_ok" in out_home
+
+
+@pytest.mark.asyncio
+async def test_create_bot_app_slash_commands():
+    config = BotConfig(
+        commands_config_path="config/commands.yaml",
+        slack_bot_token="mock-test-bot-token",
+        hub_enabled=False,
+    )
+    app, _hub, _commands = create_bot_app(config)
+    # Check registered slash commands and listeners in app (slash /host, /lan, /home, and message event)
+    assert len(app._async_listeners) >= 4
 
 
 @pytest.mark.asyncio
 async def test_main_missing_tokens(monkeypatch):
     from bot.app import main
+
     monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
     monkeypatch.delenv("SLACK_APP_TOKEN", raising=False)
     with pytest.raises(ValueError, match="SLACK_BOT_TOKEN"):
@@ -379,7 +477,11 @@ def test_bot_config_validate_invalid_port():
 
 def test_format_bot_preflight_error():
     issues = [
-        ("SLACK_BOT_TOKEN", "Slack Bot User OAuth Token is required", "Set SLACK_BOT_TOKEN"),
+        (
+            "SLACK_BOT_TOKEN",
+            "Slack Bot User OAuth Token is required",
+            "Set SLACK_BOT_TOKEN",
+        ),
     ]
     formatted = format_bot_preflight_error(issues)
     assert "[SHANGO-BOT] PREFLIGHT CONFIGURATION CHECK FAILED" in formatted
@@ -402,6 +504,7 @@ def test_run_main_configuration_error(capsys, monkeypatch):
 
 def test_run_main_keyboard_interrupt(monkeypatch):
     import asyncio
+
     monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
     monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-test")
 
@@ -418,6 +521,7 @@ def test_run_main_keyboard_interrupt(monkeypatch):
 
 def test_run_main_unhandled_exception(monkeypatch):
     import asyncio
+
     monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
     monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-test")
 
@@ -430,3 +534,101 @@ def test_run_main_unhandled_exception(monkeypatch):
     with pytest.raises(SystemExit) as exc_info:
         run_main()
     assert exc_info.value.code == 1
+
+
+@pytest.mark.asyncio
+async def test_handle_command_version():
+    post_mock = AsyncMock()
+    await handle_command("/lan version", "U1", "C1", post_mock, commands=[])
+    post_mock.assert_awaited_once()
+    assert "Shango Version" in post_mock.await_args[0][0]
+    assert "shango-bot v" in post_mock.await_args[0][0]
+
+
+def test_bot_get_version():
+    from bot.app import get_version
+
+    ver = get_version()
+    assert isinstance(ver, str)
+    assert len(ver) > 0
+
+
+@pytest.mark.asyncio
+async def test_handle_command_help_nested():
+    from bot.app import load_aliases, load_commands
+
+    commands = load_commands("config/commands.yaml")
+    aliases = load_aliases("config/commands.yaml")
+    post_mock = AsyncMock()
+
+    # General /help
+    await handle_command(
+        "/help", "U1", "C1", post_mock, commands=commands, aliases=aliases
+    )
+    assert post_mock.await_count == 1
+    assert "Shango Command Manual" in post_mock.await_args[0][0]
+
+    post_mock.reset_mock()
+    # Nested: /help lan
+    await handle_command(
+        "/help lan", "U1", "C1", post_mock, commands=commands, aliases=aliases
+    )
+    assert post_mock.await_count == 1
+    lan_text = post_mock.await_args[0][0]
+    assert "*Shango Help: `lan`*" in lan_text
+    assert "/lan devices list" in lan_text
+    assert "/lan wake {target}" in lan_text
+    assert "_Examples:_" in lan_text
+
+    post_mock.reset_mock()
+    # Nested: /help docker
+    await handle_command(
+        "/help docker", "U1", "C1", post_mock, commands=commands, aliases=aliases
+    )
+    assert post_mock.await_count == 1
+    docker_text = post_mock.await_args[0][0]
+    assert "*Shango Help: `docker`*" in docker_text
+    assert "/host {host} docker ps" in docker_text
+    assert "/host {host} docker restart" in docker_text
+
+    post_mock.reset_mock()
+    # Nested: /help home (alias topic - may split across blocks if detailed)
+    await handle_command(
+        "/help home", "U1", "C1", post_mock, commands=commands, aliases=aliases
+    )
+    assert post_mock.await_count >= 1
+    home_text = "".join(call[0][0] for call in post_mock.await_args_list)
+    assert "*Matching Aliases:*" in home_text
+    assert "`/home` → `/host home`" in home_text
+
+    post_mock.reset_mock()
+    # Unknown topic
+    await handle_command(
+        "/help completely_unknown_xyz",
+        "U1",
+        "C1",
+        post_mock,
+        commands=commands,
+        aliases=aliases,
+    )
+    assert post_mock.await_count == 1
+    assert (
+        ":question: No help found for topic `completely_unknown_xyz`"
+        in post_mock.await_args[0][0]
+    )
+
+
+@pytest.mark.asyncio
+async def test_reply_help_chunking():
+    from bot.app import reply_help
+
+    post_mock = AsyncMock()
+    # Section smaller than 3500
+    await reply_help(post_mock, "Short help text")
+    post_mock.assert_awaited_once_with("Short help text")
+
+    post_mock.reset_mock()
+    # Big text with multiple sections exceeding 3500 chars
+    large_text = ("Section A\n" + "A" * 2500) + "\n\n" + ("Section B\n" + "B" * 2500)
+    await reply_help(post_mock, large_text)
+    assert post_mock.await_count == 2

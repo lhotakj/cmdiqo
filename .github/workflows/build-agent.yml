@@ -5,13 +5,13 @@ on:
     branches: [main]
     paths:
       - "agent/**"
-      - "scripts/**"
+      - "development/**"
       - ".github/workflows/build-agent.yml"
   pull_request:
     branches: [main]
     paths:
       - "agent/**"
-      - "scripts/**"
+      - "development/**"
       - ".github/workflows/build-agent.yml"
   workflow_dispatch:
 
@@ -56,70 +56,20 @@ jobs:
             choco install upx -y || true
           fi
 
-      - name: Build Standalone Binary with Maximum PyInstaller & UPX Compression
+      - name: Build and Sign Standalone Binary
         shell: bash
-        run: |
-          python scripts/build_agent.py
-
-      - name: Sign Windows Binary (Authenticode)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
         env:
           SIGNING_CERT_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}
           SIGNING_CERT_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERT_PASSWORD }}
         run: |
-          if ($env:SIGNING_CERT_BASE64) {
-            Write-Host "[*] Using production code signing certificate from GitHub Secrets..."
-            $pfxBytes = [Convert]::FromBase64String($env:SIGNING_CERT_BASE64)
-            $pfxPath = "$env:RUNNER_TEMP\signing_cert.pfx"
-            [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
-            $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(
-              $pfxPath,
-              $env:SIGNING_CERT_PASSWORD,
-              [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable
-            )
-          } else {
-            Write-Host "[*] Using dedicated ShangoHub code-signing certificate..."
-            $cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Select-Object -First 1
-            if (-not $cert) {
-              $cert = New-SelfSignedCertificate -Type CodeSigningCert `
-                -Subject "CN=ShangoHub (GitHub Actions), O=ShangoHub, OU=Verified Build" `
-                -CertStoreLocation "Cert:\CurrentUser\My" `
-                -HashAlgorithm SHA256 `
-                -NotAfter (Get-Date).AddYears(5)
-            }
-          }
+          python development/build_agent.py
 
-          # Export public certificate for users to verify or install
-          Export-Certificate -Cert $cert -FilePath "shango-agent.cer"
-
-          # Sign executable with RFC3161 timestamp server with fallback
-          $tsServers = @("http://timestamp.digicert.com", "http://timestamp.sectigo.com")
-          $signed = $false
-          foreach ($ts in $tsServers) {
-            try {
-              $sig = Set-AuthenticodeSignature -FilePath "${{ matrix.binary_src }}" `
-                -Certificate $cert `
-                -TimestampServer $ts `
-                -HashAlgorithm SHA256
-              if ($sig.SignatureType -eq "Authenticode") {
-                $signed = $true
-                Write-Host "[+] Successfully signed with timestamp server: $ts"
-                break
-              }
-            } catch {
-              Write-Warning "Timestamp server $ts failed: $_"
-            }
-          }
-          if (-not $signed) {
-            Write-Host "[*] Signing without external timestamp server..."
-            Set-AuthenticodeSignature -FilePath "${{ matrix.binary_src }}" `
-              -Certificate $cert `
-              -HashAlgorithm SHA256
-          }
-
-          Write-Host "[+] Verification of signed binary:"
-          Get-AuthenticodeSignature "${{ matrix.binary_src }}" | Format-List
+      - name: Verify Windows Signature & Certificate
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Write-Host "[+] Verifying Authenticode signature of ${{ matrix.binary_src }}:"
+          Get-AuthenticodeSignature "${{ matrix.binary_src }}" | Format-List Status, StatusMessage, SignatureType, SignerCertificate, TimeStamperCertificate
 
       - name: Prepare binary artifact
         shell: bash

@@ -1,8 +1,9 @@
-# shango-bot (ShangoHub)
+# shango-bot (Shango)
 
 Control your home network from Slack — **works behind NAT with zero open ports**.
 
-> 📖 **First time setting up?** Check out the beginner-friendly guides:
+> 📖 **Helpful Guides:**
+> - **[OVERVIEW.md](OVERVIEW.md)**: Architectural overview, execution flowcharts (Mermaid), communication protocol, and logging observability.
 > - **[INSTALL.md](INSTALL.md)**: Click-by-click Slack setup, secrets management, Windows/Linux background service installation, and health checks.
 > - **[BUILD.md](BUILD.md)**: Beginner tutorial on GitHub Actions, GitHub Secrets, binary builds, and digital code-signing.
 
@@ -12,14 +13,17 @@ Python, Docker-ready replacement for Hubot, built specifically for LAN managemen
 
 Example session in Slack:
 
-```
 You:   /lan devices list
 Bot:   IP ADDRESS     MAC ADDRESS        VENDOR / INFO
        192.168.1.1    aa:bb:cc:dd:ee:ff  Technicolor ...
        192.168.1.20   11:22:33:44:55:66  Raspberry Pi Trading Ltd
 
-You:   /home docker restart kinetiqo
-Bot:   Container kinetiqo  Restarted
+You:   /host home docker restart plex
+Bot:   Container plex  Restarted
+
+# Or using the configured /home alias:
+You:   /home docker restart plex
+Bot:   Container plex  Restarted
 ```
 
 ## Why Socket Mode?
@@ -48,17 +52,26 @@ nothing to expose, TLS handled for you. Ideal for a home server.
 ├── Dockerfile                      # all-in-one image (python + arp-scan + docker CLI)
 ├── docker-compose.yml              # ready-to-run compose file
 ├── requirements.txt
+├── build.ps1                       # native Windows build wrapper
+├── build.sh                        # native Linux/macOS build wrapper
 ├── bot/
-│   ├── app.py                      # Slack app, dispatch, auth (no changes needed)
-│   └── commands/
-│       ├── __init__.py
-│       └── devices.py              # example Python command (LAN discovery)
+│   ├── app.py                      # Slack app, dispatch, auth
+│   ├── hub.py                      # WebSocket hub for remote agents
+│   └── commands/                   # modular command handlers
 ├── config/
 │   └── commands.yaml               # <-- YOUR commands live here
 ├── agent/
-│   ├── agent.py                      # tiny Python agent for LAN hosts (Win/Linux)
-│   └── requirements.txt
-├── .github/workflows/docker-publish.yml   # builds & pushes to Docker Hub
+│   ├── agent.py                    # tiny Python agent for LAN hosts (Win/Linux)
+│   ├── install-service.ps1         # Windows service installer
+│   └── install-service.sh          # Linux systemd service installer
+├── development/                    # build machinery, versioning, environment setup
+│   ├── build.ps1                   # local PowerShell build script
+│   ├── build.sh                    # local Bash build script
+│   ├── build_agent.py              # PyInstaller & Authenticode signer
+│   ├── update_version.py           # semantic & dev hex timestamp versioning
+│   ├── setup-env.ps1               # Windows venv setup
+│   └── setup-direnv.sh             # Linux/macOS direnv setup
+├── .github/workflows/              # CI/CD: tests, binary builds, docker publish
 └── LICENSE
 ```
 
@@ -73,11 +86,14 @@ nothing to expose, TLS handled for you. Ideal for a home server.
    - `commands` (for slash commands)
    - `chat:write` (to post replies)
    - `channels:history` (to read plain messages in channels)
-4. **Slash commands**: *Slash Commands → Create Command* (create **both**):
-   | Command | Description      | Usage hint           |
-   |---------|------------------|----------------------|
-   | `/lan`  | Manage LAN       | `devices list`       |
-   | `/home` | Manage home host | `docker restart ...` |
+4. **Slash commands**: *Slash Commands → Create Command* (create `/help`, `/lan`, `/host`, and optional aliases `/home`, `/wol`):
+   | Command | Description               | Usage hint                         |
+   |---------|---------------------------|------------------------------------|
+   | `/help` | Dynamic command manual    | `[category] (e.g. lan, host, docker)`|
+   | `/lan`  | Manage LAN operations     | `devices list \| wake <mac> \| ping`|
+   | `/host` | Host-agnostic execution   | `<hostname-or-ip> <action>`        |
+   | `/home` | *(Alias)* Home server ops | `docker restart ... \| memory`     |
+   | `/wol`  | *(Alias)* Wake-on-LAN boot| `<mac-or-ip>`                      |
 
    (With Socket Mode enabled no Request URL is needed — events arrive over the socket.)
 5. **Bot events**: *Event Subscriptions → Subscribe to bot events* → add `message.channels`.
@@ -105,22 +121,58 @@ SLACK_APP_TOKEN=xapp-your-app-token
 # SHELL_TIMEOUT=120
 ```
 
-Edit `config/commands.yaml` to define your commands (see **Adding your own
-commands** below). The defaults give you:
+Edit `config/commands.yaml` to define your commands and aliases (see **Adding your own commands** below). The defaults give you:
 
 | You type in Slack                  | What happens                                             |
 |------------------------------------|----------------------------------------------------------|
 | `/lan devices list`                | ARP-scans the LAN, prints IP / MAC / vendor table        |
-| `/home docker restart kinetiqo`    | runs `docker compose restart kinetiqo` in `/docker/kinetiqo` |
-| `/home docker ps`                  | lists running containers                                 |
-| `/home uptime`                     | host uptime                                              |
-| `/lan` (no arguments)              | built-in help for all `/lan ...` commands                |
+| `/lan wake 00:11:22:33:44:55`      | Sends Wake-on-LAN magic packet to boot a device          |
+| `/lan ping 192.168.1.1`            | Pings a device or IP from the Hub container              |
+| `/lan agents list`                 | Lists connected agents, operating systems, and IPs       |
+| `/lan version`                     | Displays bot version                                     |
+| `/host home uptime`                | System uptime and load averages                          |
+| `/host home memory`                | Free and used RAM memory (`free -h`)                     |
+| `/host nas disk`                   | Disk space usage (`df -h`)                               |
+| `/host home top`                   | Top CPU-consuming processes                              |
+| `/host home docker ps`             | Lists running docker containers                          |
+| `/host home docker logs plex`      | Tails last 50 log lines of a docker container            |
+| `/host home docker restart plex`   | Restarts docker compose project in `/docker/plex`        |
+| `/host home docker stats`          | Snapshot of container CPU, RAM, and network usage        |
+| `/host nas service status smbd`    | Checks systemd service status (`systemctl status`)       |
+| `/host nas service restart nginx`  | Restarts systemd service (`systemctl restart`)           |
+| `/host WIN-PC win updates`         | Queries installed Windows hotfixes on agent `WIN-PC`     |
+| `/host WIN-PC win memory`          | RAM usage on Windows machine                             |
+| `/host WIN-PC win services`        | Running Windows services table                           |
+| `/host WIN-PC win reboot`          | Reboots Windows machine after 10-second warning          |
+| `/wol 00:11:22:33:44:55`           | *(alias)* auto-translates to `/lan wake ...`             |
+| `/home docker ps`                  | *(alias)* auto-translates to `/host home docker ps`      |
+| `/lan` or `/host` (no arguments)   | Built-in help showing commands and configured aliases    |
 
 > The bot also understands the same commands typed **without** the leading
-> slash as plain channel messages (e.g. `lan devices list`), as long as the
-> bot is invited to the channel.
+> slash as plain channel messages (e.g. `lan devices list` or `home docker ps`),
+> as long as the bot is invited to the channel.
 
-## 3. Run with Docker Compose (recommended)
+## 3. Running Locally (Pure Python, No Docker Required)
+
+Shango provides a built-in local process supervisor ([`run.py`](run.py)):
+
+```bash
+# Start both Hub (bot) and local Agent concurrently:
+python run.py
+
+# Start the Hub / Slack Bot only:
+python run.py hub
+
+# Start the Remote Agent only:
+python run.py agent
+
+# Pass command-line arguments to the agent:
+python run.py agent --hub-url ws://192.168.1.10:8765 --token my-secret --name PC-01
+```
+
+> 🛑 **Graceful Shutdown:** Pressing `Ctrl+C` safely shuts down all active services and terminates child process trees, ensuring no orphan processes are left running.
+
+## 4. Run with Docker Compose
 
 ```bash
 docker compose up -d --build
@@ -136,7 +188,7 @@ Notes on the compose file:
   cap_add: [NET_RAW, NET_ADMIN]
   ```
   but the device list will then be limited to what the kernel neighbour table knows.
-- `/var/run/docker.sock` is mounted so `/home docker ...` commands control the
+- `/var/run/docker.sock` is mounted so `/host home docker ...` (or `/home docker ...`) commands control the
   **host** Docker daemon (this is equivalent to root on the host — see Security).
 - `/docker` is mounted at the same path so `cwd: /docker/{service}` works. If
   your compose projects live elsewhere, adjust both the mount and `cwd`.
@@ -157,37 +209,48 @@ docker run -d --name shango-bot --restart unless-stopped \
   youruser/shango-bot:latest
 ```
 
-## 4. Adding your own commands
+## 4. Interactive Help & Adding Your Own Commands
 
-Everything is data-driven via `config/commands.yaml`. Two kinds:
+### Interactive Nested Help (`/help`)
 
-### Shell command
+Shango features a built-in, dynamically generated command manual:
+- `/help` — Overview of all command categories, aliases, and quick reference.
+- `/help lan` — Detailed manual for LAN operations (ARP scanning, Wake-on-LAN, pinging).
+- `/help host` — Detailed manual for host and remote agent operations.
+- `/help docker` — Specific guidance for Docker container and compose management.
+- `/help system` — Guidance for resource monitoring (uptime, memory, disk, top CPU).
+- `/help windows` — Windows agent PowerShell command specifications.
+- `/help home` or `/help wol` — Details on configured aliases and their targets.
+
+### Adding Your Own Commands (`config/commands.yaml`)
+
+Everything is data-driven via `config/commands.yaml`, supporting top-level `aliases:` and `commands:`. You can specify rich metadata (`category`, `details`, `examples`) which automatically feeds into the `/help` engine:
 
 ```yaml
-- name: pihole-status
-  trigger: "/lan pihole status"
-  description: "Show Pi-hole status"
-  kind: shell
-  run: "docker exec pihole pihole status"
-  timeout: 60
+aliases:
+  - name: home
+    input: "/home"
+    output: "/host home"
+    description: "Shortcut alias targeting host 'home'"
+    details: "Translates any command starting with /home to /host home."
+    examples:
+      - "/home docker ps"
+      - "/home uptime"
+
+commands:
+  - name: host-docker-logs
+    category: docker
+    trigger: "/host {host} docker logs {service}"
+    description: "Tail last 50 log lines of a docker container"
+    details: "Fetches recent standard output and error logs via 'docker logs --tail 50 {service}'."
+    examples:
+      - "/host home docker logs pihole"
+      - "/host home docker logs plex"
+    kind: shell
+    target: "{host}"
+    run: "docker logs --tail 50 {service}"
+    timeout: 60
 ```
-
-With **placeholders** — `{word}` in the trigger captures one word and can be
-reused in `run`/`cwd`:
-
-```yaml
-- name: home-docker-logs
-  trigger: "/home docker logs {service}"
-  description: "Tail last 50 log lines of a service"
-  kind: shell
-  run: "docker compose logs --tail 50 {service}"
-  cwd: "/docker/{service}"
-```
-
-```yaml
-- name: wake-on-lan
-  trigger: "/lan wake {mac}"
-  description: "Send Wake-on-LAN magic packet"
   kind: shell
   run: "wakeonlan {mac}"        # install wakeonlan in the image if needed
 ```
@@ -223,14 +286,14 @@ Rebuild (or just restart if you mount the code) after adding Python handlers.
 
 ### How It Works
 
-ShangoHub uses an **asymmetric, reverse-connection WebSocket architecture** specifically designed for home servers and private networks behind NAT:
+Shango uses an **asymmetric, reverse-connection WebSocket architecture** specifically designed for home servers and private networks behind NAT:
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor User as Slack User
     participant Slack as Slack Cloud API
-    participant Bot as ShangoHub Container (Bot + Hub)
+    participant Bot as Shango Container (Bot + Hub)
     participant Agent as LAN Agent (Win / Linux)
     participant Host as Target Host OS
 
@@ -238,10 +301,10 @@ sequenceDiagram
     Agent->>Bot: 1. Outbound WS connect ws://hub:8765<br/>(Bearer Token Authentication)
     Note over Bot,Agent: Keepalive Ping/Pong (20s interval)
 
-    User->>Slack: 2. Type "/home win updates PC-OLO"
+    User->>Slack: 2. Type "/host PC-OLO win updates" (or alias)
     Slack->>Bot: 3. Dispatch slash command event (Socket Mode)
-    Note over Bot: Validate user allow-list,<br/>sanitize parameters, lookup target 'PC-OLO'
-    Bot->>Agent: 4. Send exec request (JSON over WebSocket):<br/>{id, kind: "ps1", cmd: "Get-HotFix..."}
+    Note over Bot: Apply aliases, validate user allow-list,<br/>sanitize parameters, lookup target 'PC-OLO'
+    Bot->>Agent: 4. Send exec request (JSON over WebSocket):<br/>{id, kind: "ps1", cmd: "Get-CimInstance..."}
     Agent->>Host: 5. Spawn subprocess (powershell.exe / bash)
     Host-->>Agent: 6. Output stream + exit code
     Agent-->>Bot: 7. Send result (JSON over WebSocket):<br/>{id, ok: true, code: 0, output: "..."}
@@ -289,45 +352,45 @@ The agent supports 3 configuration methods with the following precedence:
 
 ### Building Standalone Binaries (Windows & Linux 64-bit)
 
-You can compile the agent into a single, standalone binary that has **zero Python runtime dependencies** on target machines.
+You can compile the agent into a single, standalone binary that has **zero Python runtime dependencies** on target machines. Full build documentation is available in [BUILD.md](BUILD.md).
 
 #### 1. Build Windows 64-bit Executable (`shango-agent.exe`)
 
 On any Windows machine:
 ```powershell
-# Using the automated build script:
-python scripts/build_agent.py
+# Using the PowerShell build script (compiles, signs, and embeds version metadata):
+.\build.ps1
 
-# Or directly with PyInstaller:
-pip install pyinstaller -r agent/requirements.txt
-pyinstaller --onefile --clean --name shango-agent agent/agent.py
+# Or with python:
+python development/build_agent.py
 ```
-Output binary: `dist/shango-agent.exe` (self-contained single executable).
+Output binary: `dist/shango-agent.exe` (digitally signed, with PE version resource).
 
 #### 2. Build Linux 64-bit Binary (`shango-agent`)
 
-**Option A — Cross-compile on Windows or macOS using Docker (Recommended, no Linux system required!):**
+**Option A — Cross-compile on Windows or macOS using Docker:**
 ```bash
 docker run --rm -v "${PWD}:/src" -w /src python:3.12-slim bash -c \
-  "pip install pyinstaller -r agent/requirements.txt && pyinstaller --onefile --clean --name shango-agent-linux-x64 agent/agent.py"
+  "pip install pyinstaller -r agent/requirements.txt && python development/build_agent.py"
 ```
-Output binary: `dist/shango-agent-linux-x64`.
+Output binary: `dist/shango-agent`.
 
 **Option B — Directly on a Linux host:**
 ```bash
-pip install pyinstaller -r agent/requirements.txt
-python scripts/build_agent.py
+./build.sh
+# Or with python:
+python development/build_agent.py
 ```
 Output binary: `dist/shango-agent`.
 
 #### 3. Automated CI Builds via GitHub Actions (Direct Download)
-The repository includes [`.github/workflows/build-agent.yml`](.github/workflows/build-agent.yml) which automatically builds both binaries on every push to `main`, pull request, or manual trigger:
+The repository includes [`.github/workflows/build-agent.yml`](.github/workflows/build-agent.yml) which automatically compiles and signs both binaries on every push to `main` or manual workflow dispatch:
 1. Go to your GitHub repository and click the **Actions** tab.
-2. Select the latest **Build Agent Binaries** workflow run (or run it manually via **Run workflow**).
+2. Select the latest **Build Agent Binaries** workflow run.
 3. Scroll down to the **Artifacts** section at the bottom of the summary page.
 4. Click on either artifact to download:
-   - `shango-agent-windows-x64` (contains `shango-agent-windows-x64.exe`)
-   - `shango-agent-linux-x64` (contains executable Linux ELF binary)
+   - `shango-agent-windows-x64` (contains `shango-agent-windows-x64.exe` digitally signed, and `shango-agent.cer`)
+   - `shango-agent-linux-x64` (contains executable Linux x64 ELF binary)
 
 > **No Release Required:** Binaries are stored directly as downloadable build artifacts (retained for 90 days), so you can download fresh builds anytime without tagging a release.
 
@@ -369,8 +432,8 @@ The repository includes [`.github/workflows/build-agent.yml`](.github/workflows/
    .\agent\install-service.ps1 -HubUrl "ws://192.168.1.10:8765" -Token "change-me-long-random-string" -Name "WIN-PC"
    ```
    The script automatically:
-   - Installs `shango-agent.exe` into `C:\Program Files\ShangoHub\Agent\`
-   - Generates configuration at `C:\ProgramData\ShangoHub\Agent\config.json`
+   - Installs `shango-agent.exe` into `C:\Program Files\Shango\Agent\`
+   - Generates configuration at `C:\ProgramData\Shango\Agent\config.json`
    - Registers a Windows Service / Automatic Startup Task running as `NT AUTHORITY\SYSTEM` with highest privileges on boot
    - Starts the service immediately
 
@@ -392,35 +455,35 @@ The repository includes [`.github/workflows/build-agent.yml`](.github/workflows/
 ### Remote Command Examples (`config/commands.yaml`)
 
 ```yaml
-# Linux agent
-- name: nas-disk
-  trigger: "/home nas disk"
-  description: "Check storage on NAS"
-  kind: shell
-  target: nas
-  run: "df -h"
+aliases:
+  - name: home
+    input: "/home"
+    output: "/host home"
 
-# Windows agent, fixed target
-- name: win-services
-  trigger: "/home win services"
-  description: "Windows services that are not running"
-  kind: ps1
-  target: PC-OLO
-  run: "Get-Service | Where-Object {$_.Status -ne 'Running'} | Format-Table -AutoSize"
+commands:
+  # Linux agent (or local fallback)
+  - name: host-disk
+    trigger: "/host {host} disk"
+    description: "Check storage on host"
+    kind: shell
+    target: "{host}"
+    run: "df -h"
 
-# Windows agent, target chosen at runtime from the command
-- name: win-reboot
-  trigger: "/home win reboot {pc}"
-  description: "Reboot a Windows PC"
-  kind: ps1
-  target: "{pc}"
-  run: "shutdown /r /t 10 /c 'Reboot requested from Slack'"
+  # Windows agent, dynamically targeting the specified host
+  - name: host-win-reboot
+    trigger: "/host {host} win reboot"
+    description: "Reboot a Windows PC"
+    kind: ps1
+    target: "{host}"
+    run: "shutdown /r /t 10 /c 'Reboot requested from Slack'"
 ```
 
-Typing `/home win reboot PC-OLO` in Slack runs that PowerShell command on the agent named `PC-OLO` and streams the output back into the Slack thread.
+Typing `/host PC-OLO win reboot` in Slack runs that PowerShell command on the agent named `PC-OLO` and streams the output back into the Slack thread.
+Or typing `/home docker ps` translates via the configured alias to `/host home docker ps`.
 
-### Built-in Agent Command
-Type `/lan agents list` in Slack at any time to see every connected agent, its operating system, connection uptime, and LAN IP address.
+### Built-in System Commands
+- `/lan agents list` (or `/host agents list`) in Slack at any time to see every connected agent, its operating system, version, connection uptime, and LAN IP address.
+- `/lan version` (or `/host version`) to display the running version of `shango-bot`.
 
 ## 5. Publishing to Docker Hub with GitHub Actions
 
@@ -470,7 +533,7 @@ docker push youruser/shango-bot:latest
   a shared workspace — anyone who can reach the bot can run the commands you
   configured.
 - Mounting `/var/run/docker.sock` gives the container **root-level control over
-  the host**. Only mount it if you need the `/home docker ...` commands.
+  the host**. Only mount it if you need the `/host home docker ...` or `/home docker ...` commands.
 - Shell commands run with `argv` splitting (`shlex`), never through a shell
   with string interpolation of user input, so placeholders cannot inject extra
   commands. Still, treat every configured command as a capability you hand to
@@ -482,11 +545,11 @@ docker push youruser/shango-bot:latest
 
 | Symptom | Fix |
 |---|---|
-| Slash command shows "No command found" | Create `/lan` and `/home` under *Slash Commands* and **reinstall** the app to the workspace. |
+| Slash command shows "No command found" | Create `/lan`, `/host`, and `/home` under *Slash Commands* and **reinstall** the app to the workspace. |
 | Bot online but doesn't reply to channel messages | Invite it (`/invite @lan-bot`); check `channels:history` scope; check `ALLOWED_CHANNELS`. |
 | `/lan devices list` returns nothing | Use `network_mode: host` (arp-scan needs raw sockets on the real interface). |
 | `docker: command not found` / socket errors | Mount `/var/run/docker.sock`; the image ships docker CLI + compose plugin. |
-| `cwd` errors for `/home docker ...` | Mount the host directory (e.g. `/docker:/docker`) so the `cwd` path exists. |
+| `cwd` errors for `/host home docker ...` / `/home ...` | Mount the host directory (e.g. `/docker:/docker`) so the `cwd` path exists. |
 | Changes to `commands.yaml` ignored | Restart the container: `docker compose restart`. |
 | `/lan agents list` shows no agents | Check `AGENT_TOKEN` matches on both sides; check `HUB_URL` host/port and that the hub port is reachable on the LAN (`Test-NetConnection 192.168.1.10 -Port 8765`). |
 | `agent 'x' is not connected` | Agent not running / failed auth / wrong `AGENT_NAME` (`target:` must equal the agent's name). |
@@ -494,7 +557,7 @@ docker push youruser/shango-bot:latest
 
 ## Development, Testing & Code Quality
 
-ShangoHub is developed following SonarQube Clean Code standards and strict automated testing requirements.
+Shango is developed following SonarQube Clean Code standards and strict automated testing requirements.
 
 ### Running Tests Locally
 
@@ -503,15 +566,17 @@ ShangoHub is developed following SonarQube Clean Code standards and strict autom
 pip install -r requirements-dev.txt
 
 # Run linter
-ruff check bot agent tests
+ruff check bot agent development tests
 
 # Run full test suite with coverage
 pytest -v --cov=bot --cov=agent --cov-report=term-missing --cov-report=xml:coverage.xml
 ```
 
+For complete instructions on building standalone binaries, local dev environments, and GitHub Actions CI, see **[BUILD.md](BUILD.md)**.
+
 ### SonarQube & Agentic Skills
 
-- **Antigravity Skill:** [`.agents/skills/shangohub-quality/SKILL.md`](.agents/skills/shangohub-quality/SKILL.md) and [`SKILL.md`](SKILL.md) provide guidelines for SonarQube Quality Gate compliance, constant-time token comparison (`hmac`), safe command parameter sanitization, and WebSocket keepalives.
+- **Antigravity Skill:** [`.agents/skills/shango-quality/SKILL.md`](.agents/skills/shango-quality/SKILL.md) and [`SKILL.md`](SKILL.md) provide guidelines for SonarQube Quality Gate compliance, constant-time token comparison (`hmac`), safe command parameter sanitization, and WebSocket keepalives.
 - **SonarQube Configuration:** [`sonar-project.properties`](sonar-project.properties) configures source analysis, coverage reporting (`coverage.xml`), and exclusion rules.
 - **CI / CD Pipeline:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) executes linting, test coverage verification, and SonarQube quality checks on every push and pull request.
 

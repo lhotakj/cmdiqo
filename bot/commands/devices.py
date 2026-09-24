@@ -17,7 +17,7 @@ def _run(argv: list[str], timeout: int = 180) -> str:
         p = subprocess.run(
             argv, capture_output=True, text=True, timeout=timeout, check=False
         )  # nosec: B603
-        output = (p.stdout or "")
+        output = p.stdout or ""
         if p.returncode != 0 and p.stderr:
             output += "\n" + p.stderr
         return output
@@ -85,3 +85,122 @@ def list_devices(
         rows = parse_ip_neigh_output(out)
 
     return format_device_table(rows)
+
+
+# ---------------------------------------------------------------------------
+# Wake-on-LAN & Network Diagnostics
+# ---------------------------------------------------------------------------
+
+SAFE_HOST_RE = re.compile(r"^[a-zA-Z0-9_\-\.:]+$")
+
+
+def extract_mac_from_cache(
+    target: str,
+    runner: Callable[[list[str]], str] = _run,
+) -> str | None:
+    """Attempt to resolve an IP or hostname to a MAC address using the local ARP table."""
+    if shutil.which("arp-scan"):
+        out = runner(["arp-scan", "-l", "--localnet", "--ignoredups", "--timeout=300"])
+        for ip, mac, _ in parse_arp_scan_output(out):
+            if target.lower() in (ip.lower(), mac.lower()):
+                return mac
+
+    if shutil.which("ip"):
+        out = runner(["ip", "neigh", "show"])
+        for ip, mac, _ in parse_ip_neigh_output(out):
+            if target.lower() in (ip.lower(), mac.lower()):
+                return mac
+
+    return None
+
+
+def _default_broadcast_sender(packet: bytes, destination: tuple[str, int]) -> None:
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.sendto(packet, destination)
+
+
+def send_wake_on_lan(
+    params: dict[str, str],
+    broadcast_ip: str = "255.255.255.255",
+    port: int = 9,
+    runner: Callable[[list[str]], str] = _run,
+    sender: Callable[[bytes, tuple[str, int]], None] = _default_broadcast_sender,
+) -> str:
+    """Send a Wake-on-LAN (WOL) magic packet to boot a target device over the LAN."""
+    target = params.get("target") or params.get("mac") or ""
+    target = target.strip()
+    if not target:
+        return "Error: Target MAC or IP address is required (e.g. /lan wake 00:11:22:33:44:55)"
+
+    mac_clean = re.sub(r"[^0-9a-fA-F]", "", target)
+    resolved_from_ip = False
+
+    if len(mac_clean) != 12:
+        cached_mac = extract_mac_from_cache(target, runner=runner)
+        if cached_mac:
+            mac_clean = re.sub(r"[^0-9a-fA-F]", "", cached_mac)
+            resolved_from_ip = True
+        else:
+            return (
+                f"Error: Invalid MAC address '{target}'. "
+                f"Expected 12 hexadecimal characters (e.g. 00:11:22:33:44:55) or a known LAN IP."
+            )
+
+    try:
+        mac_bytes = bytes.fromhex(mac_clean)
+        magic_packet = b"\xff" * 6 + mac_bytes * 16
+
+        sender(magic_packet, (broadcast_ip, port))
+
+        formatted_mac = ":".join(mac_clean[i : i + 2].lower() for i in range(0, 12, 2))
+        info = f" (resolved from `{target}`)" if resolved_from_ip else ""
+        return (
+            f":electric_plug: Wake-on-LAN magic packet sent to `{formatted_mac}`{info} "
+            f"via UDP broadcast `{broadcast_ip}:{port}`.\n"
+            f"If the target machine has Wake-on-LAN (WOL) enabled in BIOS/UEFI, it will boot up shortly."
+        )
+    except (ValueError, OSError) as exc:
+        return f"Error sending Wake-on-LAN packet: {exc}"
+
+
+def ping_host(
+    params: dict[str, str],
+    count: int = 3,
+    timeout: int = 5,
+    runner: Callable[[list[str], int], str] | None = None,
+) -> str:
+    """Send ICMP ping to a target host or IP on the local network."""
+    import sys
+
+    host = params.get("host") or params.get("target") or ""
+    host = host.strip()
+    if not host:
+        return "Error: Hostname or IP is required (e.g. /lan ping 192.168.1.1)"
+
+    if not SAFE_HOST_RE.match(host):
+        return f"Error: Invalid host or IP '{host}'"
+
+    cmd = ["ping", "-n" if sys.platform == "win32" else "-c", str(count), host]
+
+    if runner is not None:
+        return runner(cmd, timeout)
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout + count * 2,
+            check=False,
+        )  # nosec: B603
+        out = ((proc.stdout or "") + (proc.stderr or "")).strip()
+        return out or f"(ping finished with exit code {proc.returncode})"
+    except FileNotFoundError:
+        return "Error: ping utility not found on host"
+    except subprocess.TimeoutExpired:
+        return f"Error: ping timed out after {timeout}s"
+    except OSError as exc:
+        return f"Error running ping: {exc}"

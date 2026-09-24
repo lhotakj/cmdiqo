@@ -1,17 +1,17 @@
 ---
-name: shangohub-quality
-description: Quality guidelines, SonarQube rules, testing standards, and command security workflows for ShangoHub.
+name: shango-quality
+description: Quality guidelines, SonarQube rules, testing standards, and command security workflows for Shango.
 ---
 
-# ShangoHub Quality, SonarQube & Testing Skill
+# Shango Quality, SonarQube & Testing Skill
 
-This skill defines the quality engineering standards, SonarQube quality gate compliance, testing workflows, and command extension protocols for **ShangoHub**.
+This skill defines the quality engineering standards, SonarQube quality gate compliance, testing workflows, and command extension protocols for **Shango**.
 
 ---
 
 ## 1. SonarQube Clean Code & Security Standards
 
-All contributions to ShangoHub must satisfy SonarQube Quality Gates (Zero Vulnerabilities, Zero Security Hotspots, Zero Critical Smells, and >80% Test Coverage).
+All contributions to Shango must satisfy SonarQube Quality Gates (Zero Vulnerabilities, Zero Security Hotspots, Zero Critical Smells, and >80% Test Coverage).
 
 ### Security Requirements
 - **Constant-Time Cryptographic Comparison (CWE-208 / SonarQube S5804):**
@@ -46,6 +46,9 @@ All contributions to ShangoHub must satisfy SonarQube Quality Gates (Zero Vulner
 
 ### Running Tests Locally
 ```bash
+# Run linter
+python -m ruff check bot agent development tests
+
 # Run full test suite with coverage report
 python -m pytest -v --cov=bot --cov=agent --cov-report=term-missing --cov-report=xml:coverage.xml
 ```
@@ -61,6 +64,7 @@ python -m pytest -v --cov=bot --cov=agent --cov-report=term-missing --cov-report
 - `tests/test_hub.py`: Asynchronous WebSocket server tests, token validation, agent registry, command dispatch, and disconnect cleanup.
 - `tests/test_agent.py`: Agent execution engine (`execute`), platform argv generation (`build_argv`), timeout handling, and result schema.
 - `tests/test_app.py`: Slack message authorization (`ALLOWED_USERS`, `ALLOWED_CHANNELS`), help text formatting, and slash command routing.
+- `tests/test_version.py`: Dynamic semver resolution, GitHub CI run numbers, hex timestamp dev versioning, and Windows PE version manifests.
 
 ---
 
@@ -68,9 +72,11 @@ python -m pytest -v --cov=bot --cov=agent --cov-report=term-missing --cov-report
 
 When adding a new command in `config/commands.yaml`:
 
-1. **Trigger Definition:**
-   - Use clear prefixes: `/lan` for local network queries, `/home` for host operations.
-   - Use `{param}` for dynamic arguments (e.g. `/home docker restart {service}`).
+1. **Trigger & Help Metadata Definition:**
+   - Use clear prefixes: `/lan` for local network queries, `/host` for host and remote operations (e.g. `/host {host} service restart {name}`).
+   - Define custom shortcuts in the top-level `aliases:` section (e.g. mapping `input: "/home"` to `output: "/host home"`).
+   - Use `{param}` for dynamic arguments (e.g. `/host {host} docker restart {service}`).
+   - **Enrich for Help Engine**: Provide `category` (`lan`, `system`, `services`, `docker`, `windows`), `description` (short one-liner), `details` (operational notes), and `examples` (copy-pasteable examples). These dynamically populate the Slack `/help` and `/help <category>` interactive manual.
 2. **Backend Kind:**
    - `kind: python`: For internal bot logic. Must define `handler: "module.submodule:function"`. The function receives `params: dict[str, str]` and must return a string.
    - `kind: shell`: Executes locally in the container or on a Linux agent.
@@ -86,10 +92,29 @@ When adding a new command in `config/commands.yaml`:
 
 The repository uses `sonar-project.properties` for continuous inspection:
 ```properties
-sonar.projectKey=ShangoHub
-sonar.projectName=ShangoHub
+sonar.projectKey=Shango
+sonar.projectName=Shango
 sonar.sources=bot,agent
 sonar.tests=tests
 sonar.python.coverage.reportPaths=coverage.xml
 sonar.python.version=3.12,3.13
 ```
+
+---
+
+## 5. Build Machinery, Dynamic Versioning & Signing Protocols
+
+All build and maintenance scripts are centralized in `development/`:
+- `development/update_version.py`: Resolves version and propagates to `version.txt`, `short_version.txt`, `agent/_version.py`, `bot/_version.py`, and `agent/version_info.txt`.
+- `development/build_agent.py`: Unified standalone compiler (PyInstaller, UPX, Authenticode signer).
+- `development/build.ps1` & `development/build.sh`: Local build scripts. Root `build.ps1` and `build.sh` forward to them.
+
+### Versioning Rules:
+- **CI Builds (GitHub Actions):** Derived dynamically as `<major>.<minor>.<GITHUB_RUN_NUMBER>` (e.g. `1.0.42`).
+- **Local Builds:** Derived dynamically using the hex Linux timestamp with `.dev`: `<major>.<minor>.dev<HEX_TIMESTAMP>` (e.g. `1.0.dev6AB4BAC9`).
+- **Windows PE Executable Metadata:** Populated via `FixedFileInfo` tuple `(major, minor, ts & 0xFFFF, 0)` and matching string tables (`FileVersion`, `ProductVersion`, `LegalCopyright`).
+
+### Windows Authenticode Digital Signing:
+- Binaries are digitally signed with SHA256 and RFC 3161 timestamps (`http://timestamp.digicert.com`).
+- Public certificate is exported to `shango-agent.cer` and registered in `Cert:\CurrentUser\TrustedPublisher` for local trust.
+

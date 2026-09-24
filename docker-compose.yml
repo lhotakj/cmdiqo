@@ -30,7 +30,7 @@ services:
       # LOG_LEVEL: "INFO"
 
     volumes:
-      # Needed for /home docker ... commands (docker compose on the host).
+      # Needed for /host home docker ... (or /home docker ...) commands (docker compose on the host).
       # Note: If your host docker.sock requires root/docker group access, you can add
       # `user: "0:0"` or pass the host docker GID via `group_add: [998]`.
       - /var/run/docker.sock:/var/run/docker.sock

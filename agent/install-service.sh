@@ -14,7 +14,7 @@ BIN_PATH="/usr/local/bin/shango-agent"
 CONF_DIR="/etc/shango-agent"
 SERVICE_DEST="/etc/systemd/system/shango-agent.service"
 
-echo "=== Installing ShangoHub Agent (shango-agent) ==="
+echo "=== Installing Shango Agent (shango-agent) ==="
 
 # 1. Install Binary or Python script
 if [[ -f "${SCRIPT_DIR}/../dist/shango-agent" ]]; then

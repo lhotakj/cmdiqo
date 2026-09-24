@@ -34,6 +34,29 @@ log = logging.getLogger("shango-agent")
 IS_WINDOWS = platform.system().lower() == "windows"
 
 
+def get_version() -> str:
+    """Return current agent version."""
+    try:
+        import _version  # Sibling import in PyInstaller bundle or when cwd/sys.path is agent/
+
+        return getattr(_version, "__version__", "1.0.0")
+    except ImportError:
+        pass
+    try:
+        from . import _version  # Relative import when used as agent.agent package
+
+        return getattr(_version, "__version__", "1.0.0")
+    except (ImportError, ValueError):
+        pass
+    try:
+        from agent import _version  # Absolute import when repo root is in sys.path
+
+        return getattr(_version, "__version__", "1.0.0")
+    except ImportError:
+        pass
+    return "1.0.0"
+
+
 class ConfigurationError(ValueError):
     """Raised when one or more required configuration settings are missing or invalid."""
 
@@ -59,10 +82,24 @@ class AgentConfig:
     def load(cls, args: list[str] | None = None) -> AgentConfig:
         """Load configuration with precedence: CLI flags > Env vars > Config file."""
         parser = argparse.ArgumentParser(description="shango-agent: LAN command agent")
-        parser.add_argument("-u", "--hub-url", default=None, help="Hub WebSocket URL (e.g. ws://192.168.1.10:8765)")
-        parser.add_argument("-t", "--token", default=None, help="Shared AGENT_TOKEN secret")
-        parser.add_argument("-n", "--name", default=None, help="Agent hostname / target name")
-        parser.add_argument("-c", "--config", default=None, help="Path to config JSON file")
+        parser.add_argument(
+            "-v", "--version", action="version", version=f"shango-agent {get_version()}"
+        )
+        parser.add_argument(
+            "-u",
+            "--hub-url",
+            default=None,
+            help="Hub WebSocket URL (e.g. ws://192.168.1.10:8765)",
+        )
+        parser.add_argument(
+            "-t", "--token", default=None, help="Shared AGENT_TOKEN secret"
+        )
+        parser.add_argument(
+            "-n", "--name", default=None, help="Agent hostname / target name"
+        )
+        parser.add_argument(
+            "-c", "--config", default=None, help="Path to config JSON file"
+        )
         parser.add_argument(
             "-d",
             "--reconnect-delay",
@@ -70,7 +107,11 @@ class AgentConfig:
             default=None,
             help="Initial reconnect delay in seconds",
         )
-        parser.add_argument("--log-level", default=None, help="Logging level (DEBUG, INFO, WARNING, ERROR)")
+        parser.add_argument(
+            "--log-level",
+            default=None,
+            help="Logging level (DEBUG, INFO, WARNING, ERROR)",
+        )
 
         parsed, _ = parser.parse_known_args(args if args is not None else sys.argv[1:])
 
@@ -84,45 +125,55 @@ class AgentConfig:
         # 1. Preflight check: Config file
         if config_path:
             if not os.path.exists(config_path):
-                issues.append((
-                    "CONFIG_FILE",
-                    f"Configuration file not found at '{config_path}'",
-                    "Ensure file exists or check path passed via --config / AGENT_CONFIG",
-                ))
+                issues.append(
+                    (
+                        "CONFIG_FILE",
+                        f"Configuration file not found at '{config_path}'",
+                        "Ensure file exists or check path passed via --config / AGENT_CONFIG",
+                    )
+                )
             else:
                 try:
                     with open(config_path, "r", encoding="utf-8") as f:
                         file_cfg = json.load(f)
                 except (json.JSONDecodeError, OSError) as exc:
-                    issues.append((
-                        "CONFIG_FILE",
-                        f"Failed to read/parse JSON in '{config_path}': {exc}",
-                        "Check file permissions and ensure the file is valid JSON",
-                    ))
+                    issues.append(
+                        (
+                            "CONFIG_FILE",
+                            f"Failed to read/parse JSON in '{config_path}': {exc}",
+                            "Check file permissions and ensure the file is valid JSON",
+                        )
+                    )
 
         # 2. Preflight check: Hub URL
         hub_url = parsed.hub_url or os.environ.get("HUB_URL") or file_cfg.get("hub_url")
         if not hub_url:
-            issues.append((
-                "HUB_URL",
-                "Hub WebSocket URL is required",
-                "Provide via --hub-url, HUB_URL environment variable, or in config file",
-            ))
+            issues.append(
+                (
+                    "HUB_URL",
+                    "Hub WebSocket URL is required",
+                    "Provide via --hub-url, HUB_URL environment variable, or in config file",
+                )
+            )
         elif not hub_url.startswith(("ws://", "wss://")):
-            issues.append((
-                "HUB_URL",
-                f"Invalid WebSocket scheme for '{hub_url}'",
-                "Must begin with ws:// (unencrypted) or wss:// (encrypted), e.g. ws://192.168.1.10:8765",
-            ))
+            issues.append(
+                (
+                    "HUB_URL",
+                    f"Invalid WebSocket scheme for '{hub_url}'",
+                    "Must begin with ws:// (unencrypted) or wss:// (encrypted), e.g. ws://192.168.1.10:8765",
+                )
+            )
 
         # 3. Preflight check: Shared secret token
         token = parsed.token or os.environ.get("AGENT_TOKEN") or file_cfg.get("token")
         if not token:
-            issues.append((
-                "AGENT_TOKEN",
-                "Shared secret token is required",
-                "Provide via --token, AGENT_TOKEN environment variable, or in config file",
-            ))
+            issues.append(
+                (
+                    "AGENT_TOKEN",
+                    "Shared secret token is required",
+                    "Provide via --token, AGENT_TOKEN environment variable, or in config file",
+                )
+            )
 
         # 4. Preflight check: Reconnect delay
         delay_val = (
@@ -135,18 +186,27 @@ class AgentConfig:
             if reconnect_delay <= 0:
                 raise ValueError("delay must be positive")
         except (ValueError, TypeError):
-            issues.append((
-                "RECONNECT_DELAY",
-                f"Invalid reconnect delay value '{delay_val}'",
-                "Must be a positive number of seconds (e.g. 5.0)",
-            ))
+            issues.append(
+                (
+                    "RECONNECT_DELAY",
+                    f"Invalid reconnect delay value '{delay_val}'",
+                    "Must be a positive number of seconds (e.g. 5.0)",
+                )
+            )
             reconnect_delay = 5.0
 
         if issues:
             raise ConfigurationError(issues)
 
-        name = parsed.name or os.environ.get("AGENT_NAME") or file_cfg.get("name") or socket.gethostname()
-        return cls(hub_url=hub_url, token=token, name=name, reconnect_delay=reconnect_delay)
+        name = (
+            parsed.name
+            or os.environ.get("AGENT_NAME")
+            or file_cfg.get("name")
+            or socket.gethostname()
+        )
+        return cls(
+            hub_url=hub_url, token=token, name=name, reconnect_delay=reconnect_delay
+        )
 
 
 def build_argv(kind: str, cmd: str) -> list[str]:
@@ -185,7 +245,7 @@ async def execute(msg: dict[str, Any]) -> tuple[bool, int | None, str, str | Non
             return False, -1, "", f"timed out after {timeout}s"
 
         output_str = out.decode("utf-8", errors="replace")
-        ok = (proc.returncode == 0)
+        ok = proc.returncode == 0
         return ok, proc.returncode, output_str, None
     except FileNotFoundError as exc:
         return False, 127, "", f"executable not found: {exc}"
@@ -202,16 +262,43 @@ async def handle(ws: Any, raw: str) -> None:
     if not isinstance(msg, dict) or msg.get("type") != "exec":
         return
 
+    req_id = str(msg.get("id", "?"))
+    kind = str(msg.get("kind", "shell"))
+    cmd = str(msg.get("cmd", ""))
+    timeout = int(msg.get("timeout") or 120)
+    cwd = msg.get("cwd") or "(default)"
+
+    log.info(
+        "[%s] Received %s execution request: %s (timeout=%ds, cwd=%s)",
+        req_id[:8],
+        kind,
+        cmd,
+        timeout,
+        cwd,
+    )
+
     ok, code, output, error = await execute(msg)
+
+    log.info(
+        "[%s] Execution finished: ok=%s, code=%s, out_bytes=%d, error=%s",
+        req_id[:8],
+        ok,
+        code,
+        len(output),
+        error or "none",
+    )
+
     await ws.send(
-        json.dumps({
-            "id": msg.get("id"),
-            "type": "result",
-            "ok": ok,
-            "code": code,
-            "output": output,
-            "error": error,
-        })
+        json.dumps(
+            {
+                "id": msg.get("id"),
+                "type": "result",
+                "ok": ok,
+                "code": code,
+                "output": output,
+                "error": error,
+            }
+        )
     )
 
 
@@ -246,17 +333,30 @@ async def run_agent(config: AgentConfig | None = None) -> None:
         try:
             async with connect(config.hub_url, config.token) as ws:
                 await ws.send(
-                    json.dumps({
-                        "type": "hello",
-                        "name": config.name,
-                        "platform": f"{platform.system()}/{platform.release()}",
-                    })
+                    json.dumps(
+                        {
+                            "type": "hello",
+                            "name": config.name,
+                            "version": get_version(),
+                            "platform": f"{platform.system()}/{platform.release()}",
+                        }
+                    )
                 )
-                log.info("Connected to %s as '%s'", config.hub_url, config.name)
+                log.info(
+                    "Connected to %s as '%s' (v%s)",
+                    config.hub_url,
+                    config.name,
+                    get_version(),
+                )
                 delay = config.reconnect_delay  # reset delay on successful connection
                 async for raw in ws:
                     await handle(ws, raw)
-        except (websockets.ConnectionClosed, OSError, TimeoutError, asyncio.TimeoutError) as exc:
+        except (
+            websockets.ConnectionClosed,
+            OSError,
+            TimeoutError,
+            asyncio.TimeoutError,
+        ) as exc:
             log.warning("Connection lost: %s; retrying in %.1fs", exc, delay)
             await asyncio.sleep(delay)
             delay = min(60.0, delay * 1.5)  # exponential backoff with ceiling
@@ -280,13 +380,15 @@ def format_preflight_error(issues: list[tuple[str, str, str]]) -> str:
         lines.append(f"      Resolution: {fix}")
         lines.append("")
 
-    lines.extend([
-        "Quick setup alternatives:",
-        "  - CLI:  shango-agent --hub-url ws://<HUB_IP>:8765 --token <AGENT_TOKEN>",
-        "  - Env:  set HUB_URL=ws://<HUB_IP>:8765 && set AGENT_TOKEN=<AGENT_TOKEN>",
-        "  - Help: shango-agent --help",
-        sep,
-    ])
+    lines.extend(
+        [
+            "Quick setup alternatives:",
+            "  - CLI:  shango-agent --hub-url ws://<HUB_IP>:8765 --token <AGENT_TOKEN>",
+            "  - Env:  set HUB_URL=ws://<HUB_IP>:8765 && set AGENT_TOKEN=<AGENT_TOKEN>",
+            "  - Help: shango-agent --help",
+            sep,
+        ]
+    )
     return "\n".join(lines)
 
 

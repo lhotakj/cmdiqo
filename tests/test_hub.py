@@ -119,13 +119,15 @@ async def test_hub_exec_successful():
     async def simulate_agent_response():
         await asyncio.sleep(0.01)
         req_id = next(iter(hub.pending.keys()))
-        result_msg = json.dumps({
-            "id": req_id,
-            "type": "result",
-            "ok": True,
-            "code": 0,
-            "output": "Windows Hotfix installed",
-        })
+        result_msg = json.dumps(
+            {
+                "id": req_id,
+                "type": "result",
+                "ok": True,
+                "code": 0,
+                "output": "Windows Hotfix installed",
+            }
+        )
         await hub._on_message(result_msg)
 
     asyncio.create_task(simulate_agent_response())
@@ -148,13 +150,17 @@ async def test_hub_exec_empty_output_fallback():
     async def simulate_exit_code_response():
         await asyncio.sleep(0.01)
         req_id = next(iter(hub.pending.keys()))
-        await hub._on_message(json.dumps({
-            "id": req_id,
-            "type": "result",
-            "ok": True,
-            "code": 0,
-            "output": "",
-        }))
+        await hub._on_message(
+            json.dumps(
+                {
+                    "id": req_id,
+                    "type": "result",
+                    "ok": True,
+                    "code": 0,
+                    "output": "",
+                }
+            )
+        )
 
     asyncio.create_task(simulate_exit_code_response())
     output = await hub.exec("node", "shell", "true", timeout=5)
@@ -178,7 +184,9 @@ async def test_hub_agent_disconnect_fails_pending_exec():
 
     asyncio.create_task(disconnect_agent())
 
-    with pytest.raises(ConnectionResetError, match="disconnected before command completed"):
+    with pytest.raises(
+        ConnectionResetError, match="disconnected before command completed"
+    ):
         await hub.exec("node1", "shell", "sleep 10", timeout=5)
 
 
@@ -196,12 +204,16 @@ async def test_hub_exec_fallback_ok_no_output():
     async def simulate_ok():
         await asyncio.sleep(0.01)
         req_id = next(iter(hub.pending.keys()))
-        await hub._on_message(json.dumps({
-            "id": req_id,
-            "type": "result",
-            "ok": True,
-            "output": "",
-        }))
+        await hub._on_message(
+            json.dumps(
+                {
+                    "id": req_id,
+                    "type": "result",
+                    "ok": True,
+                    "output": "",
+                }
+            )
+        )
 
     asyncio.create_task(simulate_ok())
     output = await hub.exec("node", "shell", "noop", timeout=5)
@@ -222,13 +234,17 @@ async def test_hub_exec_fallback_failure():
     async def simulate_fail():
         await asyncio.sleep(0.01)
         req_id = next(iter(hub.pending.keys()))
-        await hub._on_message(json.dumps({
-            "id": req_id,
-            "type": "result",
-            "ok": False,
-            "error": "permission denied",
-            "output": "",
-        }))
+        await hub._on_message(
+            json.dumps(
+                {
+                    "id": req_id,
+                    "type": "result",
+                    "ok": False,
+                    "error": "permission denied",
+                    "output": "",
+                }
+            )
+        )
 
     asyncio.create_task(simulate_fail())
     output = await hub.exec("node", "shell", "restricted", timeout=5)

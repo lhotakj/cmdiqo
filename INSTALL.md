@@ -1,4 +1,4 @@
-# ShangoHub Installation & Operator's Guide
+# Shango Installation & Operator's Guide
 
 A beginner-friendly, step-by-step walkthrough for deploying **shango-bot** and installing **shango-agent** as a background service on Windows and Linux.
 
@@ -62,7 +62,7 @@ Socket Mode allows the bot to receive Slack events over a secure outbound WebSoc
 ### Step 1.3: Set Permissions (OAuth Scopes)
 1. In the left sidebar, click **OAuth & Permissions** (under *Features*).
 2. Scroll down to **Scopes** → **Bot Token Scopes** and click **Add an OAuth Scope** for each of these:
-   - `commands` — allows the bot to handle `/lan` and `/home` slash commands.
+   - `commands` — allows the bot to handle `/help`, `/lan`, `/host`, `/home`, and `/wol` slash commands.
    - `chat:write` — allows the bot to post replies in channels and threads.
    - `channels:history` — allows the bot to read messages in public channels.
    - `groups:history` — (optional) allows reading messages in private channels.
@@ -71,17 +71,23 @@ Socket Mode allows the bot to receive Slack events over a secure outbound WebSoc
 
 ### Step 1.4: Create the Slash Commands
 1. In the left sidebar, click **Slash Commands** (under *Features*).
-2. Click **Create New Command** and create the first command:
+2. Click **Create New Command** for each of the following:
+   - **Command:** `/help`
+     - **Short Description:** `Interactive manual and command reference`
+     - **Usage Hint:** `[category|topic] (e.g. /help lan, /help host)`
    - **Command:** `/lan`
-   - **Short Description:** `Manage local network and agents`
-   - **Usage Hint:** `devices list | agents list`
-   - *(Leave Request URL blank — Socket Mode handles routing automatically)*
-   - Click **Save**.
-3. Click **Create New Command** again for the second command:
-   - **Command:** `/home`
-   - **Short Description:** `Run host and agent commands`
-   - **Usage Hint:** `docker restart <service> | win updates <pc>`
-   - Click **Save**.
+     - **Short Description:** `Manage local network and agents`
+     - **Usage Hint:** `devices list | wake <mac> | ping <host> | agents list`
+   - **Command:** `/host`
+     - **Short Description:** `Run host and remote agent commands`
+     - **Usage Hint:** `<hostname-or-ip> <action>`
+   - **Command:** `/home` *(Alias)*
+     - **Short Description:** `Shortcut to /host home`
+     - **Usage Hint:** `docker ps | docker restart <service>`
+   - **Command:** `/wol` *(Alias)*
+     - **Short Description:** `Wake-on-LAN boot shortcut`
+     - **Usage Hint:** `<mac-or-ip>`
+   *(Leave Request URL blank for all commands — Socket Mode handles routing automatically)*
 
 ---
 
@@ -127,9 +133,9 @@ Never store tokens or passwords in Git repositories, Dockerfiles, or Slack chat.
 
 | Component | Secret File Location | File Permissions | What Goes Inside |
 |---|---|---|---|
-| **Bot Server** | `/path/to/ShangoHub/.env` | `chmod 600 .env` | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `AGENT_TOKEN`, `ALLOWED_USERS` |
+| **Bot Server** | `/path/to/Shango/.env` | `chmod 600 .env` | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `AGENT_TOKEN`, `ALLOWED_USERS` |
 | **Linux Agent** | `/etc/shango-agent/agent.env` | `chmod 600` (owned by `root:root`) | `HUB_URL`, `AGENT_TOKEN`, `AGENT_NAME` |
-| **Windows Agent** | `C:\ProgramData\ShangoHub\Agent\config.json` | Protected NTFS ACL (SYSTEM & Administrators only) | `hub_url`, `token`, `name` |
+| **Windows Agent** | `C:\ProgramData\Shango\Agent\config.json` | Protected NTFS ACL (SYSTEM & Administrators only) | `hub_url`, `token`, `name` |
 
 ### Generate a Strong `AGENT_TOKEN`
 The `AGENT_TOKEN` is a shared secret between your bot and your agents. Generate a secure random string:
@@ -156,8 +162,8 @@ The `AGENT_TOKEN` is a shared secret between your bot and your agents. Generate 
 ### Step 3.1: Clone Repository & Create `.env`
 On your server:
 ```bash
-git clone https://github.com/your-username/ShangoHub.git
-cd ShangoHub
+git clone https://github.com/your-username/Shango.git
+cd Shango
 ```
 
 Create a `.env` file next to `docker-compose.yml`:
@@ -244,7 +250,7 @@ On the target Linux machine:
 ```bash
 cd /tmp
 chmod +x shango-agent
-# Move to ShangoHub repository clone or run installer:
+# Move to Shango repository clone or run installer:
 sudo ./agent/install-service.sh
 ```
 
@@ -269,7 +275,7 @@ HUB_URL=ws://192.168.1.10:8765
 # Must match AGENT_TOKEN in your bot server's .env
 AGENT_TOKEN=your-random-agent-token-here
 
-# Unique name for this agent (used in Slack commands like /home nas disk)
+# Unique name for this agent (used in Slack commands like /host nas disk)
 AGENT_NAME=nas
 LOG_LEVEL=INFO
 ```
@@ -324,11 +330,11 @@ To verify and ensure the `.exe` is authentic and safe:
 
 1. **Check the Embedded Digital Signature**:
    - Right-click `shango-agent.exe` $\rightarrow$ **Properties** $\rightarrow$ **Digital Signatures** tab.
-   - You will see the signature from `ShangoHub (GitHub Actions)` with a secure SHA256 digest and official timestamp.
+   - You will see the signature from `Shango (GitHub Actions)` with a secure SHA256 digest and official timestamp.
 2. **Check Publisher Metadata**:
    - In **Properties** $\rightarrow$ **Details**, you will see:
-     - *File Description*: ShangoHub LAN Remote Agent
-     - *Company*: ShangoHub
+     - *File Description*: Shango LAN Remote Agent
+     - *Company*: Shango
      - *Original Filename*: shango-agent.exe
 3. **Permanent SmartScreen Trust**:
    When you run `install-service.ps1` as Administrator (below), it **automatically imports the digital certificate into your Windows Trusted Publishers store**, permanently silencing SmartScreen warnings on that machine.
@@ -339,7 +345,7 @@ To verify and ensure the `.exe` is authentic and safe:
 1. Press the **Windows Key**, type **PowerShell**, right-click **Windows PowerShell**, and select **Run as Administrator**.
 2. Navigate to the folder containing `install-service.ps1` and `shango-agent.exe`:
    ```powershell
-   cd C:\Users\YourUser\Downloads\ShangoHub\agent
+   cd C:\Users\YourUser\Downloads\Shango\agent
    ```
 3. Run the installer script, supplying your server IP, token, and a name for this PC:
    ```powershell
@@ -347,8 +353,8 @@ To verify and ensure the `.exe` is authentic and safe:
    ```
 
 #### What the installer does automatically:
-- Copies `shango-agent.exe` into `C:\Program Files\ShangoHub\Agent\`.
-- Writes secret configuration to `C:\ProgramData\ShangoHub\Agent\config.json` with restricted access permissions.
+- Copies `shango-agent.exe` into `C:\Program Files\Shango\Agent\`.
+- Writes secret configuration to `C:\ProgramData\Shango\Agent\config.json` with restricted access permissions.
 - Registers an automatic background service named `Shango-Agent` using Windows Task Scheduler (configured to run on computer boot as `NT AUTHORITY\SYSTEM` with highest privileges, surviving user logoffs).
 - Starts the service immediately.
 
@@ -370,7 +376,7 @@ Stop-ScheduledTask -TaskName "Shango-Agent"
 Start-ScheduledTask -TaskName "Shango-Agent"
 
 # Re-configure (edit the config file):
-notepad "C:\ProgramData\ShangoHub\Agent\config.json"
+notepad "C:\ProgramData\Shango\Agent\config.json"
 # (Then restart the service)
 
 # Uninstall the service completely:
@@ -404,9 +410,22 @@ Once the bot and agents are running, test everything directly inside Slack:
    ```
    The bot performs an ARP scan and prints all discovered MAC addresses and vendor names on your subnet.
 
-3. **Test Remote Command Execution:**
-   - On Linux: `/home nas disk` (runs `df -h` on the NAS and returns storage usage).
-   - On Windows: `/home win updates MY-WINDOWS-PC` (queries Windows hotfixes).
+3. **Test Wake-on-LAN (Boot Over LAN):**
+   Type:
+   ```text
+   /lan wake 00:11:22:33:44:55
+   # or with alias:
+   /wol 00:11:22:33:44:55
+   ```
+   The bot broadcasts a magic UDP packet on port 9 to boot the target machine.
+
+4. **Test Remote Command Execution:**
+   - Host-agnostic commands:
+     - System health: `/host home uptime` or `/host home memory`
+     - On Linux: `/host nas disk` (runs `df -h` on the NAS and returns storage usage).
+     - On Windows: `/host MY-WINDOWS-PC win updates` (queries Windows hotfixes).
+   - Via alias:
+     - `/home docker ps` (automatically translated to `/host home docker ps`).
 
 ---
 
@@ -448,8 +467,8 @@ If an agent fails to connect, verify that the agent PC can reach the bot contain
 | Symptom / Error in Slack | Cause | Fix |
 |---|---|---|
 | `:no_entry_sign: You are not authorized to use this bot.` | Your Slack Member ID is not listed in `ALLOWED_USERS`. | Follow **Step 1.7** to copy your member ID (e.g. `U0123ABCDEF`). Add it to `.env` as `ALLOWED_USERS=U0123ABCDEF` and run `docker compose restart`. |
-| `dispatch_failed` or `No command found` | Slash commands `/lan` or `/home` were not created or the app wasn't reinstalled. | In [api.slack.com/apps](https://api.slack.com/apps), verify both commands exist under **Slash Commands**, then go to **Install App** and click **Reinstall to Workspace**. |
+| `dispatch_failed` or `No command found` | Slash commands `/lan`, `/host`, or `/home` were not created or the app wasn't reinstalled. | In [api.slack.com/apps](https://api.slack.com/apps), verify both commands exist under **Slash Commands**, then go to **Install App** and click **Reinstall to Workspace**. |
 | `agent 'nas' is not connected. Connected agents: (none)` | Agent is offline, has the wrong IP, or token mismatch. | 1. Run `/lan agents list` to see what agents are online.<br/>2. Check `HUB_URL` in `/etc/shango-agent/agent.env` or `config.json`.<br/>3. Verify `AGENT_TOKEN` matches **exactly** on server and agent. |
-| Agent connects but disconnects every 30 seconds. | Stateful NAT / firewall dropping idle connection. | ShangoHub includes automated 20-second ping/pong keepalives. Ensure your firewall allows outbound WebSockets on port 8765. |
+| Agent connects but disconnects every 30 seconds. | Stateful NAT / firewall dropping idle connection. | Shango includes automated 20-second ping/pong keepalives. Ensure your firewall allows outbound WebSockets on port 8765. |
 | `/lan devices list` returns `No devices discovered` | Container running in bridge mode instead of host mode. | In `docker-compose.yml`, verify `network_mode: host` is set. Raw ARP packets require host network access. |
 | Windows agent command fails with execution policy error. | PowerShell script execution disabled. | `shango-agent` automatically calls PowerShell with `-NoProfile -NonInteractive -Command`, bypassing execution policy restrictions. |

@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-    Installs the ShangoHub Slack LAN Agent as an automatic background service on Windows.
+    Installs the Shango Slack LAN Agent as an automatic background service on Windows.
 
 .DESCRIPTION
     Configures the agent to start automatically on Windows boot with SYSTEM/Administrator
     privileges. Supports both Windows Task Scheduler (native, zero dependencies) and NSSM.
 
 .PARAMETER HubUrl
-    The WebSocket URL of the ShangoHub server (e.g. ws://192.168.1.10:8765).
+    The WebSocket URL of the Shango server (e.g. ws://192.168.1.10:8765).
 
 .PARAMETER Token
     The shared secret AGENT_TOKEN configured on the hub.
@@ -16,7 +16,7 @@
     The agent name used as target in Slack commands (default: hostname).
 
 .PARAMETER InstallDir
-    Target directory for the binary (default: C:\Program Files\ShangoHub\Agent).
+    Target directory for the binary (default: C:\Program Files\Shango\Agent).
 
 .EXAMPLE
     .\install-service.ps1 -HubUrl "ws://192.168.1.10:8765" -Token "my-secret-token" -Name "WIN-PC"
@@ -34,10 +34,10 @@ param(
     [string]$Name = $env:COMPUTERNAME,
 
     [Parameter(Mandatory = $false)]
-    [string]$InstallDir = "C:\Program Files\ShangoHub\Agent",
+    [string]$InstallDir = "C:\Program Files\Shango\Agent",
 
     [Parameter(Mandatory = $false)]
-    [string]$ConfigDir = "C:\ProgramData\ShangoHub\Agent"
+    [string]$ConfigDir = "C:\ProgramData\Shango\Agent"
 )
 
 # Ensure running with Administrator privileges
@@ -49,7 +49,7 @@ if (-not $isAdmin) {
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-Write-Host "=== Installing ShangoHub Slack LAN Agent on Windows ===" -ForegroundColor Cyan
+Write-Host "=== Installing Shango Slack LAN Agent on Windows ===" -ForegroundColor Cyan
 
 # 1. Resolve or prompt for parameters if missing
 if (-not $HubUrl) {

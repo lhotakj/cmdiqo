@@ -27,3 +27,10 @@ htmlcov/
 *.swp
 *.swo
 Thumbs.db
+
+# Secrets & Certificates
+.secrets.*
+*.pfx
+*.key
+*.cer
+

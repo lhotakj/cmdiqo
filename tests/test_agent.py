@@ -72,7 +72,18 @@ def test_agent_config_cli_args(monkeypatch):
     monkeypatch.delenv("HUB_URL", raising=False)
     monkeypatch.delenv("AGENT_TOKEN", raising=False)
 
-    args = ["--hub-url", "ws://10.0.0.5:8765", "-t", "cli-token", "-n", "cli-node", "-d", "8.0", "--log-level", "DEBUG"]
+    args = [
+        "--hub-url",
+        "ws://10.0.0.5:8765",
+        "-t",
+        "cli-token",
+        "-n",
+        "cli-node",
+        "-d",
+        "8.0",
+        "--log-level",
+        "DEBUG",
+    ]
     config = AgentConfig.load(args=args)
     assert config.hub_url == "ws://10.0.0.5:8765"
     assert config.token == "cli-token"
@@ -85,12 +96,17 @@ def test_agent_config_json_file(tmp_path, monkeypatch):
     monkeypatch.delenv("AGENT_TOKEN", raising=False)
 
     cfg_file = tmp_path / "agent.json"
-    cfg_file.write_text(json.dumps({
-        "hub_url": "ws://192.168.1.50:8765",
-        "token": "file-token",
-        "name": "file-node",
-        "reconnect_delay": 3.0,
-    }), encoding="utf-8")
+    cfg_file.write_text(
+        json.dumps(
+            {
+                "hub_url": "ws://192.168.1.50:8765",
+                "token": "file-token",
+                "name": "file-node",
+                "reconnect_delay": 3.0,
+            }
+        ),
+        encoding="utf-8",
+    )
 
     config = AgentConfig.load(args=["--config", str(cfg_file)])
     assert config.hub_url == "ws://192.168.1.50:8765"
@@ -133,7 +149,9 @@ async def test_agent_execute_success():
 
 @pytest.mark.asyncio
 async def test_agent_execute_not_found(monkeypatch):
-    monkeypatch.setattr("agent.agent.build_argv", lambda kind, cmd: ["nonexistent_binary_xyz_123"])
+    monkeypatch.setattr(
+        "agent.agent.build_argv", lambda kind, cmd: ["nonexistent_binary_xyz_123"]
+    )
     msg = {"id": "req-2", "type": "exec", "kind": "shell", "cmd": "foo"}
     ok, code, _output, error = await execute(msg)
     assert ok is False
@@ -173,7 +191,13 @@ async def test_agent_execute_timeout(monkeypatch):
         return MockProcess()
 
     monkeypatch.setattr("asyncio.create_subprocess_exec", mock_subp)
-    msg = {"id": "req-4", "type": "exec", "kind": "shell", "cmd": "sleep", "timeout": 0.05}
+    msg = {
+        "id": "req-4",
+        "type": "exec",
+        "kind": "shell",
+        "cmd": "sleep",
+        "timeout": 0.05,
+    }
     ok, code, _output, error = await execute(msg)
     assert ok is False
     assert code == -1
@@ -183,13 +207,15 @@ async def test_agent_execute_timeout(monkeypatch):
 @pytest.mark.asyncio
 async def test_agent_handle_message():
     mock_ws = AsyncMock()
-    raw = json.dumps({
-        "id": "req-100",
-        "type": "exec",
-        "kind": "shell",
-        "cmd": "echo ping",
-        "timeout": 5,
-    })
+    raw = json.dumps(
+        {
+            "id": "req-100",
+            "type": "exec",
+            "kind": "shell",
+            "cmd": "echo ping",
+            "timeout": 5,
+        }
+    )
 
     await handle(mock_ws, raw)
     mock_ws.send.assert_awaited_once()
@@ -266,3 +292,18 @@ def test_agent_main_unhandled_exception(monkeypatch):
         main(argv=[])
     assert exc_info.value.code == 1
 
+
+def test_agent_get_version():
+    from agent.agent import get_version
+
+    ver = get_version()
+    assert isinstance(ver, str)
+    assert len(ver) > 0
+
+
+def test_agent_version_cli(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        AgentConfig.load(args=["--version"])
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    assert "shango-agent" in captured.out
