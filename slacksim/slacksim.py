@@ -181,6 +181,18 @@ class SlackSimulator:
         self.load_specifications()
         self._running = True
 
+        async def _on_agent_event(event_type: str, name: str, hello: dict[str, Any]) -> None:
+            agent_notify = hello.get("agent_connection_notify") if isinstance(hello, dict) else None
+            notify_enabled = agent_notify if agent_notify is not None else True
+            if not notify_enabled:
+                return
+
+            icon = "🟢" if event_type == "connected" else "🔴"
+            action_word = "connected" if event_type == "connected" else "just disconnected"
+            msg = f"Agent notification: {icon} Agent {name} {action_word}"
+            post_fn = self._post_callback()
+            await post_fn(msg)
+
         if self.config.hub_enabled:
             target_url = self.config.hub_url or f"ws://127.0.0.1:{self.config.hub_port}"
             token = self.config.agent_token or None
@@ -202,6 +214,7 @@ class SlackSimulator:
                     port=self.config.hub_port,
                     token=token,
                 )
+                hub.on_agent_event = _on_agent_event
                 self.hub = hub
                 self._hub_task = asyncio.create_task(hub.run())
                 log.info("Simulator embedded Hub started on ws://%s:%d", self.config.hub_host, self.config.hub_port)

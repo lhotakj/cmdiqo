@@ -87,10 +87,8 @@ def package_agent_zip(system: str, dist_path: Path) -> Path:
 
     if system == "windows":
         zip_name = "cmdiqo-agent-windows-x64.zip"
-        alt_bin_name = "cmdiqo-agent-windows-x64.exe"
         files_to_pack = [
             (dist_path, "cmdiqo-agent.exe"),
-            (dist_path, alt_bin_name),
             (AGENT_DIR / "install-service.ps1", "install-service.ps1"),
             (AGENT_DIR / "uninstall-service.ps1", "uninstall-service.ps1"),
             (AGENT_DIR / "agent.env.example", "agent.env.example"),
@@ -101,10 +99,8 @@ def package_agent_zip(system: str, dist_path: Path) -> Path:
             files_to_pack.append((cer_path, "cmdiqo-agent.cer"))
     else:
         zip_name = "cmdiqo-agent-linux-x64.zip"
-        alt_bin_name = "cmdiqo-agent-linux-x64"
         files_to_pack = [
             (dist_path, "cmdiqo-agent"),
-            (dist_path, alt_bin_name),
             (AGENT_DIR / "install-service.sh", "install-service.sh"),
             (AGENT_DIR / "uninstall-service.sh", "uninstall-service.sh"),
             (AGENT_DIR / "cmdiqo-agent.service", "cmdiqo-agent.service"),

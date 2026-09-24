@@ -823,8 +823,9 @@ def create_bot_app(
             if not notify_enabled:
                 return
 
-            msg = f"🟢 Agent {name} connected" if event_type == "connected" else f"🔴 Agent {name} just disconnected"
-            log.info("Agent notification: %s", msg)
+            status_text = f"🟢 Agent {name} connected" if event_type == "connected" else f"🔴 Agent {name} just disconnected"
+            msg = f"Agent notification: {status_text}"
+            log.info("%s", msg)
 
             if config.allowed_channels:
                 for ch in config.allowed_channels:

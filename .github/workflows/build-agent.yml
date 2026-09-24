@@ -79,7 +79,6 @@ jobs:
           mkdir -p dist/package
           if [[ "${{ matrix.os }}" == "windows"* ]]; then
             cp dist/cmdiqo-agent.exe dist/package/cmdiqo-agent.exe
-            cp dist/cmdiqo-agent.exe dist/package/cmdiqo-agent-windows-x64.exe
             cp agent/install-service.ps1 dist/package/
             cp agent/uninstall-service.ps1 dist/package/
             cp agent/agent.env.example dist/package/
@@ -88,8 +87,7 @@ jobs:
             [ -f dist/cmdiqo-agent.cer ] && cp dist/cmdiqo-agent.cer dist/package/ || true
           else
             cp dist/cmdiqo-agent dist/package/cmdiqo-agent
-            cp dist/cmdiqo-agent dist/package/cmdiqo-agent-linux-x64
-            chmod +x dist/package/cmdiqo-agent dist/package/cmdiqo-agent-linux-x64
+            chmod +x dist/package/cmdiqo-agent
             cp agent/install-service.sh dist/package/
             cp agent/uninstall-service.sh dist/package/
             cp agent/cmdiqo-agent.service dist/package/
@@ -98,18 +96,10 @@ jobs:
             chmod +x dist/package/*.sh || true
           fi
 
-      - name: Upload Package Artifact (contains binary, install/uninstall scripts & configs)
+      - name: Upload Agent Package Artifact (contains binary, install/uninstall scripts & configs)
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: dist/package/*
-          retention-days: 90
-          if-no-files-found: error
-
-      - name: Upload Zip Archive Artifact (for direct zip file download)
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact_name }}-zip
-          path: ${{ matrix.zip_src }}
           retention-days: 90
           if-no-files-found: error

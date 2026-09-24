@@ -73,6 +73,7 @@ try {{
 
     if ($action -eq "enable") {{
         Enable-LocalUser -Name $targetUser
+        try {{ Unlock-LocalUser -Name $targetUser -ErrorAction SilentlyContinue }} catch {{}}
         Write-Output "SUCCESS:enabled:$targetUser"
         exit 0
     }}
@@ -286,10 +287,10 @@ async def manage_users(params: dict[str, str], hub: Hub | None = None) -> str:
                 )
         return f"👤 *User Status for `{username}` on `{host}`:*\n```{output}```"
 
-    if action == "disable" or "SUCCESS:disabled:" in output:
-        return f"🚫 *User `{username}` on `{host}` disabled (locked).* "
+    if "SUCCESS:disabled:" in output:
+        return f"🚫 *User `{username}` on `{host}` disabled (locked).*"
 
-    if action == "enable" or "SUCCESS:enabled:" in output:
-        return f"✔️ *User `{username}` on `{host}` enabled (active).* "
+    if "SUCCESS:enabled:" in output:
+        return f"✔️ *User `{username}` on `{host}` enabled (active).*"
 
-    return f":information_source: User command output from `{host}`:\n```{output}```"
+    return f":x: Failed to {action} user `{username}` on `{host}`:\n```{output}```"
