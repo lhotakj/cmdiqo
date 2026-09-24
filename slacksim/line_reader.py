@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 # Default history file path in user's home directory
-DEFAULT_HISTORY_FILE = Path.home() / ".shango-history"
+DEFAULT_HISTORY_FILE = Path.home() / ".cmdiqo-history"
 
 # Track original Unix terminal attributes for guaranteed restoration
 _orig_termios: Any = None

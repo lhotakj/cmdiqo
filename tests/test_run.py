@@ -25,7 +25,7 @@ def test_load_dotenv(tmp_path):
 def test_print_usage(capsys):
     run.print_usage()
     out = capsys.readouterr().out
-    assert "Shango Process Runner" in out
+    assert "Cmdiqo Process Runner" in out
     assert "python run.py hub" in out
     assert "python run.py agent" in out
 
@@ -51,7 +51,7 @@ def test_main_help(capsys):
         run.main()
     assert exc.value.code == 0
     out = capsys.readouterr().out
-    assert "Shango Process Runner" in out
+    assert "Cmdiqo Process Runner" in out
 
 
 def test_main_unknown_command(capsys):

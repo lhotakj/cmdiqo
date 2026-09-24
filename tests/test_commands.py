@@ -145,3 +145,65 @@ def test_trigger_to_regex_mac_address_placeholder():
     m_ip = pattern.match("/lan wake 192.168.1.50")
     assert m_ip is not None
     assert m_ip.group("target") == "192.168.1.50"
+
+
+@pytest.mark.asyncio
+async def test_manage_users_handlers():
+    from bot.commands.users import (
+        build_user_script_linux,
+        build_user_script_windows,
+        manage_users,
+    )
+
+    # Test script generators
+    win_script = build_user_script_windows("users")
+    assert "Get-LocalUser" in win_script
+
+    win_status = build_user_script_windows("status", "john")
+    assert "john" in win_status
+
+    linux_script = build_user_script_linux("users")
+    assert "getent passwd" in linux_script
+
+    linux_status = build_user_script_linux("status", "john")
+    assert "john" in linux_status
+
+    # Test invalid inputs
+    res_missing_host = await manage_users({})
+    assert "Target host is required" in res_missing_host
+
+    res_missing_user = await manage_users({"host": "WIN-PC", "action": "status"})
+    assert "Username is required" in res_missing_user
+
+    # Test mock remote execution via Hub
+    class MockHub:
+        def __init__(self):
+            self.agents = {"WIN-PC": {"platform": "Windows"}}
+
+        async def exec(self, host, kind, cmd, timeout=60):
+            if "$action = 'users'" in cmd or 'ACTION="users"' in cmd:
+                return "USERS_LIST:\n✔️ john (active)\n🚫 guest (locked)"
+            if "$action = 'status'" in cmd or 'ACTION="status"' in cmd:
+                return "USER_STATUS|john|John Doe|C:\\Users\\john|active|✔️|1h 20m 5s"
+            if "$action = 'disable'" in cmd or 'ACTION="disable"' in cmd:
+                return "SUCCESS:disabled:john"
+            if "$action = 'enable'" in cmd or 'ACTION="enable"' in cmd:
+                return "SUCCESS:enabled:john"
+            return ""
+
+    mock_hub = MockHub()
+
+    res_users = await manage_users({"host": "WIN-PC", "action": "users"}, hub=mock_hub)
+    assert "Users on `WIN-PC`" in res_users
+    assert "✔️ john" in res_users
+
+    res_status = await manage_users({"host": "WIN-PC", "user": "john", "action": "status"}, hub=mock_hub)
+    assert "John Doe" in res_status
+    assert "1h 20m 5s" in res_status
+
+    res_dis = await manage_users({"host": "WIN-PC", "user": "john", "action": "disable"}, hub=mock_hub)
+    assert "disabled" in res_dis
+
+    res_ena = await manage_users({"host": "WIN-PC", "user": "john", "action": "enable"}, hub=mock_hub)
+    assert "enabled" in res_ena
+

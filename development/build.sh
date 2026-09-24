@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# development/build.sh — Cross-platform local build script for Shango.
+# development/build.sh — Cross-platform local build script for Cmdiqo.
 #
 # Usage:
-#   ./development/build.sh               # Build standalone shango-agent binary for current platform
+#   ./development/build.sh               # Build standalone cmdiqo-agent binary for current platform
 #   ./development/build.sh --agent       # Build standalone agent binary
-#   ./development/build.sh --bot         # Build Docker image for shango-bot
+#   ./development/build.sh --bot         # Build Docker image for cmdiqo-bot
 #   ./development/build.sh --all         # Build both agent binary and bot container
 #   ./development/build.sh --dev         # Build with .dev version suffix
 #   ./development/build.sh --push        # Build and push Docker image to registry
@@ -74,7 +74,7 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: ./development/build.sh [options]"
             echo "Options:"
             echo "  --agent       Build standalone agent binary (default)"
-            echo "  --bot         Build Docker container for shango-bot"
+            echo "  --bot         Build Docker container for cmdiqo-bot"
             echo "  --all         Build both agent binary and bot container"
             echo "  --dev         Tag version as development build (<major>.<minor>.dev<HEX>)"
             echo "  --push        Build and push Docker image to DockerHub"
@@ -118,7 +118,7 @@ info "Build target version: \033[34m${VERSION}\033[0m (Short: ${SHORT_VERSION})"
 
 # 2. Build standalone agent binary
 if [[ "$BUILD_AGENT" = true ]]; then
-    info "=== Building standalone shango-agent binary ==="
+    info "=== Building standalone cmdiqo-agent binary ==="
     AGENT_BUILD_ARGS=("$PYTHON_CMD" "development/build_agent.py")
     if [[ -n "$VERSION_OVERRIDE" ]]; then
         AGENT_BUILD_ARGS+=(--version "$VERSION_OVERRIDE")
@@ -128,16 +128,16 @@ fi
 
 # 3. Build Docker container for bot (if requested)
 if [[ "$BUILD_BOT" = true ]]; then
-    info "=== Building Docker image for shango-bot ==="
+    info "=== Building Docker image for cmdiqo-bot ==="
     if ! command -v docker >/dev/null 2>&1; then
         error "Docker CLI is not installed or not in PATH."
         exit 1
     fi
 
-    TAG_LATEST="${DOCKER_USERNAME}/shango-bot:latest"
-    TAG_SHORT="${DOCKER_USERNAME}/shango-bot:${SHORT_VERSION}"
-    TAG_FULL="${DOCKER_USERNAME}/shango-bot:${VERSION}"
-    TAG_TS="${DOCKER_USERNAME}/shango-bot:${TIMESTAMP}"
+    TAG_LATEST="${DOCKER_USERNAME}/cmdiqo-bot:latest"
+    TAG_SHORT="${DOCKER_USERNAME}/cmdiqo-bot:${SHORT_VERSION}"
+    TAG_FULL="${DOCKER_USERNAME}/cmdiqo-bot:${VERSION}"
+    TAG_TS="${DOCKER_USERNAME}/cmdiqo-bot:${TIMESTAMP}"
 
     if [[ "$PUSH_DOCKER" = true ]]; then
         info "Building and pushing multi-arch images (${TAG_FULL}) ..."

@@ -1,4 +1,4 @@
-"""shango-bot - manage your local network from Slack, even behind NAT.
+"""cmdiqo-bot - manage your local network from Slack, even behind NAT.
 
 Uses Slack Socket Mode (outbound WebSocket only) so no ports need to be exposed
 to the internet. Also embeds a Hub server: LAN agents (Windows/Linux) connect
@@ -34,7 +34,7 @@ logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
-log = logging.getLogger("shango-bot")
+log = logging.getLogger("cmdiqo-bot")
 
 MAX_BLOCK = 3500  # Slack message limit is ~4000 chars
 SAFE_PARAM_RE = re.compile(r"^[a-zA-Z0-9_\-\.:]+$")
@@ -86,6 +86,7 @@ class BotConfig:
     agent_token: str = ""
     slack_bot_token: str = ""
     slack_app_token: str = ""
+    agent_connection_notify: bool = False
 
     def validate(self) -> None:
         """Perform preflight checks on critical configuration."""
@@ -119,7 +120,25 @@ class BotConfig:
 
     @classmethod
     def from_env(cls) -> BotConfig:
-        """Load configuration cleanly from environment variables without import-time side effects."""
+        """Load configuration cleanly from environment variables and config files without import-time side effects."""
+        config_notify = False
+        for cfg_file in ("config.json", "config/config.json", os.getenv("CONFIG_FILE", "")):
+            if cfg_file and os.path.exists(cfg_file):
+                try:
+                    with open(cfg_file, "r", encoding="utf-8") as fh:
+                        data = json.load(fh)
+                        if isinstance(data, dict) and "agent_connection_notify" in data:
+                            val = data["agent_connection_notify"]
+                            config_notify = str(val).lower() in ("true", "1", "yes", "on")
+                except Exception:
+                    pass
+
+        env_notify = os.getenv("AGENT_NOTIFICATION_NOTIFY") or os.getenv("AGENT_CONNECTION_NOTIFY")
+        if env_notify is not None:
+            agent_notify = env_notify.strip().lower() in ("true", "1", "yes", "on")
+        else:
+            agent_notify = config_notify
+
         return cls(
             commands_config_path=os.getenv("COMMANDS_CONFIG", DEFAULT_COMMANDS_CONFIG),
             shell_timeout=int(os.getenv("SHELL_TIMEOUT", str(DEFAULT_SHELL_TIMEOUT))),
@@ -139,6 +158,7 @@ class BotConfig:
             agent_token=os.getenv("AGENT_TOKEN", ""),
             slack_bot_token=os.getenv("SLACK_BOT_TOKEN", ""),
             slack_app_token=os.getenv("SLACK_APP_TOKEN", ""),
+            agent_connection_notify=agent_notify,
         )
 
 
@@ -468,8 +488,8 @@ BUILTIN_COMMANDS: list[dict[str, Any]] = [
     {
         "trigger": "/lan version",
         "category": "lan",
-        "description": "Display running shango-bot version",
-        "details": "Returns the installed semantic version string of the Shango bot container.",
+        "description": "Display running cmdiqo-bot version",
+        "details": "Returns the installed semantic version string of the Cmdiqo bot container.",
         "examples": ["/lan version"],
     },
     {
@@ -498,7 +518,7 @@ def help_text(
     # 1. General Overview (no topic requested)
     if not req_topic:
         lines = [
-            ":book: *Shango Command Manual*",
+            ":book: *Cmdiqo Command Manual*",
             "Manage your LAN, Docker services, and remote Windows/Linux machines directly from Slack.\n",
             "*Available Categories:*",
             "• *`lan`* — Network scanning, pinging, and Wake-on-LAN (`/help lan`)",
@@ -578,7 +598,7 @@ def help_text(
             f"Type `/help` to see all available categories and commands."
         )
 
-    lines = [f":book: *Shango Help: `{req_topic}`*"]
+    lines = [f":book: *Cmdiqo Help: `{req_topic}`*"]
 
     if matching_aliases:
         lines.append("\n*Matching Aliases:*")
@@ -706,8 +726,8 @@ async def handle_command(
     if text.lower() in ("/lan version", "/host version"):
         await reply_output(
             post,
-            ":information_source: *Shango Version*",
-            f"shango-bot v{get_version()}",
+            ":information_source: *Cmdiqo Version*",
+            f"cmdiqo-bot v{get_version()}",
         )
         return
 
@@ -791,6 +811,29 @@ def create_bot_app(
     # Allow instantiation without token for testing
     token = config.slack_bot_token or "mock-test-bot-token"
     app = AsyncApp(token=token)
+
+    if hub is not None:
+        async def _on_hub_agent_event(event_type: str, name: str, hello: dict[str, Any]) -> None:
+            agent_notify = hello.get("agent_connection_notify") if isinstance(hello, dict) else None
+            notify_enabled = (
+                config.agent_connection_notify
+                if agent_notify is None
+                else bool(agent_notify) or config.agent_connection_notify
+            )
+            if not notify_enabled:
+                return
+
+            msg = f"🟢 Agent {name} connected" if event_type == "connected" else f"🔴 Agent {name} just disconnected"
+            log.info("Agent notification: %s", msg)
+
+            if config.allowed_channels:
+                for ch in config.allowed_channels:
+                    try:
+                        await app.client.chat_postMessage(channel=ch, text=msg)
+                    except Exception as exc:  # noqa: BLE001
+                        log.warning("Could not post agent event notification to %s: %s", ch, exc)
+
+        hub.on_agent_event = _on_hub_agent_event
 
     @app.command("/host")
     async def slash_host(ack: Any, command: dict[str, Any], respond: Any) -> None:
@@ -913,7 +956,7 @@ def format_bot_preflight_error(issues: list[tuple[str, str, str]]) -> str:
     sep = "=" * width
     lines = [
         sep,
-        "[SHANGO-BOT] PREFLIGHT CONFIGURATION CHECK FAILED".center(width),
+        "[CMDIQO-BOT] PREFLIGHT CONFIGURATION CHECK FAILED".center(width),
         sep,
         "The bot cannot start because required configuration parameters are missing",
         "or invalid. Please review the following issues:",
@@ -954,7 +997,7 @@ async def main() -> None:
 
 
 def run_main() -> None:
-    """Entry point for shango-bot with preflight error handling and clean exit."""
+    """Entry point for cmdiqo-bot with preflight error handling and clean exit."""
     try:
         asyncio.run(main())
     except BotConfigurationError as exc:

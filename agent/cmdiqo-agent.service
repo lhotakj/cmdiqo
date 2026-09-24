@@ -1,5 +1,5 @@
 [Unit]
-Description=Shango Agent (shango-agent)
+Description=Cmdiqo Agent (cmdiqo-agent)
 After=network-online.target
 Wants=network-online.target
 
@@ -7,8 +7,8 @@ Wants=network-online.target
 Type=simple
 User=root
 # Configuration via environment file or JSON file
-EnvironmentFile=-/etc/shango-agent/agent.env
-ExecStart=/usr/local/bin/shango-agent
+EnvironmentFile=-/etc/cmdiqo-agent/agent.env
+ExecStart=/usr/local/bin/cmdiqo-agent
 Restart=always
 RestartSec=5s
 LimitNOFILE=65536

@@ -1,4 +1,4 @@
-"""Shango Slack Simulator (slacksim).
+"""Cmdiqo Slack Simulator (slacksim).
 
 Terminal-based Slack console emulator for interactive testing, debugging,
 and remote agent supervision.

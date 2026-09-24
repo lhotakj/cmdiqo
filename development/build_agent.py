@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-platform build script to compile shango-agent into standalone binaries."""
+"""Cross-platform build script to compile cmdiqo-agent into standalone binaries."""
 
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ def run_cmd(cmd: list[str], check: bool = True) -> None:
 
 def sign_windows_binary(exe_path: Path) -> None:
     """Digitally sign the Windows executable using Authenticode and export certificate."""
-    cer_dist = exe_path.parent / "shango-agent.cer"
-    cer_root = ROOT / "shango-agent.cer"
+    cer_dist = exe_path.parent / "cmdiqo-agent.cer"
+    cer_root = ROOT / "cmdiqo-agent.cer"
     ps_cmd = (
         "$cert = $null; "
         "if ($env:SIGNING_CERT_BASE64) { "
@@ -39,9 +39,9 @@ def sign_windows_binary(exe_path: Path) -> None:
         "  Write-Host '[*] Checking for existing CodeSigning certificate in Cert:\\CurrentUser\\My...'; "
         "  $cert = Get-ChildItem Cert:\\CurrentUser\\My -CodeSigningCert | Select-Object -First 1; "
         "  if (-not $cert) { "
-        "    Write-Host '[*] Creating self-signed Shango code signing certificate...'; "
+        "    Write-Host '[*] Creating self-signed Cmdiqo code signing certificate...'; "
         "    $cert = New-SelfSignedCertificate -Type CodeSigningCert "
-        "      -Subject 'CN=ShangoHub, O=ShangoHub, OU=Verified Build' "
+        "      -Subject 'CN=CmdiqoHub, O=CmdiqoHub, OU=Verified Build' "
         "      -CertStoreLocation 'Cert:\\CurrentUser\\My' "
         "      -HashAlgorithm SHA256 "
         "      -NotAfter (Get-Date).AddYears(5); "
@@ -80,30 +80,43 @@ import zipfile
 
 
 def package_agent_zip(system: str, dist_path: Path) -> Path:
-    """Pack binary along with install and uninstall scripts into a zip archive."""
+    """Pack binary along with install and uninstall scripts into a zip archive and staging directory."""
     dist_dir = dist_path.parent
+    pkg_dir = dist_dir / "package"
+    pkg_dir.mkdir(parents=True, exist_ok=True)
+
     if system == "windows":
-        zip_name = "shango-agent-windows-x64.zip"
+        zip_name = "cmdiqo-agent-windows-x64.zip"
+        alt_bin_name = "cmdiqo-agent-windows-x64.exe"
         files_to_pack = [
-            (dist_path, "shango-agent.exe"),
+            (dist_path, "cmdiqo-agent.exe"),
+            (dist_path, alt_bin_name),
             (AGENT_DIR / "install-service.ps1", "install-service.ps1"),
             (AGENT_DIR / "uninstall-service.ps1", "uninstall-service.ps1"),
             (AGENT_DIR / "agent.env.example", "agent.env.example"),
             (AGENT_DIR / "agent.json.example", "agent.json.example"),
         ]
-        cer_path = dist_dir / "shango-agent.cer"
+        cer_path = dist_dir / "cmdiqo-agent.cer"
         if cer_path.exists():
-            files_to_pack.append((cer_path, "shango-agent.cer"))
+            files_to_pack.append((cer_path, "cmdiqo-agent.cer"))
     else:
-        zip_name = "shango-agent-linux-x64.zip"
+        zip_name = "cmdiqo-agent-linux-x64.zip"
+        alt_bin_name = "cmdiqo-agent-linux-x64"
         files_to_pack = [
-            (dist_path, "shango-agent"),
+            (dist_path, "cmdiqo-agent"),
+            (dist_path, alt_bin_name),
             (AGENT_DIR / "install-service.sh", "install-service.sh"),
             (AGENT_DIR / "uninstall-service.sh", "uninstall-service.sh"),
-            (AGENT_DIR / "shango-agent.service", "shango-agent.service"),
+            (AGENT_DIR / "cmdiqo-agent.service", "cmdiqo-agent.service"),
             (AGENT_DIR / "agent.env.example", "agent.env.example"),
             (AGENT_DIR / "agent.json.example", "agent.json.example"),
         ]
+
+    # Populate dist/package/ for GitHub Actions artifact staging
+    import shutil
+    for src_path, arc_name in files_to_pack:
+        if src_path.exists():
+            shutil.copy2(src_path, pkg_dir / arc_name)
 
     zip_path = dist_dir / zip_name
     print(f"\n[*] Packaging zip archive: {zip_path}")
@@ -122,7 +135,7 @@ def package_agent_zip(system: str, dist_path: Path) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Cross-platform build script for shango-agent"
+        description="Cross-platform build script for cmdiqo-agent"
     )
     parser.add_argument(
         "-v", "--version", help="Explicit version override (e.g. 1.0.1)"
@@ -140,7 +153,7 @@ def main() -> None:
 
     system = platform.system().lower()
     machine = platform.machine().lower()
-    print(f"=== Building shango-agent for {system} ({machine}) ===")
+    print(f"=== Building cmdiqo-agent for {system} ({machine}) ===")
 
     # 0. Sync version across version.txt, version_info.txt, and Python modules
     sys.path.insert(0, str(ROOT))
@@ -168,7 +181,7 @@ def main() -> None:
         )
 
     # 2. Determine target binary name
-    bin_name = "shango-agent"
+    bin_name = "cmdiqo-agent"
 
     # 3. Build single-file executable with maximum compression
     version_file = AGENT_DIR / "version_info.txt"
@@ -199,8 +212,36 @@ def main() -> None:
         "--name",
         bin_name,
     ]
+    # 2.5 Ensure icon exists or convert from .design logo
+    icon_file = ROOT / "development" / "cmdiqo.ico"
+    design_logo = ROOT / ".design" / "icon.png"
+    if not icon_file.exists() and design_logo.exists():
+        try:
+            from PIL import Image
+
+            img = Image.open(design_logo)
+            img.save(
+                icon_file,
+                format="ICO",
+                sizes=[
+                    (16, 16),
+                    (24, 24),
+                    (32, 32),
+                    (48, 48),
+                    (64, 64),
+                    (128, 128),
+                    (256, 256),
+                ],
+            )
+            print(f"[build] Generated icon file: {icon_file}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[build] Could not generate icon file: {exc}")
+
     if system != "windows":
         pyinstaller_cmd.append("--strip")
+
+    if icon_file.exists():
+        pyinstaller_cmd.extend(["--icon", str(icon_file)])
 
     if system == "windows" and version_file.exists():
         pyinstaller_cmd.extend(["--version-file", str(version_file)])
@@ -227,7 +268,7 @@ def main() -> None:
 
             shutil.copy2(dist_path, dest)
             print(f"[+] Copied binary to {dest}")
-            if dest.suffix == ".exe" or dest.name == "shango-agent":
+            if dest.suffix == ".exe" or dest.name == "cmdiqo-agent":
                 copy_zip = dest.parent / zip_path.name
                 shutil.copy2(zip_path, copy_zip)
                 print(f"[+] Copied zip package to {copy_zip}")

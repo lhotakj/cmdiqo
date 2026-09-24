@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""run.py: Shango local application runner and process supervisor.
+"""run.py: Cmdiqo local application runner and process supervisor.
 
 Usage:
     python run.py          # Start both Hub (bot) and Agent concurrently
@@ -109,15 +109,15 @@ def terminate_process_safely(
 def print_usage() -> None:
     """Print command-line help."""
     print(f"""
-{COLOR_CYAN}Shango Process Runner{COLOR_RESET}
+{COLOR_CYAN}Cmdiqo Process Runner{COLOR_RESET}
 
 Usage:
     python run.py [COMMAND] [OPTIONS...]
 
 Commands:
     {COLOR_GREEN}(none){COLOR_RESET}         Start both Hub (bot) and Agent concurrently
-    {COLOR_GREEN}hub{COLOR_RESET}            Start the Shango Bot & WebSocket Hub only
-    {COLOR_GREEN}agent{COLOR_RESET}          Start the Shango Remote Agent only
+    {COLOR_GREEN}hub{COLOR_RESET}            Start the Cmdiqo Bot & WebSocket Hub only
+    {COLOR_GREEN}agent{COLOR_RESET}          Start the Cmdiqo Remote Agent only
     {COLOR_GREEN}sim, slacksim{COLOR_RESET}  Start the interactive Slack emulator (no Slack tokens needed)
     {COLOR_GREEN}-h, --help{COLOR_RESET}     Show this help message and exit
 
@@ -176,7 +176,7 @@ def run_both(extra_args: list[str]) -> int:
     def shutdown_all(*_args) -> NoReturn:
         print()
         log_warn(
-            "Interrupt received (Ctrl+C). Shutting down all Shango services safely..."
+            "Interrupt received (Ctrl+C). Shutting down all Cmdiqo services safely..."
         )
         for name, proc in list(processes.items()):
             terminate_process_safely(proc, name)
@@ -190,7 +190,7 @@ def run_both(extra_args: list[str]) -> int:
         signal.signal(signal.SIGBREAK, shutdown_all)
 
     # 1. Start Hub / Bot
-    log_info("Starting Shango Bot & Hub server...")
+    log_info("Starting Cmdiqo Bot & Hub server...")
     hub_cmd = [sys.executable, str(hub_script)]
     hub_proc = subprocess.Popen(hub_cmd, cwd=str(ROOT), env=env)
     processes["Hub"] = hub_proc
@@ -202,7 +202,7 @@ def run_both(extra_args: list[str]) -> int:
         return hub_proc.returncode
 
     # 2. Start Agent
-    log_info("Starting Shango Remote Agent...")
+    log_info("Starting Cmdiqo Remote Agent...")
     agent_cmd = [sys.executable, str(agent_script)] + extra_args
     agent_proc = subprocess.Popen(agent_cmd, cwd=str(ROOT), env=env)
     processes["Agent"] = agent_proc

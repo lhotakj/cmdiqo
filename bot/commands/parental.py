@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from bot.hub import Hub
 
-log = logging.getLogger("shango-bot.commands.parental")
+log = logging.getLogger("cmdiqo-bot.commands.parental")
 
 YOUTUBE_DOMAINS: list[str] = [
     "youtube.com",

@@ -373,3 +373,38 @@ async def test_remote_hub_client_start_refresh_and_exec():
         await msg_queue.put(None)
         await client.stop()
 
+
+@pytest.mark.asyncio
+async def test_hub_on_agent_event_callbacks():
+    events = []
+
+    async def mock_event_cb(evt_type, agent_name, hello):
+        events.append((evt_type, agent_name, hello.get("agent_connection_notify")))
+
+    hub = Hub(token=None)
+    hub.on_agent_event = mock_event_cb
+
+    mock_ws = AsyncMock()
+    mock_ws.remote_address = ("192.168.1.100", 54321)
+    mock_ws.request.headers = {}
+    mock_ws.recv.return_value = json.dumps({
+        "type": "hello",
+        "name": "test-agent",
+        "version": "1.0.0",
+        "agent_connection_notify": True,
+    })
+
+    async def mock_iter():
+        await asyncio.sleep(0.01)
+        return
+        yield ""
+
+    mock_ws.__aiter__.side_effect = mock_iter
+
+    await hub._handle(mock_ws)
+
+    assert len(events) == 2
+    assert events[0] == ("connected", "test-agent", True)
+    assert events[1] == ("disconnected", "test-agent", True)
+
+

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Uninstall shango-agent systemd service on Linux
+# Uninstall cmdiqo-agent systemd service on Linux
 # ==============================================================================
 set -euo pipefail
 
@@ -9,18 +9,18 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-SERVICE_NAME="shango-agent.service"
+SERVICE_NAME="cmdiqo-agent.service"
 SERVICE_DEST="/etc/systemd/system/${SERVICE_NAME}"
-BIN_PATH="/usr/local/bin/shango-agent"
-CONF_DIR="/etc/shango-agent"
-OPT_DIR="/opt/shango-agent"
+BIN_PATH="/usr/local/bin/cmdiqo-agent"
+CONF_DIR="/etc/cmdiqo-agent"
+OPT_DIR="/opt/cmdiqo-agent"
 
 PURGE=false
 if [[ "${1:-}" == "--purge" || "${1:-}" == "-p" ]]; then
     PURGE=true
 fi
 
-echo "=== Uninstalling Shango Agent (${SERVICE_NAME}) ==="
+echo "=== Uninstalling Cmdiqo Agent (${SERVICE_NAME}) ==="
 
 if systemctl is-active --quiet "${SERVICE_NAME}" 2>/dev/null; then
     echo "[*] Stopping systemd service..."

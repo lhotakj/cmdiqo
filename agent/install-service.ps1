@@ -1,19 +1,19 @@
 <#
 .SYNOPSIS
-    Installs the Shango Slack LAN Agent as a native Windows Service (Python & PS1 only).
+    Installs the Cmdiqo Slack LAN Agent as a native Windows Service (Python & PS1 only).
 
 .DESCRIPTION
-    Configures shango-agent as a native Windows Service managed directly by the
+    Configures cmdiqo-agent as a native Windows Service managed directly by the
     Windows Service Control Manager (SCM). Uses Python's native Win32 service
     dispatcher (zero external dependencies, zero third-party wrappers).
     
     Architecture:
-      - Binary Directory: C:\Program Files\Shango\Agent\ (shango-agent.exe or agent.py)
-      - Secrets & Config: C:\ProgramData\Shango\Agent\config.json (Full edit access for Admins & Users)
-      - Service Logs:     C:\ProgramData\Shango\Agent\logs\service.log (auto stdout/stderr capture)
+      - Binary Directory: C:\Program Files\Cmdiqo\Agent\ (cmdiqo-agent.exe or agent.py)
+      - Secrets & Config: C:\ProgramData\Cmdiqo\Agent\config.json (Full edit access for Admins & Users)
+      - Service Logs:     C:\ProgramData\Cmdiqo\Agent\logs\service.log (auto stdout/stderr capture)
 
 .PARAMETER HubUrl
-    The WebSocket URL of the Shango hub (e.g. ws://192.168.1.10:8765).
+    The WebSocket URL of the Cmdiqo hub (e.g. ws://192.168.1.10:8765).
 
 .PARAMETER Token
     The shared secret AGENT_TOKEN configured on the hub.
@@ -22,13 +22,13 @@
     The agent name used as target in Slack commands (default: hostname).
 
 .PARAMETER BinaryPath
-    Optional explicit path to pre-built shango-agent.exe or shango-agent-windows-x64.exe.
+    Optional explicit path to pre-built cmdiqo-agent.exe or cmdiqo-agent-windows-x64.exe.
 
 .PARAMETER InstallDir
-    Target directory for service binaries (default: C:\Program Files\Shango\Agent).
+    Target directory for service binaries (default: C:\Program Files\Cmdiqo\Agent).
 
 .PARAMETER ConfigDir
-    Directory for secrets and config (default: C:\ProgramData\Shango\Agent).
+    Directory for secrets and config (default: C:\ProgramData\Cmdiqo\Agent).
 
 .PARAMETER Uninstall
     If specified, uninstalls and deletes the Windows Service completely.
@@ -53,10 +53,13 @@ param(
     [string]$BinaryPath,
 
     [Parameter(Mandatory = $false)]
-    [string]$InstallDir = "C:\Program Files\Shango\Agent",
+    [string]$InstallDir = "C:\Program Files\Cmdiqo\Agent",
 
     [Parameter(Mandatory = $false)]
-    [string]$ConfigDir = "C:\ProgramData\Shango\Agent",
+    [string]$ConfigDir = "C:\ProgramData\Cmdiqo\Agent",
+
+    [Parameter(Mandatory = $false)]
+    [string]$AgentConnectionNotify,
 
     [switch]$Uninstall
 )
@@ -70,15 +73,15 @@ if (-not $isAdmin) {
     exit 1
 }
 
-$ServiceName = "ShangoAgent"
-$DisplayName = "Shango LAN Remote Agent"
+$ServiceName = "CmdiqoAgent"
+$DisplayName = "Cmdiqo LAN Remote Agent"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # ==============================================================================
 # UNINSTALL WORKFLOW
 # ==============================================================================
 if ($Uninstall) {
-    Write-Host "`n=== Uninstalling Shango Windows Service ($ServiceName) ===" -ForegroundColor Yellow
+    Write-Host "`n=== Uninstalling Cmdiqo Windows Service ($ServiceName) ===" -ForegroundColor Yellow
 
     # Stop service if running
     $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -94,14 +97,14 @@ if ($Uninstall) {
     Start-Sleep -Seconds 1
 
     # Clean up legacy Scheduled Task if previously installed
-    $legacyTask = Get-ScheduledTask -TaskName "Shango-Agent" -ErrorAction SilentlyContinue
+    $legacyTask = Get-ScheduledTask -TaskName "Cmdiqo-Agent" -ErrorAction SilentlyContinue
     if ($legacyTask) {
-        Write-Host "[*] Removing legacy Scheduled Task 'Shango-Agent'..." -ForegroundColor Cyan
-        Unregister-ScheduledTask -TaskName "Shango-Agent" -Confirm:$false -ErrorAction SilentlyContinue
+        Write-Host "[*] Removing legacy Scheduled Task 'Cmdiqo-Agent'..." -ForegroundColor Cyan
+        Unregister-ScheduledTask -TaskName "Cmdiqo-Agent" -Confirm:$false -ErrorAction SilentlyContinue
     }
 
     # Terminate any lingering processes
-    Get-Process -Name "shango-agent" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Get-Process -Name "cmdiqo-agent" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
     # Remove binary files
     if (Test-Path $InstallDir) {
@@ -118,7 +121,7 @@ if ($Uninstall) {
 # ==============================================================================
 # INSTALL WORKFLOW
 # ==============================================================================
-Write-Host "`n=== Installing Shango Slack LAN Agent as a Real Windows Service ===" -ForegroundColor Cyan
+Write-Host "`n=== Installing Cmdiqo Slack LAN Agent as a Real Windows Service ===" -ForegroundColor Cyan
 
 # 1. Resolve configuration parameters
 $ConfigFile = Join-Path $ConfigDir "config.json"
@@ -149,6 +152,21 @@ if (-not $Token) {
     exit 1
 }
 
+# Resolve Agent Connection Notification setting
+$defaultNotify = if ($ExistingConfig.agent_connection_notify -ne $null) {
+    if ($ExistingConfig.agent_connection_notify) { "yes" } else { "no" }
+} else {
+    "no"
+}
+
+if (-not $AgentConnectionNotify) {
+    $notifyResp = Read-Host "Enable Slack notification on agent connect/disconnect? (yes/no) [Default: $defaultNotify]"
+    if (-not $notifyResp) { $notifyResp = $defaultNotify }
+    $AgentConnectionNotifyBool = ($notifyResp.Trim().ToLower() -in @("yes", "y", "true", "1"))
+} else {
+    $AgentConnectionNotifyBool = ($AgentConnectionNotify.Trim().ToLower() -in @("yes", "y", "true", "1"))
+}
+
 # 2. Setup Directories
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
@@ -156,10 +174,11 @@ New-Item -ItemType Directory -Force -Path (Join-Path $ConfigDir "logs") | Out-Nu
 
 # 3. Save Configuration JSON and Secure ACLs (Secrets Protection)
 $ConfigData = @{
-    hub_url         = $HubUrl
-    token           = $Token
-    name            = $Name
-    reconnect_delay = 5.0
+    hub_url                 = $HubUrl
+    token                   = $Token
+    name                    = $Name
+    reconnect_delay         = 5.0
+    agent_connection_notify = $AgentConnectionNotifyBool
 } | ConvertTo-Json -Depth 3
 
 [IO.File]::WriteAllText($ConfigFile, $ConfigData, (New-Object System.Text.UTF8Encoding($false)))
@@ -185,21 +204,21 @@ try {
     }
 }
 
-# 4. Locate or copy shango-agent binary / python scripts
-$DestExe = Join-Path $InstallDir "shango-agent.exe"
+# 4. Locate or copy cmdiqo-agent binary / python scripts
+$DestExe = Join-Path $InstallDir "cmdiqo-agent.exe"
 
-$latestDownload = Get-ChildItem -Path "$env:USERPROFILE\Downloads" -Filter "*shango-agent*.exe" -Recurse -ErrorAction SilentlyContinue |
+$latestDownload = Get-ChildItem -Path "$env:USERPROFILE\Downloads" -Filter "*cmdiqo-agent*.exe" -Recurse -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending |
     Select-Object -First 1 -ExpandProperty FullName
 
 $candidateExes = @(
     $BinaryPath,
-    (Join-Path $ScriptDir "..\dist\shango-agent.exe"),
-    (Join-Path $ScriptDir "shango-agent-windows-x64.exe"),
-    (Join-Path $ScriptDir "shango-agent.exe"),
+    (Join-Path $ScriptDir "..\dist\cmdiqo-agent.exe"),
+    (Join-Path $ScriptDir "cmdiqo-agent-windows-x64.exe"),
+    (Join-Path $ScriptDir "cmdiqo-agent.exe"),
     $latestDownload,
-    (Join-Path $ScriptDir "..\shango-agent-windows-x64.exe"),
-    (Join-Path $ScriptDir "..\dist\shango-agent-windows-x64.exe")
+    (Join-Path $ScriptDir "..\cmdiqo-agent-windows-x64.exe"),
+    (Join-Path $ScriptDir "..\dist\cmdiqo-agent-windows-x64.exe")
 ) | Where-Object { $_ -and (Test-Path $_) }
 
 $SourceExe = $null
@@ -255,10 +274,10 @@ if (Test-Path $DestExe) {
 }
 
 # 6. Clean up any existing legacy Scheduled Task
-$legacyTask = Get-ScheduledTask -TaskName "Shango-Agent" -ErrorAction SilentlyContinue
+$legacyTask = Get-ScheduledTask -TaskName "Cmdiqo-Agent" -ErrorAction SilentlyContinue
 if ($legacyTask) {
-    Write-Host "[*] Cleaning up legacy Scheduled Task 'Shango-Agent'..." -ForegroundColor DarkGray
-    Unregister-ScheduledTask -TaskName "Shango-Agent" -Confirm:$false -ErrorAction SilentlyContinue
+    Write-Host "[*] Cleaning up legacy Scheduled Task 'Cmdiqo-Agent'..." -ForegroundColor DarkGray
+    Unregister-ScheduledTask -TaskName "Cmdiqo-Agent" -Confirm:$false -ErrorAction SilentlyContinue
 }
 
 # 7. Determine execution command line
@@ -267,7 +286,7 @@ if (Test-Path $DestExe) {
 } else {
     $PythonExe = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
     if (-not $PythonExe) {
-        Write-Error "[ERROR] Neither shango-agent.exe nor python.exe was found in PATH!"
+        Write-Error "[ERROR] Neither cmdiqo-agent.exe nor python.exe was found in PATH!"
         exit 1
     }
     $AgentPy = Join-Path $InstallDir "agent.py"
@@ -312,7 +331,7 @@ if (-not $serviceConfigured) {
             -BinaryPathName $BinPathValue `
             -DisplayName $DisplayName `
             -StartupType Automatic `
-            -Description "Shango Slack LAN Remote Agent reverse WebSocket connection service" | Out-Null
+            -Description "Cmdiqo Slack LAN Remote Agent reverse WebSocket connection service" | Out-Null
     } catch {
         if ($_ -match "marked for deletion") {
             Write-Error "[ERROR] Service '$ServiceName' is marked for deletion because 'services.msc' (Services window) is currently open.`n`n--> PLEASE CLOSE 'services.msc' (Services window) and re-run .\install-service.ps1"
@@ -335,7 +354,7 @@ $svcStatus = Get-Service -Name $ServiceName
 $LogFile = Join-Path $ConfigDir "logs\service.log"
 
 Write-Host "`n" + ("=" * 70) -ForegroundColor Green
-Write-Host "  SHANGO WINDOWS SERVICE INSTALLED SUCCESSFULLY!" -ForegroundColor Green
+Write-Host "  CMDIQO WINDOWS SERVICE INSTALLED SUCCESSFULLY!" -ForegroundColor Green
 Write-Host ("=" * 70) -ForegroundColor Green
 Write-Host "Service Name:    $ServiceName" -ForegroundColor White
 Write-Host "Display Name:    $DisplayName" -ForegroundColor White

@@ -1,4 +1,4 @@
-# Shango Build & Development Guide
+# Cmdiqo Build & Development Guide
 
 This guide covers:
 1. **Local Environment Setup**: Automated environment activation via `.direnv` or PowerShell.
@@ -11,7 +11,7 @@ This guide covers:
 
 ## 1. Local Environment Setup
 
-Shango provides automated virtual environment setup across Linux, macOS, and Windows.
+Cmdiqo provides automated virtual environment setup across Linux, macOS, and Windows.
 
 ### Option A: Linux / macOS / WSL / Git-Bash (`direnv`)
 Whenever you `cd` into the repository, `direnv` automatically:
@@ -90,10 +90,10 @@ development/update_version.py
      *(Example: If timestamp is `1788611373`, its hex representation is `6A9C0B2D`, resulting in `1.0.dev6A9C0B2D`)*.
 4. **Windows PE Executable Metadata (`version_info.txt`):**
    - Windows PE binary headers require fixed 16-bit unsigned integers (`0`–`65535`) in `filevers=(major, minor, patch, build)`. For local dev builds, the lower 16 bits of the timestamp (`ts & 0xFFFF`) populate the binary tuple, while the full string (`1.0.dev6A9C0B2D`) is written to `FileVersion` and `ProductVersion`.
-   - Right-clicking `shango-agent.exe` $\rightarrow$ Properties $\rightarrow$ Details shows:
+   - Right-clicking `cmdiqo-agent.exe` $\rightarrow$ Properties $\rightarrow$ Details shows:
      - **File version:** `1.0.dev6A9C0B2D` (or `1.0.42` in CI)
      - **Product version:** `1.0.dev6A9C0B2D` (or `1.0.42` in CI)
-     - **Product name:** `Shango Agent`
+     - **Product name:** `Cmdiqo Agent`
      - **Legal copyright:** `Copyright (c) 2026 Jaroslav Lhotak. Verified GitHub build.`
 
 ### Manual Version Synchronization:
@@ -117,11 +117,11 @@ All build machinery resides in `development/`, with root-level wrapper scripts (
 Use `.\build.ps1` (or `.\development\build.ps1`):
 
 ```powershell
-# 1. Build standalone Windows agent executable (dist\shango-agent.exe):
+# 1. Build standalone Windows agent executable (dist\cmdiqo-agent.exe):
 .\build.ps1
 
 # 2. Build and copy directly to a test location (e.g. C:\tmp\):
-.\build.ps1 -CopyTo "C:\tmp\shango-agent-windows-x64.exe"
+.\build.ps1 -CopyTo "C:\tmp\cmdiqo-agent-windows-x64.exe"
 
 # 3. Clean previous build artifacts and build with explicit version:
 .\build.ps1 -Clean -Version "1.2.0"
@@ -145,13 +145,13 @@ Use `.\build.ps1` (or `.\development\build.ps1`):
 Use `./build.sh` (or `./development/build.sh`):
 
 ```bash
-# 1. Build standalone Linux agent binary (dist/shango-agent):
+# 1. Build standalone Linux agent binary (dist/cmdiqo-agent):
 ./build.sh
 
 # 2. Build with explicit version:
 ./build.sh -v 1.2.0
 
-# 3. Build Docker container for shango-bot:
+# 3. Build Docker container for cmdiqo-bot:
 ./build.sh --bot
 
 # 4. Build both standalone agent and Docker bot:
@@ -160,7 +160,7 @@ Use `./build.sh` (or `./development/build.sh`):
 
 #### Parameters for `build.sh`:
 - `--agent`: Build standalone agent binary (default).
-- `--bot`: Build Docker container for `shango-bot`.
+- `--bot`: Build Docker container for `cmdiqo-bot`.
 - `--all`: Build both agent binary and bot container.
 - `--dev`: Force development build format `<major>.<minor>.dev<HEX>`.
 - `--push`: Build and push multi-architecture Docker image to registry.
@@ -176,38 +176,38 @@ To ensure the Windows binary is safe, verified, and free of security warnings, t
 When `development/build_agent.py` runs on Windows:
 1. **Certificate Resolution:**
    - If `$env:SIGNING_CERT_BASE64` is provided (e.g. from GitHub Secrets), it imports your production code-signing certificate.
-   - Otherwise, it checks `Cert:\CurrentUser\My` for an existing code-signing certificate, or generates a dedicated Shango Authenticode certificate (`CN=Shango, O=Shango, OU=Verified Build`).
+   - Otherwise, it checks `Cert:\CurrentUser\My` for an existing code-signing certificate, or generates a dedicated Cmdiqo Authenticode certificate (`CN=Cmdiqo, O=Cmdiqo, OU=Verified Build`).
 2. **Dual Certificate Export:**
-   - Exports the public certificate to `dist\shango-agent.cer` and `shango-agent.cer`.
+   - Exports the public certificate to `dist\cmdiqo-agent.cer` and `cmdiqo-agent.cer`.
 3. **Local Store Registration:**
    - Adds the certificate to `Cert:\CurrentUser\TrustedPublisher` store, making the executable trusted on the local build machine.
 4. **Dual Timestamping:**
-   - Digitally signs `shango-agent.exe` with SHA256 Authenticode signatures and queries official RFC 3161 timestamp servers (`http://timestamp.digicert.com` with fallback to `http://timestamp.sectigo.com`).
+   - Digitally signs `cmdiqo-agent.exe` with SHA256 Authenticode signatures and queries official RFC 3161 timestamp servers (`http://timestamp.digicert.com` with fallback to `http://timestamp.sectigo.com`).
    - Valid timestamps ensure the digital signature remains valid even after the certificate expires.
 
 ### How to Trust the Binary on Target Windows Machines
 
-When you copy `shango-agent.exe` to another Windows PC or download it from GitHub Actions, Windows Defender SmartScreen may inspect untrusted publishers until the public certificate is installed into the machine's trusted certificate store.
+When you copy `cmdiqo-agent.exe` to another Windows PC or download it from GitHub Actions, Windows Defender SmartScreen may inspect untrusted publishers until the public certificate is installed into the machine's trusted certificate store.
 
 #### Option A: Quick Command (Administrator or Standard User)
 Open Command Prompt or PowerShell and run:
 ```cmd
-certutil -addstore -user Root dist\shango-agent.cer
+certutil -addstore -user Root dist\cmdiqo-agent.cer
 ```
 *(Or if using PowerShell)*:
 ```powershell
-Import-Certificate -FilePath .\dist\shango-agent.cer -CertStoreLocation Cert:\CurrentUser\Root
+Import-Certificate -FilePath .\dist\cmdiqo-agent.cer -CertStoreLocation Cert:\CurrentUser\Root
 ```
 
 #### Option B: Windows GUI (No Commands Needed)
-1. Double-click `shango-agent.cer` (or right-click $\rightarrow$ **Install Certificate**).
+1. Double-click `cmdiqo-agent.cer` (or right-click $\rightarrow$ **Install Certificate**).
 2. Store Location: Select **Current User** $\rightarrow$ click **Next**.
 3. Select **Place all certificates in the following store** $\rightarrow$ click **Browse...**.
 4. Select **Trusted Root Certification Authorities** (or **Trusted Publishers**) $\rightarrow$ click **OK**.
 5. Click **Next** $\rightarrow$ click **Finish**.
 6. When the Windows Security confirmation dialog appears, click **Yes**.
 
-Once trusted, `shango-agent.exe` runs smoothly without warnings.
+Once trusted, `cmdiqo-agent.exe` runs smoothly without warnings.
 
 ---
 
@@ -216,13 +216,13 @@ Once trusted, `shango-agent.exe` runs smoothly without warnings.
 Automated CI/CD workflows run in `.github/workflows/` using the exact same build engine as local builds:
 - **`ci.yml`**: Runs Ruff linter, Pytest test suites, and SonarQube quality gate.
 - **`build-agent.yml`**: Compiles standalone binaries for Linux (`ubuntu-24.04`) and Windows (`windows-latest`) using `development/build_agent.py`, applies Authenticode signing, and uploads downloadable artifacts.
-- **`docker-publish.yml`**: Builds and publishes multi-arch Docker container images for `shango-bot`.
+- **`docker-publish.yml`**: Builds and publishes multi-arch Docker container images for `cmdiqo-bot`.
 
 ### 1. Summary of Repository Secrets
 
 > [!NOTE]
 > **No secrets are required to build and download binaries!**
-> The binary build workflow works 100% out of the box with zero secrets required. If signing secrets are omitted, the workflow automatically generates a dedicated Shango certificate, signs the `.exe`, and packages `shango-agent.cer` along with the binary.
+> The binary build workflow works 100% out of the box with zero secrets required. If signing secrets are omitted, the workflow automatically generates a dedicated Cmdiqo certificate, signs the `.exe`, and packages `cmdiqo-agent.cer` along with the binary.
 
 | Secret Name | Workflow | Is it Required? | Description |
 | :--- | :--- | :---: | :--- |
@@ -238,7 +238,7 @@ Automated CI/CD workflows run in `.github/workflows/` using the exact same build
 
 1. Open your repository on GitHub:
    ```text
-   https://github.com/<your-username>/Shango
+   https://github.com/<your-username>/Cmdiqo
    ```
 2. Click the **Settings** tab in the top navigation bar.
 3. In the left-hand sidebar:
@@ -257,13 +257,13 @@ Automated CI/CD workflows run in `.github/workflows/` using the exact same build
 1. Log into [Docker Hub](https://hub.docker.com).
 2. Click your profile avatar $\rightarrow$ **Account Settings** $\rightarrow$ **Security**.
 3. Under *Access Tokens*, click **New Access Token**.
-4. Description: `GitHub Actions Shango`, Permissions: **Read & Write**.
+4. Description: `GitHub Actions Cmdiqo`, Permissions: **Read & Write**.
 5. Click **Generate** and copy the `dckr_pat_...` token into GitHub Secrets as `DOCKERHUB_TOKEN`.
 
 #### B. SonarCloud Secret (`SONAR_TOKEN`)
 1. Log into [SonarCloud.io](https://sonarcloud.io) using GitHub.
 2. Click user avatar $\rightarrow$ **My Account** $\rightarrow$ **Security**.
-3. Generate a new token named `Shango-CI` and paste into GitHub Secrets as `SONAR_TOKEN`.
+3. Generate a new token named `Cmdiqo-CI` and paste into GitHub Secrets as `SONAR_TOKEN`.
 *(If omitted, unit tests and linting still run 100% cleanly).*
 
 #### C. Commercial Windows Code-Signing Secrets (Optional)
@@ -289,6 +289,7 @@ Pushing any commit to the `main` branch automatically triggers CI tests and bina
 #### Downloading Built Binaries:
 1. Click the completed workflow run.
 2. Scroll to the bottom to **Artifacts**:
-   - **`shango-agent-windows-x64`**: Contains `shango-agent-windows-x64.exe` (digitally signed with version and metadata) and `shango-agent.cer`.
-   - **`shango-agent-linux-x64`**: Standalone Linux x64 executable.
+   - **`cmdiqo-agent-windows-x64`**: Complete zip bundle containing signed `cmdiqo-agent.exe` (and `cmdiqo-agent-windows-x64.exe`), `install-service.ps1`, `uninstall-service.ps1`, `agent.env.example`, `agent.json.example`, and Authenticode certificate (`cmdiqo-agent.cer`).
+   - **`cmdiqo-agent-linux-x64`**: Complete zip bundle containing `cmdiqo-agent` binary, `install-service.sh`, `uninstall-service.sh`, `cmdiqo-agent.service`, and configuration examples.
+   - **`cmdiqo-agent-windows-x64-zip` / `cmdiqo-agent-linux-x64-zip`**: Direct `.zip` package archives for distribution.
 3. Click to download the `.zip` archive.

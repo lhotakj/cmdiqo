@@ -22,7 +22,7 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/shango-bot
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/cmdiqo-bot
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}

@@ -27,15 +27,15 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
-            artifact_name: shango-agent-linux-x64
-            binary_src: dist/shango-agent
-            binary_dest: shango-agent-linux-x64
-            zip_src: dist/shango-agent-linux-x64.zip
+            artifact_name: cmdiqo-agent-linux-x64
+            binary_src: dist/cmdiqo-agent
+            binary_dest: cmdiqo-agent-linux-x64
+            zip_src: dist/cmdiqo-agent-linux-x64.zip
           - os: windows-latest
-            artifact_name: shango-agent-windows-x64
-            binary_src: dist/shango-agent.exe
-            binary_dest: shango-agent-windows-x64.exe
-            zip_src: dist/shango-agent-windows-x64.zip
+            artifact_name: cmdiqo-agent-windows-x64
+            binary_src: dist/cmdiqo-agent.exe
+            binary_dest: cmdiqo-agent-windows-x64.exe
+            zip_src: dist/cmdiqo-agent-windows-x64.zip
 
     steps:
       - name: Checkout repository
@@ -73,19 +73,43 @@ jobs:
           Write-Host "[+] Verifying Authenticode signature of ${{ matrix.binary_src }}:"
           Get-AuthenticodeSignature "${{ matrix.binary_src }}" | Format-List Status, StatusMessage, SignatureType, SignerCertificate, TimeStamperCertificate
 
-      - name: Prepare binary artifact
+      - name: Stage Package Files
         shell: bash
         run: |
-          mv ${{ matrix.binary_src }} ${{ matrix.binary_dest }}
-          chmod +x ${{ matrix.binary_dest }} || true
+          mkdir -p dist/package
+          if [[ "${{ matrix.os }}" == "windows"* ]]; then
+            cp dist/cmdiqo-agent.exe dist/package/cmdiqo-agent.exe
+            cp dist/cmdiqo-agent.exe dist/package/cmdiqo-agent-windows-x64.exe
+            cp agent/install-service.ps1 dist/package/
+            cp agent/uninstall-service.ps1 dist/package/
+            cp agent/agent.env.example dist/package/
+            cp agent/agent.json.example dist/package/
+            [ -f cmdiqo-agent.cer ] && cp cmdiqo-agent.cer dist/package/ || true
+            [ -f dist/cmdiqo-agent.cer ] && cp dist/cmdiqo-agent.cer dist/package/ || true
+          else
+            cp dist/cmdiqo-agent dist/package/cmdiqo-agent
+            cp dist/cmdiqo-agent dist/package/cmdiqo-agent-linux-x64
+            chmod +x dist/package/cmdiqo-agent dist/package/cmdiqo-agent-linux-x64
+            cp agent/install-service.sh dist/package/
+            cp agent/uninstall-service.sh dist/package/
+            cp agent/cmdiqo-agent.service dist/package/
+            cp agent/agent.env.example dist/package/
+            cp agent/agent.json.example dist/package/
+            chmod +x dist/package/*.sh || true
+          fi
 
-      - name: Upload Binary & Zip Artifacts (for direct download)
+      - name: Upload Package Artifact (contains binary, install/uninstall scripts & configs)
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: |
-            ${{ matrix.binary_dest }}
-            ${{ matrix.zip_src }}
-            shango-agent.cer
+          path: dist/package/*
           retention-days: 90
-          if-no-files-found: warn
+          if-no-files-found: error
+
+      - name: Upload Zip Archive Artifact (for direct zip file download)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}-zip
+          path: ${{ matrix.zip_src }}
+          retention-days: 90
+          if-no-files-found: error

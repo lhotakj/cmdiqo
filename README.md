@@ -1,4 +1,4 @@
-# shango-bot (Shango)
+# cmdiqo-bot (Cmdiqo)
 
 Control your home network from Slack — **works behind NAT with zero open ports**.
 
@@ -156,7 +156,7 @@ Edit `config/commands.yaml` to define your commands and aliases (see **Adding yo
 
 ## 3. Running Locally (Pure Python, No Docker Required)
 
-Shango provides a built-in local process supervisor ([`run.py`](run.py)):
+Cmdiqo provides a built-in local process supervisor ([`run.py`](run.py)):
 
 ```bash
 # Start both Hub (bot) and local Agent concurrently:
@@ -192,7 +192,7 @@ python run.py agent --hub-url ws://192.168.1.10:8765 --token my-secret --name PC
 - **ANSI mrkdwn Rendering**: Automatically formats `*bold*`, `_italics_`, `` `inline code` ``, ```` ```pre/code blocks``` ````, bullet lists, and converts Slack emoji shortcodes (`:white_check_mark:` $\rightarrow$ ✅, `:hourglass_flowing_sand:` $\rightarrow$ ⏳, `:computer:` $\rightarrow$ 💻).
 - **Direct Hub Connection & Embedded Hub Integration**: Automatically connects directly to a running Hub server (e.g. launched via `./run.py` or `python run.py hub`) to interact with live connected agents. When running standalone, seamlessly starts an embedded WebSocket Hub server on port `8765`.
 - **Interactive Line Editing & Persistent History**:
-  - Automatically loads and immediately logs every executed command to `~/.shango-history` (creating it if missing).
+  - Automatically loads and immediately logs every executed command to `~/.cmdiqo-history` (creating it if missing).
   - `↑` (Up Arrow) — Recall previous command from history.
   - `↓` (Down Arrow) — Navigate forward through history.
   - `Esc` — Instantly clear/delete the current draft message buffer.
@@ -205,8 +205,8 @@ python run.py agent --hub-url ws://192.168.1.10:8765 --token my-secret --name PC
 
 ```text
 slack [#general] @U0123ABCDEF > /host AMD uptime
-  [18:55:01] 🤖 shango-bot: ⏳ Running `/host AMD uptime` on `AMD` ...
-  [18:55:02] 🤖 shango-bot: ✅ `host-uptime`
+  [18:55:01] 🤖 cmdiqo-bot: ⏳ Running `/host AMD uptime` on `AMD` ...
+  [18:55:02] 🤖 cmdiqo-bot: ✅ `host-uptime`
   ┌────────────────────────────────────────────────────────────┐
   │ Uptime: 0d 7h 18m 55s (Booted: 2026-09-24 10:06:01)        │
   └────────────────────────────────────────────────────────────┘
@@ -216,7 +216,7 @@ slack [#general] @U0123ABCDEF > /host AMD uptime
 
 ```bash
 docker compose up -d --build
-docker compose logs -f shango-bot
+docker compose logs -f cmdiqo-bot
 ```
 
 Notes on the compose file:
@@ -238,7 +238,7 @@ Notes on the compose file:
 Plain `docker run` equivalent:
 
 ```bash
-docker run -d --name shango-bot --restart unless-stopped \
+docker run -d --name cmdiqo-bot --restart unless-stopped \
   --network host \
   -e SLACK_BOT_TOKEN=xoxb-... \
   -e SLACK_APP_TOKEN=xapp-... \
@@ -246,14 +246,14 @@ docker run -d --name shango-bot --restart unless-stopped \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v /docker:/docker \
   -v "$PWD/config:/app/config:ro" \
-  youruser/shango-bot:latest
+  youruser/cmdiqo-bot:latest
 ```
 
 ## 4. Interactive Help & Adding Your Own Commands
 
 ### Interactive Nested Help (`/help`)
 
-Shango features a built-in, dynamically generated command manual:
+Cmdiqo features a built-in, dynamically generated command manual:
 - `/help` — Overview of all command categories, aliases, and quick reference.
 - `/help lan` — Detailed manual for LAN operations (ARP scanning, Wake-on-LAN, pinging).
 - `/help host` — Detailed manual for host and remote agent operations.
@@ -338,14 +338,14 @@ Rebuild (or just restart if you mount the code) after adding Python handlers.
 
 ### How It Works
 
-Shango uses an **asymmetric, reverse-connection WebSocket architecture** specifically designed for home servers and private networks behind NAT:
+Cmdiqo uses an **asymmetric, reverse-connection WebSocket architecture** specifically designed for home servers and private networks behind NAT:
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor User as Slack User
     participant Slack as Slack Cloud API
-    participant Bot as Shango Container (Bot + Hub)
+    participant Bot as Cmdiqo Container (Bot + Hub)
     participant Agent as LAN Agent (Win / Linux)
     participant Host as Target Host OS
 
@@ -386,7 +386,7 @@ The agent supports 3 configuration methods with the following precedence:
 | `-u`, `--hub-url` | `HUB_URL` | `hub_url` | *(required)* | WebSocket URL of the hub (e.g. `ws://192.168.1.10:8765`) |
 | `-t`, `--token` | `AGENT_TOKEN` | `token` | *(required)* | Shared secret matching the hub's `AGENT_TOKEN` |
 | `-n`, `--name` | `AGENT_NAME` | `name` | Hostname | Unique name for this agent, used in `target:` commands |
-| `-c`, `--config` | `AGENT_CONFIG` | — | `None` | Path to JSON config file (e.g. `/etc/shango-agent/agent.json`) |
+| `-c`, `--config` | `AGENT_CONFIG` | — | `None` | Path to JSON config file (e.g. `/etc/cmdiqo-agent/agent.json`) |
 | `-d`, `--reconnect-delay` | `RECONNECT_DELAY` | `reconnect_delay` | `5.0` | Initial reconnect delay in seconds (uses exponential backoff) |
 | `--log-level` | `LOG_LEVEL` | — | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 
@@ -406,7 +406,7 @@ The agent supports 3 configuration methods with the following precedence:
 
 You can compile the agent into a single, standalone binary that has **zero Python runtime dependencies** on target machines. Full build documentation is available in [BUILD.md](BUILD.md).
 
-#### 1. Build Windows 64-bit Executable (`shango-agent.exe`)
+#### 1. Build Windows 64-bit Executable (`cmdiqo-agent.exe`)
 
 On any Windows machine:
 ```powershell
@@ -416,16 +416,16 @@ On any Windows machine:
 # Or with python:
 python development/build_agent.py
 ```
-Output binary: `dist/shango-agent.exe` (digitally signed, with PE version resource).
+Output binary: `dist/cmdiqo-agent.exe` (digitally signed, with PE version resource).
 
-#### 2. Build Linux 64-bit Binary (`shango-agent`)
+#### 2. Build Linux 64-bit Binary (`cmdiqo-agent`)
 
 **Option A — Cross-compile on Windows or macOS using Docker:**
 ```bash
 docker run --rm -v "${PWD}:/src" -w /src python:3.12-slim bash -c \
   "pip install pyinstaller -r agent/requirements.txt && python development/build_agent.py"
 ```
-Output binary: `dist/shango-agent`.
+Output binary: `dist/cmdiqo-agent`.
 
 **Option B — Directly on a Linux host:**
 ```bash
@@ -433,7 +433,7 @@ Output binary: `dist/shango-agent`.
 # Or with python:
 python development/build_agent.py
 ```
-Output binary: `dist/shango-agent`.
+Output binary: `dist/cmdiqo-agent`.
 
 #### 3. Automated CI Builds via GitHub Actions (Direct Download)
 The repository includes [`.github/workflows/build-agent.yml`](.github/workflows/build-agent.yml) which automatically compiles and signs both binaries on every push to `main` or manual workflow dispatch:
@@ -441,8 +441,8 @@ The repository includes [`.github/workflows/build-agent.yml`](.github/workflows/
 2. Select the latest **Build Agent Binaries** workflow run.
 3. Scroll down to the **Artifacts** section at the bottom of the summary page.
 4. Click on either artifact to download:
-   - `shango-agent-windows-x64` (contains `shango-agent-windows-x64.exe` digitally signed, and `shango-agent.cer`)
-   - `shango-agent-linux-x64` (contains executable Linux x64 ELF binary)
+   - `cmdiqo-agent-windows-x64` (contains `cmdiqo-agent-windows-x64.exe` digitally signed, and `cmdiqo-agent.cer`)
+   - `cmdiqo-agent-linux-x64` (contains executable Linux x64 ELF binary)
 
 > **No Release Required:** Binaries are stored directly as downloadable build artifacts (retained for 90 days), so you can download fresh builds anytime without tagging a release.
 
@@ -458,22 +458,22 @@ The repository includes [`.github/workflows/build-agent.yml`](.github/workflows/
    sudo ./agent/install-service.sh
    ```
    The installer automatically:
-   - Installs the binary to `/usr/local/bin/shango-agent` (or prepares an isolated venv if no binary is present)
-   - Creates configuration at `/etc/shango-agent/agent.env`
-   - Installs and enables [`agent/shango-agent.service`](agent/shango-agent.service)
+   - Installs the binary to `/usr/local/bin/cmdiqo-agent` (or prepares an isolated venv if no binary is present)
+   - Creates configuration at `/etc/cmdiqo-agent/agent.env`
+   - Installs and enables [`agent/cmdiqo-agent.service`](agent/cmdiqo-agent.service)
    - Starts the service immediately
 
 2. **Managing the Linux Service:**
    ```bash
    # Check service status
-   sudo systemctl status shango-agent
+   sudo systemctl status cmdiqo-agent
 
    # View live streaming logs
-   sudo journalctl -u shango-agent -f
+   sudo journalctl -u cmdiqo-agent -f
 
    # Restart or stop
-   sudo systemctl restart shango-agent
-   sudo systemctl stop shango-agent
+   sudo systemctl restart cmdiqo-agent
+   sudo systemctl stop cmdiqo-agent
    ```
 
 #### Windows: Deploy as an Automatic Background Service
@@ -484,20 +484,20 @@ The repository includes [`.github/workflows/build-agent.yml`](.github/workflows/
    .\agent\install-service.ps1 -HubUrl "ws://192.168.1.10:8765" -Token "change-me-long-random-string" -Name "WIN-PC"
    ```
    The script automatically:
-   - Installs `shango-agent.exe` into `C:\Program Files\Shango\Agent\`
-   - Generates configuration at `C:\ProgramData\Shango\Agent\config.json` (accessible for easy editing)
-   - Registers a native Windows Service (`ShangoAgent`) running under `NT AUTHORITY\SYSTEM` on boot
+   - Installs `cmdiqo-agent.exe` into `C:\Program Files\Cmdiqo\Agent\`
+   - Generates configuration at `C:\ProgramData\Cmdiqo\Agent\config.json` (accessible for easy editing)
+   - Registers a native Windows Service (`CmdiqoAgent`) running under `NT AUTHORITY\SYSTEM` on boot
    - Starts the service immediately
 
 2. **Managing the Windows Service:**
    ```powershell
    # Check service state
-   Get-Service ShangoAgent
+   Get-Service CmdiqoAgent
 
    # Start / Stop / Restart service
-   Start-Service ShangoAgent
-   Stop-Service ShangoAgent
-   Restart-Service ShangoAgent
+   Start-Service CmdiqoAgent
+   Stop-Service CmdiqoAgent
+   Restart-Service CmdiqoAgent
 
    # Uninstall service completely
    .\agent\uninstall-service.ps1
@@ -536,7 +536,7 @@ Or typing `/home docker ps` translates via the configured alias to `/host home d
 
 ### Built-in System Commands
 - `/lan agents list` (or `/host agents list`) in Slack at any time to see every connected agent, its operating system, version, connection uptime, and LAN IP address.
-- `/lan version` (or `/host version`) to display the running version of `shango-bot`.
+- `/lan version` (or `/host version`) to display the running version of `cmdiqo-bot`.
 
 ## 5. Publishing to Docker Hub with GitHub Actions
 
@@ -551,7 +551,7 @@ to `main` and every `v*` tag.
    - `DOCKERHUB_USERNAME` — your Docker Hub username
    - `DOCKERHUB_TOKEN` — the access token
 3. Push to `main`. The image appears as
-   `<your-user>/shango-bot:latest`.
+   `<your-user>/cmdiqo-bot:latest`.
    Push a tag like `v1.0.0` to also get `:1.0.0` and `:1.0`.
 4. Set `DOCKERHUB_USER` in `.env` (or hardcode your user in
    `docker-compose.yml`) so `docker compose pull` fetches your image instead of
@@ -560,8 +560,8 @@ to `main` and every `v*` tag.
 ### Manual push (without CI)
 
 ```bash
-docker build -t youruser/shango-bot:latest .
-docker push youruser/shango-bot:latest
+docker build -t youruser/cmdiqo-bot:latest .
+docker push youruser/cmdiqo-bot:latest
 ```
 
 ## Environment variable reference
@@ -610,7 +610,7 @@ docker push youruser/shango-bot:latest
 
 ## Development, Testing & Code Quality
 
-Shango is developed following SonarQube Clean Code standards and strict automated testing requirements.
+Cmdiqo is developed following SonarQube Clean Code standards and strict automated testing requirements.
 
 ### Running Tests Locally
 
@@ -629,7 +629,7 @@ For complete instructions on building standalone binaries, local dev environment
 
 ### SonarQube & Agentic Skills
 
-- **Antigravity Skill:** [`.agents/skills/shango-quality/SKILL.md`](.agents/skills/shango-quality/SKILL.md) and [`SKILL.md`](SKILL.md) provide guidelines for SonarQube Quality Gate compliance, constant-time token comparison (`hmac`), safe command parameter sanitization, and WebSocket keepalives.
+- **Antigravity Skill:** [`.agents/skills/cmdiqo-quality/SKILL.md`](.agents/skills/cmdiqo-quality/SKILL.md) and [`SKILL.md`](SKILL.md) provide guidelines for SonarQube Quality Gate compliance, constant-time token comparison (`hmac`), safe command parameter sanitization, and WebSocket keepalives.
 - **SonarQube Configuration:** [`sonar-project.properties`](sonar-project.properties) configures source analysis, coverage reporting (`coverage.xml`), and exclusion rules.
 - **CI / CD Pipeline:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) executes linting, test coverage verification, and SonarQube quality checks on every push and pull request.
 

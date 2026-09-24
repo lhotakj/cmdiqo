@@ -1,11 +1,11 @@
-# PowerShell local build script for Shango
+# PowerShell local build script for Cmdiqo
 # Builds standalone Windows agent executable and Docker container for bot.
 #
 # Usage:
-#   .\development\build.ps1                        # Build standalone shango-agent.exe
+#   .\development\build.ps1                        # Build standalone cmdiqo-agent.exe
 #   .\development\build.ps1 -Version "1.2.0"       # Build with specific version override
 #   .\development\build.ps1 -Target All            # Build both agent binary and bot container
-#   .\development\build.ps1 -CopyTo "C:\tmp\shango-agent-windows-x64.exe"
+#   .\development\build.ps1 -CopyTo "C:\tmp\cmdiqo-agent-windows-x64.exe"
 
 [CmdletBinding()]
 param(
@@ -16,7 +16,7 @@ param(
 
     [switch]$SkipSign,
 
-    [string]$CopyTo = "C:\tmp\shango-agent-windows-x64.exe",
+    [string]$CopyTo = "C:\tmp\cmdiqo-agent-windows-x64.exe",
 
     [switch]$Clean
 )
@@ -64,7 +64,7 @@ Write-Info "Building version: $currentVersion (Short: $shortVersion)"
 
 # 2. Build standalone agent binary
 if ($Target -eq "Agent" -or $Target -eq "All") {
-    Write-Info "=== Building standalone shango-agent executable ==="
+    Write-Info "=== Building standalone cmdiqo-agent executable ==="
     $buildArgs = @("$rootDir\development\build_agent.py")
     if ($Version) { $buildArgs += @("--version", $Version) }
     if ($SkipSign) { $buildArgs += @("--skip-sign") }
@@ -76,8 +76,8 @@ if ($Target -eq "Agent" -or $Target -eq "All") {
         exit 1
     }
 
-    $distExe = "$rootDir\dist\shango-agent.exe"
-    $distZip = "$rootDir\dist\shango-agent-windows-x64.zip"
+    $distExe = "$rootDir\dist\cmdiqo-agent.exe"
+    $distZip = "$rootDir\dist\cmdiqo-agent-windows-x64.zip"
     if (Test-Path $distExe) {
         Write-Host ""
         Write-Info "=== Artifact Verification ($distExe) ==="
@@ -95,16 +95,16 @@ if ($Target -eq "Agent" -or $Target -eq "All") {
 
 # 3. Build Docker container for bot (if requested)
 if ($Target -eq "Bot" -or $Target -eq "All") {
-    Write-Info "=== Building Docker image for shango-bot ==="
+    Write-Info "=== Building Docker image for cmdiqo-bot ==="
     $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
     if (-not $dockerCmd) {
         Write-Warn "Docker is not available. Skipping container build."
     } else {
         $timestamp = (Get-Date -Format "yyyyMMddHHmmss")
-        $imgLatest = "lhotakj/shango-bot:latest"
-        $imgShort = "lhotakj/shango-bot:$shortVersion"
-        $imgFull = "lhotakj/shango-bot:$currentVersion"
-        $imgTs = "lhotakj/shango-bot:$timestamp"
+        $imgLatest = "lhotakj/cmdiqo-bot:latest"
+        $imgShort = "lhotakj/cmdiqo-bot:$shortVersion"
+        $imgFull = "lhotakj/cmdiqo-bot:$currentVersion"
+        $imgTs = "lhotakj/cmdiqo-bot:$timestamp"
 
         docker build -t $imgLatest -t $imgShort -t $imgFull -t $imgTs -f Dockerfile .
         if ($LASTEXITCODE -eq 0) {

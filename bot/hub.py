@@ -17,7 +17,7 @@ from typing import Any
 
 import websockets
 
-log = logging.getLogger("shango-bot.hub")
+log = logging.getLogger("cmdiqo-bot.hub")
 
 
 def _headers(ws: Any) -> Any:
@@ -58,6 +58,7 @@ class Hub:
         self.pending_agents: dict[str, str] = {}  # req_id -> agent_name
         self._server: Any = None
         self._stop_event = asyncio.Event()
+        self.on_agent_event: Any = None  # Optional async callback: fn(event_type: str, agent_name: str, hello: dict)
 
     async def run(self) -> None:
         """Run the hub WebSocket server."""
@@ -150,6 +151,7 @@ class Hub:
             "platform": str(hello.get("platform", "?")),
             "since": time.strftime("%Y-%m-%d %H:%M:%S"),
             "addr": addr,
+            "hello": hello,
         }
         log.info(
             "Agent connected: %s (v%s, %s) from %s",
@@ -159,6 +161,14 @@ class Hub:
             addr,
         )
 
+        if self.on_agent_event is not None:
+            try:
+                res = self.on_agent_event("connected", name, hello)
+                if asyncio.iscoroutine(res):
+                    await res
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Error in on_agent_event ('connected') for agent '%s': %s", name, exc)
+
         try:
             async for raw in ws:
                 await self._on_message(raw)
@@ -167,6 +177,13 @@ class Hub:
                 del self.agents[name]
                 self._cancel_pending_for_agent(name)
             log.info("Agent disconnected: %s", name)
+            if self.on_agent_event is not None:
+                try:
+                    res = self.on_agent_event("disconnected", name, hello)
+                    if asyncio.iscoroutine(res):
+                        await res
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("Error in on_agent_event ('disconnected') for agent '%s': %s", name, exc)
 
     async def _on_client_message(self, ws: Any, raw: str) -> None:
         try:

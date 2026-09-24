@@ -39,4 +39,4 @@ def test_generate_version_info_txt():
     assert "filevers=(1, 0, 2861, 0)" in content
     assert "StringStruct('FileVersion', '1.0.dev6A9C0B2D')" in content
     assert "StringStruct('ProductVersion', '1.0.dev6A9C0B2D')" in content
-    assert "StringStruct('ProductName', 'Shango Agent')" in content
+    assert "StringStruct('ProductName', 'Cmdiqo Agent')" in content

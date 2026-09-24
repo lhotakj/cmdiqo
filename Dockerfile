@@ -22,11 +22,11 @@ ENV COMMANDS_CONFIG=/app/config/commands.yaml \
 
 # SonarQube S6437: Non-root container execution
 # Create non-root user and grant raw network capabilities for arp-scan
-RUN addgroup -g 1000 shango && \
-    adduser -u 1000 -G shango -s /bin/sh -D shango && \
-    chown -R shango:shango /app && \
+RUN addgroup -g 1000 cmdiqo && \
+    adduser -u 1000 -G cmdiqo -s /bin/sh -D cmdiqo && \
+    chown -R cmdiqo:cmdiqo /app && \
     setcap cap_net_raw,cap_net_admin+eip /usr/bin/arp-scan || true
 
-USER shango
+USER cmdiqo
 
 CMD ["python", "-m", "bot.app"]

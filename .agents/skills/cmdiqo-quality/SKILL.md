@@ -1,17 +1,17 @@
 ---
-name: shango-quality
-description: Quality guidelines, SonarQube rules, testing standards, and command security workflows for Shango.
+name: cmdiqo-quality
+description: Quality guidelines, SonarQube rules, testing standards, and command security workflows for Cmdiqo.
 ---
 
-# Shango Quality, SonarQube & Testing Skill
+# Cmdiqo Quality, SonarQube & Testing Skill
 
-This skill defines the quality engineering standards, SonarQube quality gate compliance, testing workflows, and command extension protocols for **Shango**.
+This skill defines the quality engineering standards, SonarQube quality gate compliance, testing workflows, and command extension protocols for **Cmdiqo**.
 
 ---
 
 ## 1. SonarQube Clean Code & Security Standards
 
-All contributions to Shango must satisfy SonarQube Quality Gates (Zero Vulnerabilities, Zero Security Hotspots, Zero Critical Smells, and >80% Test Coverage).
+All contributions to Cmdiqo must satisfy SonarQube Quality Gates (Zero Vulnerabilities, Zero Security Hotspots, Zero Critical Smells, and >80% Test Coverage).
 
 ### Security Requirements
 - **Constant-Time Cryptographic Comparison (CWE-208 / SonarQube S5804):**
@@ -111,8 +111,8 @@ When adding a new command in `config/commands.yaml`:
 
 The repository uses `sonar-project.properties` for continuous inspection:
 ```properties
-sonar.projectKey=Shango
-sonar.projectName=Shango
+sonar.projectKey=Cmdiqo
+sonar.projectName=Cmdiqo
 sonar.sources=bot,agent
 sonar.tests=tests
 sonar.python.coverage.reportPaths=coverage.xml
@@ -135,5 +135,5 @@ All build and maintenance scripts are centralized in `development/`:
 
 ### Windows Authenticode Digital Signing:
 - Binaries are digitally signed with SHA256 and RFC 3161 timestamps (`http://timestamp.digicert.com`).
-- Public certificate is exported to `shango-agent.cer` and registered in `Cert:\CurrentUser\TrustedPublisher` for local trust.
+- Public certificate is exported to `cmdiqo-agent.cer` and registered in `Cert:\CurrentUser\TrustedPublisher` for local trust.
 

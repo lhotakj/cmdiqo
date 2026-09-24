@@ -1,4 +1,4 @@
-# PowerShell environment setup script for Shango
+# PowerShell environment setup script for Cmdiqo
 [CmdletBinding()]
 param()
 

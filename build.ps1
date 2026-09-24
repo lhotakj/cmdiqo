@@ -1,4 +1,4 @@
-# PowerShell build wrapper for Shango
+# PowerShell build wrapper for Cmdiqo
 # Forwards execution to development/build.ps1
 
 [CmdletBinding()]
@@ -10,7 +10,7 @@ param(
 
     [switch]$SkipSign,
 
-    [string]$CopyTo = "C:\tmp\shango-agent-windows-x64.exe",
+    [string]$CopyTo = "C:\tmp\cmdiqo-agent-windows-x64.exe",
 
     [switch]$Clean
 )

@@ -1,6 +1,6 @@
-# Shango Installation & Operator's Guide
+# Cmdiqo Installation & Operator's Guide
 
-A beginner-friendly, step-by-step walkthrough for deploying **shango-bot** and installing **shango-agent** as a background service on Windows and Linux.
+A beginner-friendly, step-by-step walkthrough for deploying **cmdiqo-bot** and installing **cmdiqo-agent** as a background service on Windows and Linux.
 
 ---
 
@@ -15,7 +15,7 @@ Before configuring anything, here is how the parts talk to each other:
                │  ▲  (Outbound WebSocket - Socket Mode)
                │  │  No open internet ports needed!
 ┌──────────────▼──┴──────────────┐
-│     shango-bot (Docker)        │  ◄── Central Hub & Slack Bot
+│     cmdiqo-bot (Docker)        │  ◄── Central Hub & Slack Bot
 │     Listens on port :8765      │
 └──────────────┬─────────────────┘
                │  ▲  (Internal LAN WebSockets)
@@ -41,7 +41,7 @@ You will need a Slack workspace where you have permission to install apps (or yo
 ### Step 1.1: Create the App
 1. Go to [api.slack.com/apps](https://api.slack.com/apps) and click **Create New App**.
 2. Select **From scratch**.
-3. Set **App Name** to `shango-bot` and choose your Slack workspace.
+3. Set **App Name** to `cmdiqo-bot` and choose your Slack workspace.
 4. Click **Create App**.
 
 ---
@@ -137,11 +137,11 @@ To ensure only **you** can execute commands, find your Slack User ID:
 ### Step 1.9: Interact with the Bot
 You can interact with the bot in two ways:
 1. **Direct Message / App Home:**
-   Click **shango-bot** under the **Apps** section in Slack and type `/help` or `/lan`.
+   Click **cmdiqo-bot** under the **Apps** section in Slack and type `/help` or `/lan`.
 2. **In any Channel:**
    Invite the bot to a channel (e.g. `#devops` or `#admin`):
    ```text
-   /invite @shango-bot
+   /invite @cmdiqo-bot
    ```
    Then type slash commands like `/lan`, `/host`, or `/help`.
 
@@ -153,9 +153,9 @@ Never store tokens or passwords in Git repositories, Dockerfiles, or Slack chat.
 
 | Component | Secret File Location | File Permissions | What Goes Inside |
 |---|---|---|---|
-| **Bot Server** | `/path/to/Shango/.env` | `chmod 600 .env` | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `AGENT_TOKEN`, `ALLOWED_USERS` |
-| **Linux Agent** | `/etc/shango-agent/agent.env` | `chmod 600` (owned by `root:root`) | `HUB_URL`, `AGENT_TOKEN`, `AGENT_NAME` |
-| **Windows Agent** | `C:\ProgramData\Shango\Agent\config.json` | Config & secrets (Full edit access for Admins & Users) | `hub_url`, `token`, `name` |
+| **Bot Server** | `/path/to/Cmdiqo/.env` | `chmod 600 .env` | `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `AGENT_TOKEN`, `ALLOWED_USERS` |
+| **Linux Agent** | `/etc/cmdiqo-agent/agent.env` | `chmod 600` (owned by `root:root`) | `HUB_URL`, `AGENT_TOKEN`, `AGENT_NAME` |
+| **Windows Agent** | `C:\ProgramData\Cmdiqo\Agent\config.json` | Config & secrets (Full edit access for Admins & Users) | `hub_url`, `token`, `name` |
 
 ### Generate a Strong `AGENT_TOKEN`
 The `AGENT_TOKEN` is a shared secret between your bot and your agents. Generate a secure random string:
@@ -182,8 +182,8 @@ The `AGENT_TOKEN` is a shared secret between your bot and your agents. Generate 
 ### Step 3.1: Clone Repository & Create `.env`
 On your server:
 ```bash
-git clone https://github.com/your-username/Shango.git
-cd Shango
+git clone https://github.com/your-username/Cmdiqo.git
+cd Cmdiqo
 ```
 
 Create a `.env` file next to `docker-compose.yml`:
@@ -227,15 +227,15 @@ docker compose up -d --build
 
 Check the live logs to verify that Socket Mode connected:
 ```bash
-docker compose logs -f shango-bot
+docker compose logs -f cmdiqo-bot
 ```
 
 You should see:
 ```text
-INFO [shango-bot] Loaded 19 command(s) from /app/config/commands.yaml
-INFO [shango-bot] Loaded 2 alias(es) from /app/config/commands.yaml
-INFO [shango-bot.hub] Hub listening on ws://0.0.0.0:8765 (agents connect outbound to this)
-INFO [shango-bot] Starting Socket Mode handler (outbound WebSocket only - NAT friendly)
+INFO [cmdiqo-bot] Loaded 19 command(s) from /app/config/commands.yaml
+INFO [cmdiqo-bot] Loaded 2 alias(es) from /app/config/commands.yaml
+INFO [cmdiqo-bot.hub] Hub listening on ws://0.0.0.0:8765 (agents connect outbound to this)
+INFO [cmdiqo-bot] Starting Socket Mode handler (outbound WebSocket only - NAT friendly)
 ```
 
 ---
@@ -272,19 +272,19 @@ slack [#general] @U_ADMIN > /host AMD uptime
 
 ---
 
-## 4. How to Install the Linux Service (`shango-agent`)
+## 4. How to Install the Linux Service (`cmdiqo-agent`)
 
-Install `shango-agent` on your Linux machines (e.g., Raspberry Pi, Ubuntu NAS, home server) so you can execute shell commands on them remotely from Slack.
+Install `cmdiqo-agent` on your Linux machines (e.g., Raspberry Pi, Ubuntu NAS, home server) so you can execute shell commands on them remotely from Slack.
 
 ### Step 4.1: Download or Build the Binary
 You can either:
-- **Download from GitHub Actions:** Go to your GitHub repo → **Actions** → click the latest **Build Agent Binaries** run → download `shango-agent-linux-x64` under *Artifacts*.
-- **Or copy from repository:** Use `dist/shango-agent` (if built locally) or copy the `agent/` folder.
+- **Download from GitHub Actions:** Go to your GitHub repo → **Actions** → click the latest **Build Agent Binaries** run → download `cmdiqo-agent-linux-x64` under *Artifacts*.
+- **Or copy from repository:** Use `dist/cmdiqo-agent` (if built locally) or copy the `agent/` folder.
 
 Place the binary or source on the target Linux machine:
 ```bash
 # Example: transferring to your target Linux host
-scp dist/shango-agent user@192.168.1.50:/tmp/
+scp dist/cmdiqo-agent user@192.168.1.50:/tmp/
 ```
 
 ---
@@ -293,27 +293,27 @@ scp dist/shango-agent user@192.168.1.50:/tmp/
 On the target Linux machine:
 ```bash
 cd /tmp
-chmod +x shango-agent
-# Move to Shango repository clone or run installer:
+chmod +x cmdiqo-agent
+# Move to Cmdiqo repository clone or run installer:
 sudo ./agent/install-service.sh
 ```
 
 The script will:
-1. Place the binary at `/usr/local/bin/shango-agent`.
-2. Create `/etc/shango-agent/agent.env`.
-3. Install and enable the systemd service `/etc/systemd/system/shango-agent.service`.
+1. Place the binary at `/usr/local/bin/cmdiqo-agent`.
+2. Create `/etc/cmdiqo-agent/agent.env`.
+3. Install and enable the systemd service `/etc/systemd/system/cmdiqo-agent.service`.
 
 ---
 
 ### Step 4.3: Configure the Linux Agent Secret
 Edit the agent's secret configuration file:
 ```bash
-sudo nano /etc/shango-agent/agent.env
+sudo nano /etc/cmdiqo-agent/agent.env
 ```
 
 Fill in your server's LAN IP and the shared secret:
 ```bash
-# IP of the machine running shango-bot Docker container
+# IP of the machine running cmdiqo-bot Docker container
 HUB_URL=ws://192.168.1.10:8765
 
 # Must match AGENT_TOKEN in your bot server's .env
@@ -328,7 +328,7 @@ Save and exit (`Ctrl+O`, `Enter`, `Ctrl+X`).
 
 Restart the service to load the new config:
 ```bash
-sudo systemctl restart shango-agent
+sudo systemctl restart cmdiqo-agent
 ```
 
 ---
@@ -336,31 +336,31 @@ sudo systemctl restart shango-agent
 ### Step 4.4: Verify the Linux Agent
 Check the service status:
 ```bash
-sudo systemctl status shango-agent
+sudo systemctl status cmdiqo-agent
 ```
 It should say `active (running)`.
 
 View live streaming connection logs:
 ```bash
-sudo journalctl -u shango-agent -f
+sudo journalctl -u cmdiqo-agent -f
 ```
 You should see:
 ```text
-INFO [shango-agent] Connected to ws://192.168.1.10:8765 as 'nas'
+INFO [cmdiqo-agent] Connected to ws://192.168.1.10:8765 as 'nas'
 ```
 
 ---
 
-## 5. How to Install the Windows Service (`shango-agent.exe`)
+## 5. How to Install the Windows Service (`cmdiqo-agent.exe`)
 
-Install `shango-agent.exe` on Windows 10/11 or Windows Server so you can run PowerShell commands (`ps1`) or batch commands remotely from Slack.
+Install `cmdiqo-agent.exe` on Windows 10/11 or Windows Server so you can run PowerShell commands (`ps1`) or batch commands remotely from Slack.
 
 ### Step 5.1: Download the Windows Binary
 1. Go to your GitHub repository in your web browser.
 2. Click the **Actions** tab.
 3. Click on the latest run named **Build Agent Binaries (Windows & Linux x64)**.
-4. Scroll to the bottom to **Artifacts** and click **`shango-agent-windows-x64`**.
-5. Extract the downloaded `.zip` file to get `shango-agent.exe` (and optionally `shango-agent.cer`).
+4. Scroll to the bottom to **Artifacts** and click **`cmdiqo-agent-windows-x64`**.
+5. Extract the downloaded `.zip` file to get `cmdiqo-agent.exe` (and optionally `cmdiqo-agent.cer`).
 
 ---
 
@@ -373,13 +373,13 @@ Install `shango-agent.exe` on Windows 10/11 or Windows Server so you can run Pow
 To verify and ensure the `.exe` is authentic and safe:
 
 1. **Check the Embedded Digital Signature**:
-   - Right-click `shango-agent.exe` $\rightarrow$ **Properties** $\rightarrow$ **Digital Signatures** tab.
-   - You will see the signature from `Shango (GitHub Actions)` with a secure SHA256 digest and official timestamp.
+   - Right-click `cmdiqo-agent.exe` $\rightarrow$ **Properties** $\rightarrow$ **Digital Signatures** tab.
+   - You will see the signature from `Cmdiqo (GitHub Actions)` with a secure SHA256 digest and official timestamp.
 2. **Check Publisher Metadata**:
    - In **Properties** $\rightarrow$ **Details**, you will see:
-     - *File Description*: Shango LAN Remote Agent
-     - *Company*: Shango
-     - *Original Filename*: shango-agent.exe
+     - *File Description*: Cmdiqo LAN Remote Agent
+     - *Company*: Cmdiqo
+     - *Original Filename*: cmdiqo-agent.exe
 3. **Permanent SmartScreen Trust**:
    When you run `install-service.ps1` as Administrator (below), it **automatically imports the digital certificate into your Windows Trusted Publishers store**, permanently silencing SmartScreen warnings on that machine.
 
@@ -389,7 +389,7 @@ To verify and ensure the `.exe` is authentic and safe:
 1. Press the **Windows Key**, type **PowerShell**, right-click **Windows PowerShell**, and select **Run as Administrator**.
 2. Navigate to the `agent` folder in your repository:
    ```powershell
-   cd H:\WORKING\ShangoHub\agent
+   cd H:\WORKING\CmdiqoHub\agent
    ```
 3. Run the installer script, supplying your server IP, token, and a name for this PC:
    ```powershell
@@ -397,14 +397,14 @@ To verify and ensure the `.exe` is authentic and safe:
    ```
 
 > [!TIP]
-> The installer automatically detects your downloaded binary (e.g. `shango-agent-windows-x64.exe` from `Downloads` or `dist`). You can also specify `-BinaryPath "C:\path\to\binary.exe"` if needed.
+> The installer automatically detects your downloaded binary (e.g. `cmdiqo-agent-windows-x64.exe` from `Downloads` or `dist`). You can also specify `-BinaryPath "C:\path\to\binary.exe"` if needed.
 
 #### What the installer sets up automatically:
-- **Real Windows Service (`ShangoAgent`)**: Registered directly in Windows Service Control Manager (SCM). Visible in `services.msc`.
-- **Pure Python & PowerShell Engine**: Uses Python's native Win32 service dispatcher (`agent/service_windows.py` using standard library `ctypes`) invoked via `shango-agent.exe --service` (zero compiler steps, zero external wrappers).
-- **Accessible Config in `C:\ProgramData\Shango\Agent\config.json`**: Grants Full Control to Administrators and the current user (plus Modify to Users) so you can freely view and edit settings in Notepad, VS Code, or any shell without UAC access issues.
+- **Real Windows Service (`CmdiqoAgent`)**: Registered directly in Windows Service Control Manager (SCM). Visible in `services.msc`.
+- **Pure Python & PowerShell Engine**: Uses Python's native Win32 service dispatcher (`agent/service_windows.py` using standard library `ctypes`) invoked via `cmdiqo-agent.exe --service` (zero compiler steps, zero external wrappers).
+- **Accessible Config in `C:\ProgramData\Cmdiqo\Agent\config.json`**: Grants Full Control to Administrators and the current user (plus Modify to Users) so you can freely view and edit settings in Notepad, VS Code, or any shell without UAC access issues.
 - **Automatic Self-Healing**: Configures SCM failure recovery to automatically restart the service if it ever terminates.
-- **Log Redirection**: Redirects stdout/stderr to `C:\ProgramData\Shango\Agent\logs\service.log`.
+- **Log Redirection**: Redirects stdout/stderr to `C:\ProgramData\Cmdiqo\Agent\logs\service.log`.
 - **Strips Mark-of-the-Web & Trusts Certificate**: Removes download flags and imports the Authenticode certificate into machine stores.
 
 ---
@@ -412,35 +412,35 @@ To verify and ensure the `.exe` is authentic and safe:
 ### Step 5.4: Verify & Manage the Windows Service
 In your Administrator PowerShell window, check that the Windows Service is running:
 ```powershell
-Get-Service -Name "ShangoAgent"
+Get-Service -Name "CmdiqoAgent"
 ```
 The `Status` should be `Running`:
 ```text
 Status   Name               DisplayName
 ------   ----               -----------
-Running  ShangoAgent        Shango LAN Remote Agent
+Running  CmdiqoAgent        Cmdiqo LAN Remote Agent
 ```
 
 #### Native Windows Service Management Commands:
 ```powershell
 # Check service status:
-Get-Service ShangoAgent
+Get-Service CmdiqoAgent
 
 # Restart service:
-Restart-Service ShangoAgent
+Restart-Service CmdiqoAgent
 
 # Stop service:
-Stop-Service ShangoAgent
+Stop-Service CmdiqoAgent
 
 # Start service:
-Start-Service ShangoAgent
+Start-Service CmdiqoAgent
 
 # View live service logs:
-Get-Content "C:\ProgramData\Shango\Agent\logs\service.log" -Tail 20 -Wait
+Get-Content "C:\ProgramData\Cmdiqo\Agent\logs\service.log" -Tail 20 -Wait
 
 # Re-configure (edit config file):
-notepad "C:\ProgramData\Shango\Agent\config.json"
-Restart-Service ShangoAgent
+notepad "C:\ProgramData\Cmdiqo\Agent\config.json"
+Restart-Service CmdiqoAgent
 ```
 
 ---
@@ -451,12 +451,12 @@ To cleanly stop, unregister, and remove the Windows Service:
 
 ```powershell
 # Run in Administrator PowerShell from the agent folder:
-cd H:\WORKING\ShangoHub\agent
+cd H:\WORKING\CmdiqoHub\agent
 
 # Standard uninstall (stops service, removes SCM registration & binaries, preserves config for upgrades):
 .\uninstall-service.ps1
 
-# Complete purge (removes service, binaries, AND deletes config/secrets in C:\ProgramData\Shango\Agent):
+# Complete purge (removes service, binaries, AND deletes config/secrets in C:\ProgramData\Cmdiqo\Agent):
 .\uninstall-service.ps1 -PurgeConfig
 ```
 
@@ -527,7 +527,7 @@ On your bot server:
 docker compose ps
 
 # 2. Inspect live container logs
-docker compose logs -f shango-bot
+docker compose logs -f cmdiqo-bot
 
 # 3. Check if the WebSocket hub port is listening on the host:
 ss -tulpn | grep 8765
@@ -558,7 +558,7 @@ If an agent fails to connect, verify that the agent PC can reach the bot contain
 |---|---|---|
 | `:no_entry_sign: You are not authorized to use this bot.` | Your Slack Member ID is not listed in `ALLOWED_USERS`. | Follow **Step 1.7** to copy your member ID (e.g. `U0123ABCDEF`). Add it to `.env` as `ALLOWED_USERS=U0123ABCDEF` and run `docker compose restart`. |
 | `dispatch_failed` or `No command found` | Slash commands `/lan`, `/host`, or `/home` were not created or the app wasn't reinstalled. | In [api.slack.com/apps](https://api.slack.com/apps), verify both commands exist under **Slash Commands**, then go to **Install App** and click **Reinstall to Workspace**. |
-| `agent 'nas' is not connected. Connected agents: (none)` | Agent is offline, has the wrong IP, or token mismatch. | 1. Run `/lan agents list` to see what agents are online.<br/>2. Check `HUB_URL` in `/etc/shango-agent/agent.env` or `config.json`.<br/>3. Verify `AGENT_TOKEN` matches **exactly** on server and agent. |
-| Agent connects but disconnects every 30 seconds. | Stateful NAT / firewall dropping idle connection. | Shango includes automated 20-second ping/pong keepalives. Ensure your firewall allows outbound WebSockets on port 8765. |
+| `agent 'nas' is not connected. Connected agents: (none)` | Agent is offline, has the wrong IP, or token mismatch. | 1. Run `/lan agents list` to see what agents are online.<br/>2. Check `HUB_URL` in `/etc/cmdiqo-agent/agent.env` or `config.json`.<br/>3. Verify `AGENT_TOKEN` matches **exactly** on server and agent. |
+| Agent connects but disconnects every 30 seconds. | Stateful NAT / firewall dropping idle connection. | Cmdiqo includes automated 20-second ping/pong keepalives. Ensure your firewall allows outbound WebSockets on port 8765. |
 | `/lan devices list` returns `No devices discovered` | Container running in bridge mode instead of host mode. | In `docker-compose.yml`, verify `network_mode: host` is set. Raw ARP packets require host network access. |
-| Windows agent command fails with execution policy error. | PowerShell script execution disabled. | `shango-agent` automatically calls PowerShell with `-NoProfile -NonInteractive -Command`, bypassing execution policy restrictions. |
+| Windows agent command fails with execution policy error. | PowerShell script execution disabled. | `cmdiqo-agent` automatically calls PowerShell with `-NoProfile -NonInteractive -Command`, bypassing execution policy restrictions. |

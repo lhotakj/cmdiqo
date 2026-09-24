@@ -38,14 +38,14 @@ def test_help_text():
     ]
     aliases = [{"name": "home", "input": "/home", "output": "/host home"}]
     txt = help_text(commands, aliases=aliases)
-    assert "*Shango Command Manual*" in txt
+    assert "*Cmdiqo Command Manual*" in txt
     assert "`/lan devices list`" in txt
     assert "`/host {host} docker restart {service}`" in txt
     assert "`/home` → `/host home`" in txt
 
     # Prefix / category filter
     prefix_txt = help_text(commands, prefix="/lan", aliases=aliases)
-    assert "*Shango Help: `lan`*" in prefix_txt
+    assert "*Cmdiqo Help: `lan`*" in prefix_txt
     assert "`/lan devices list`" in prefix_txt
     assert "`/host {host} docker restart {service}`" not in prefix_txt
 
@@ -85,8 +85,8 @@ def test_run_shell_local():
 
 
 def test_run_ps1_local():
-    out = _run_ps1_local("Write-Output 'hello_shango'", cwd=None, timeout=5)
-    assert "hello_shango" in out or "Error:" in out
+    out = _run_ps1_local("Write-Output 'hello_cmdiqo'", cwd=None, timeout=5)
+    assert "hello_cmdiqo" in out or "Error:" in out
 
 
 @pytest.mark.asyncio
@@ -185,7 +185,7 @@ async def test_handle_command_empty():
         commands=[],
     )
     post_mock.assert_awaited_once()
-    assert "*Shango Command Manual*" in post_mock.await_args[0][0]
+    assert "*Cmdiqo Command Manual*" in post_mock.await_args[0][0]
 
 
 @pytest.mark.asyncio
@@ -406,7 +406,7 @@ async def test_handle_command_prefix_filtering():
     await handle_command("/host", "U1", "C1", post_mock, commands)
     assert post_mock.await_count == 1
     call_text = post_mock.await_args_list[0][0][0]
-    assert "*Shango Help: `host`*" in call_text
+    assert "*Cmdiqo Help: `host`*" in call_text
     assert "/host {host} docker ps" in call_text
 
 
@@ -513,7 +513,7 @@ def test_format_bot_preflight_error():
         ),
     ]
     formatted = format_bot_preflight_error(issues)
-    assert "[SHANGO-BOT] PREFLIGHT CONFIGURATION CHECK FAILED" in formatted
+    assert "[CMDIQO-BOT] PREFLIGHT CONFIGURATION CHECK FAILED" in formatted
     assert "* SLACK_BOT_TOKEN:" in formatted
     assert "Slack App Setup Checklist:" in formatted
 
@@ -527,7 +527,7 @@ def test_run_main_configuration_error(capsys, monkeypatch):
     assert exc_info.value.code == 2
 
     captured = capsys.readouterr()
-    assert "[SHANGO-BOT] PREFLIGHT CONFIGURATION CHECK FAILED" in captured.err
+    assert "[CMDIQO-BOT] PREFLIGHT CONFIGURATION CHECK FAILED" in captured.err
     assert "SLACK_BOT_TOKEN" in captured.err
 
 
@@ -570,8 +570,8 @@ async def test_handle_command_version():
     post_mock = AsyncMock()
     await handle_command("/lan version", "U1", "C1", post_mock, commands=[])
     post_mock.assert_awaited_once()
-    assert "Shango Version" in post_mock.await_args[0][0]
-    assert "shango-bot v" in post_mock.await_args[0][0]
+    assert "Cmdiqo Version" in post_mock.await_args[0][0]
+    assert "cmdiqo-bot v" in post_mock.await_args[0][0]
 
 
 def test_bot_get_version():
@@ -595,7 +595,7 @@ async def test_handle_command_help_nested():
         "/help", "U1", "C1", post_mock, commands=commands, aliases=aliases
     )
     assert post_mock.await_count == 1
-    assert "Shango Command Manual" in post_mock.await_args[0][0]
+    assert "Cmdiqo Command Manual" in post_mock.await_args[0][0]
 
     post_mock.reset_mock()
     # Nested: /help lan
@@ -604,7 +604,7 @@ async def test_handle_command_help_nested():
     )
     assert post_mock.await_count == 1
     lan_text = post_mock.await_args[0][0]
-    assert "*Shango Help: `lan`*" in lan_text
+    assert "*Cmdiqo Help: `lan`*" in lan_text
     assert "/lan devices list" in lan_text
     assert "/lan wake {target}" in lan_text
     assert "_Examples:_" in lan_text
@@ -616,7 +616,7 @@ async def test_handle_command_help_nested():
     )
     assert post_mock.await_count == 1
     docker_text = post_mock.await_args[0][0]
-    assert "*Shango Help: `docker`*" in docker_text
+    assert "*Cmdiqo Help: `docker`*" in docker_text
     assert "/host {host} docker ps" in docker_text
     assert "/host {host} docker restart" in docker_text
 

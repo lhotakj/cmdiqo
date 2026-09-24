@@ -14,7 +14,7 @@ error() {
     printf "\033[0;31m[ERROR]\033[0m %s\n" "$1"
 }
 
-info "=== Configuring direnv for Shango ==="
+info "=== Configuring direnv for Cmdiqo ==="
 
 # 1. Ensure direnv is installed
 if ! command -v direnv >/dev/null 2>&1; then

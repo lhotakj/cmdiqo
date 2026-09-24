@@ -1,6 +1,6 @@
-# Shango Quality & Engineering Guide
+# Cmdiqo Quality & Engineering Guide
 
-> This document mirrors the Antigravity Skill located in [`.agents/skills/shango-quality/SKILL.md`](.agents/skills/shango-quality/SKILL.md).
+> This document mirrors the Antigravity Skill located in [`.agents/skills/cmdiqo-quality/SKILL.md`](.agents/skills/cmdiqo-quality/SKILL.md).
 
 ## Quality Gates & SonarQube Compliance
 

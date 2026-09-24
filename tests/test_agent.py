@@ -242,7 +242,7 @@ def test_format_preflight_error():
         ("TEST_VAR", "Test variable is required", "Provide via TEST_VAR"),
     ]
     formatted = format_preflight_error(issues)
-    assert "[SHANGO-AGENT] PREFLIGHT CONFIGURATION CHECK FAILED" in formatted
+    assert "[CMDIQO-AGENT] PREFLIGHT CONFIGURATION CHECK FAILED" in formatted
     assert "* TEST_VAR:" in formatted
     assert "Problem:    Test variable is required" in formatted
     assert "Resolution: Provide via TEST_VAR" in formatted
@@ -258,7 +258,7 @@ def test_agent_main_configuration_error(capsys, monkeypatch):
     assert exc_info.value.code == 2
 
     captured = capsys.readouterr()
-    assert "[SHANGO-AGENT] PREFLIGHT CONFIGURATION CHECK FAILED" in captured.err
+    assert "[CMDIQO-AGENT] PREFLIGHT CONFIGURATION CHECK FAILED" in captured.err
     assert "HUB_URL" in captured.err
     assert "AGENT_TOKEN" in captured.err
 
@@ -306,4 +306,4 @@ def test_agent_version_cli(capsys):
         AgentConfig.load(args=["--version"])
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
-    assert "shango-agent" in captured.out
+    assert "cmdiqo-agent" in captured.out

@@ -1,5 +1,5 @@
 # ============================================================================
-# shango-bot command and alias definitions
+# cmdiqo-bot command and alias definitions
 # ----------------------------------------------------------------------------
 # Top-level sections:
 #   aliases:  Prefix substitutions (e.g. /home -> /host home)
@@ -70,7 +70,7 @@ commands:
     category: lan
     trigger: "/lan ping {host}"
     description: "Ping a host or IP from the Hub container"
-    details: "Sends 3 ICMP echo request packets to verify network connectivity and latency to a local or remote host from the Shango container."
+    details: "Sends 3 ICMP echo request packets to verify network connectivity and latency to a local or remote host from the Cmdiqo container."
     examples:
       - "/lan ping 192.168.1.1"
       - "/lan ping nas.lan"
@@ -78,6 +78,55 @@ commands:
     handler: "commands.devices:ping_host"
 
   # ---- Host-agnostic operations (/host <host> <action>) --------------------
+  # User Management
+  - name: host-users
+    category: system
+    trigger: "/host {host} users"
+    description: "List all OS users on {host} (active ✔️ or locked 🚫)"
+    details: "Lists all local OS users on the target host indicating whether each user account is active (✔️) or locked (🚫)."
+    examples:
+      - "/host home users"
+      - "/host AMD users"
+    kind: python
+    target: "{host}"
+    handler: "commands.users:manage_users"
+
+  - name: host-user-status
+    category: system
+    trigger: "/host {host} user {user} status"
+    description: "Show user info, status (✔️/🚫), and session duration"
+    details: "Displays user profile details including full name, home directory, status (✔️ active or 🚫 locked), and active session duration (h, m, s)."
+    examples:
+      - "/host home user john status"
+      - "/host AMD user Administrator status"
+    kind: python
+    target: "{host}"
+    handler: "commands.users:manage_users"
+
+  - name: host-user-disable
+    category: system
+    trigger: "/host {host} user {user} disable"
+    description: "Lock / disable user account on {host}"
+    details: "Locks the specified user account (disables login) on target host."
+    examples:
+      - "/host home user john disable"
+      - "/host AMD user tempuser disable"
+    kind: python
+    target: "{host}"
+    handler: "commands.users:manage_users"
+
+  - name: host-user-enable
+    category: system
+    trigger: "/host {host} user {user} enable"
+    description: "Unlock / enable user account on {host}"
+    details: "Unlocks and reactivates the specified user account on target host."
+    examples:
+      - "/host home user john enable"
+      - "/host AMD user tempuser enable"
+    kind: python
+    target: "{host}"
+    handler: "commands.users:manage_users"
+
   # System Health & Performance
   - name: host-uptime
     category: system

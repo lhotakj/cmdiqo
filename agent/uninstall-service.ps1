@@ -1,14 +1,14 @@
 <#
 .SYNOPSIS
-    Uninstalls the Shango Slack LAN Agent Windows Service completely.
+    Uninstalls the Cmdiqo Slack LAN Agent Windows Service completely.
 
 .DESCRIPTION
-    Stops the ShangoAgent Windows Service, deletes it from the Windows Service
+    Stops the CmdiqoAgent Windows Service, deletes it from the Windows Service
     Control Manager (SCM), terminates running agent processes, and removes
     installed binaries. Optionally purges secrets and configuration.
 
 .PARAMETER PurgeConfig
-    If specified, deletes C:\ProgramData\Shango\Agent (including secrets and logs).
+    If specified, deletes C:\ProgramData\Cmdiqo\Agent (including secrets and logs).
     Default is to keep configuration for upgrades.
 
 .EXAMPLE
@@ -30,11 +30,11 @@ if (-not $isAdmin) {
     exit 1
 }
 
-$ServiceName = "ShangoAgent"
-$InstallDir = "C:\Program Files\Shango\Agent"
-$ConfigDir = "C:\ProgramData\Shango\Agent"
+$ServiceName = "CmdiqoAgent"
+$InstallDir = "C:\Program Files\Cmdiqo\Agent"
+$ConfigDir = "C:\ProgramData\Cmdiqo\Agent"
 
-Write-Host "`n=== Uninstalling Shango Windows Service ($ServiceName) ===" -ForegroundColor Yellow
+Write-Host "`n=== Uninstalling Cmdiqo Windows Service ($ServiceName) ===" -ForegroundColor Yellow
 
 # 1. Stop service if running
 $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -50,14 +50,14 @@ Write-Host "[*] Deleting service from Windows Service Control Manager..." -Foreg
 Start-Sleep -Seconds 1
 
 # 3. Clean up legacy Scheduled Task if previously installed
-$legacyTask = Get-ScheduledTask -TaskName "Shango-Agent" -ErrorAction SilentlyContinue
+$legacyTask = Get-ScheduledTask -TaskName "Cmdiqo-Agent" -ErrorAction SilentlyContinue
 if ($legacyTask) {
-    Write-Host "[*] Removing legacy Scheduled Task 'Shango-Agent'..." -ForegroundColor Cyan
-    Unregister-ScheduledTask -TaskName "Shango-Agent" -Confirm:$false -ErrorAction SilentlyContinue
+    Write-Host "[*] Removing legacy Scheduled Task 'Cmdiqo-Agent'..." -ForegroundColor Cyan
+    Unregister-ScheduledTask -TaskName "Cmdiqo-Agent" -Confirm:$false -ErrorAction SilentlyContinue
 }
 
 # 4. Terminate any lingering processes
-Get-Process -Name "shango-agent" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process -Name "cmdiqo-agent" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
 # 5. Remove binary files
 if (Test-Path $InstallDir) {
@@ -76,4 +76,4 @@ if ($PurgeConfig) {
     Write-Host "    (Run with -PurgeConfig if you wish to delete config and secrets)." -ForegroundColor DarkGray
 }
 
-Write-Host "`n[+] Shango Windows Service ($ServiceName) successfully uninstalled!" -ForegroundColor Green
+Write-Host "`n[+] Cmdiqo Windows Service ($ServiceName) successfully uninstalled!" -ForegroundColor Green

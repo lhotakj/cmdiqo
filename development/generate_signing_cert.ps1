@@ -1,4 +1,4 @@
-# PowerShell script to create a persistent Code Signing Certificate for ShangoHub.
+# PowerShell script to create a persistent Code Signing Certificate for CmdiqoHub.
 # Generates a PFX certificate and public CER, trusts it on your local machine,
 # and outputs the Base64 and password ready to paste into GitHub Actions Secrets.
 #
@@ -8,14 +8,14 @@
 
 [CmdletBinding()]
 param(
-    [string]$Subject = "CN=ShangoHub, O=ShangoHub, OU=Verified Build",
+    [string]$Subject = "CN=CmdiqoHub, O=CmdiqoHub, OU=Verified Build",
     [string]$Password,
     [string]$OutDir = "$PSScriptRoot\..\certs"
 )
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "`n=== ShangoHub Code Signing Certificate Generator ===" -ForegroundColor Cyan
+Write-Host "`n=== CmdiqoHub Code Signing Certificate Generator ===" -ForegroundColor Cyan
 
 if (-not $Password) {
     # Generate random 16-character alphanumeric password
@@ -27,8 +27,8 @@ if (-not (Test-Path $OutDir)) {
     New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
 }
 
-$pfxFile = Join-Path $OutDir "shango-signing-cert.pfx"
-$cerFile = Join-Path $OutDir "shango-signing-cert.cer"
+$pfxFile = Join-Path $OutDir "cmdiqo-signing-cert.pfx"
+$cerFile = Join-Path $OutDir "cmdiqo-signing-cert.cer"
 
 Write-Host "[*] Creating Code-Signing Certificate: $Subject" -ForegroundColor Green
 $cert = New-SelfSignedCertificate -Type CodeSigningCert `

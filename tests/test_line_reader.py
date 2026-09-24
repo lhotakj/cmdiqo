@@ -397,7 +397,7 @@ def test_line_reader_unix_up_arrow():
 
 
 def test_line_reader_history_file_persistence(tmp_path):
-    history_file = tmp_path / ".shango-history"
+    history_file = tmp_path / ".cmdiqo-history"
 
     # 1. File doesn't exist initially -> created on first command entry
     assert not history_file.exists()

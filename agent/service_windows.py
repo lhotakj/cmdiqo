@@ -1,4 +1,4 @@
-"""Native Windows Service host for shango-agent using standard library ctypes.
+"""Native Windows Service host for cmdiqo-agent using standard library ctypes.
 
 Provides native Windows Service Control Manager (SCM) integration with zero
 external dependencies. Works in both Python runtime and PyInstaller
@@ -18,7 +18,7 @@ from ctypes import wintypes
 from pathlib import Path
 from typing import Any
 
-log = logging.getLogger("shango-agent.service")
+log = logging.getLogger("cmdiqo-agent.service")
 
 SERVICE_WIN32_OWN_PROCESS = 0x00000010
 SERVICE_START_PENDING = 0x00000002
@@ -91,7 +91,7 @@ def _set_status(state: int, win32_exit_code: int = NO_ERROR, wait_hint: int = 0)
 def setup_service_logging(log_file: Path | None = None) -> Path:
     """Redirect logging to persistent file when running under Windows Service Control Manager."""
     if log_file is None:
-        log_dir = Path(os.environ.get("ProgramData", r"C:\ProgramData")) / "Shango" / "Agent" / "logs"
+        log_dir = Path(os.environ.get("ProgramData", r"C:\ProgramData")) / "Cmdiqo" / "Agent" / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / "service.log"
     else:
@@ -114,7 +114,7 @@ def run_as_windows_service(
     global _c_main_func, _c_handler_func
 
     log_file = setup_service_logging(log_path)
-    log.info("Starting ShangoAgent service dispatcher (logs: %s)...", log_file)
+    log.info("Starting CmdiqoAgent service dispatcher (logs: %s)...", log_file)
 
     advapi32 = ctypes.windll.advapi32
     advapi32.RegisterServiceCtrlHandlerExW.argtypes = [
@@ -160,14 +160,14 @@ def run_as_windows_service(
 
         _set_status(SERVICE_START_PENDING, wait_hint=3000)
         _set_status(SERVICE_RUNNING)
-        log.info("Shango Windows Service is active and reported RUNNING to SCM.")
+        log.info("Cmdiqo Windows Service is active and reported RUNNING to SCM.")
 
         try:
             asyncio.run(run_coro_fn(_stop_event))
         except Exception:
             log.exception("Exception in Windows service worker loop")
         finally:
-            log.info("Shango Windows Service terminated; reporting STOPPED to SCM.")
+            log.info("Cmdiqo Windows Service terminated; reporting STOPPED to SCM.")
             _set_status(SERVICE_STOPPED)
 
     _c_main_func = SERVICE_MAIN_FUNCTION(service_main)

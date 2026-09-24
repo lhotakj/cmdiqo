@@ -1,4 +1,4 @@
-"""Slack Simulator (slacksim): Terminal-based emulator for shango-bot.
+"""Slack Simulator (slacksim): Terminal-based emulator for cmdiqo-bot.
 
 Simulates the Slack chat environment in a console REPL with full
 support for Slack slash commands, aliases, permissions, and ANSI-rendered
@@ -71,7 +71,7 @@ except (ImportError, ValueError, AttributeError):
         format_slack_to_ansi,
     )
 
-log = logging.getLogger("shango-slacksim")
+log = logging.getLogger("cmdiqo-slacksim")
 
 
 @dataclass
@@ -239,9 +239,9 @@ class SlackSimulator:
             ts = time.strftime("%H:%M:%S")
             formatted = format_slack_to_ansi(text, use_color=use_color)
             if use_color:
-                header = f"  {ANSI_DARK_GRAY}[{ts}]{ANSI_RESET} {ANSI_BOLD}{ANSI_MAGENTA}🤖 shango-bot:{ANSI_RESET}"
+                header = f"  {ANSI_DARK_GRAY}[{ts}]{ANSI_RESET} {ANSI_BOLD}{ANSI_MAGENTA}🤖 cmdiqo-bot:{ANSI_RESET}"
             else:
-                header = f"  [{ts}] shango-bot:"
+                header = f"  [{ts}] cmdiqo-bot:"
             print(f"{header} {formatted}")
 
         return post
@@ -319,7 +319,7 @@ class SlackSimulator:
 
         print(f"""
 {cyan}======================================================================{reset}
-  {bold}⚡ Shango Slack Simulator (slacksim) v{ver}{reset}
+  {bold}⚡ Cmdiqo Slack Simulator (slacksim) v{ver}{reset}
   {gray}Interactive local console emulator for Slack commands & remote agents{reset}
 {cyan}======================================================================{reset}
   {green}Active User:{reset}    {bold}{self.current_user}{reset} (type {yellow}/as <id>{reset} to change)
@@ -355,7 +355,7 @@ class SlackSimulator:
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build command-line parser for slacksim."""
     parser = argparse.ArgumentParser(
-        description="slacksim: Interactive Slack command console emulator for Shango."
+        description="slacksim: Interactive Slack command console emulator for Cmdiqo."
     )
     parser.add_argument(
         "-c", "--command",

@@ -182,8 +182,8 @@ async def test_slacksim_dispatch_command_execution(capsys):
     res = await sim.dispatch("/lan version")
     assert res is True
     out = capsys.readouterr().out
-    assert "shango-bot" in out
-    assert "Shango Version" in out
+    assert "cmdiqo-bot" in out
+    assert "Cmdiqo Version" in out
 
 
 def test_slacksim_print_banner(capsys):
@@ -192,7 +192,7 @@ def test_slacksim_print_banner(capsys):
     sim.load_specifications()
     sim.print_banner()
     out = capsys.readouterr().out
-    assert "Shango Slack Simulator" in out
+    assert "Cmdiqo Slack Simulator" in out
     assert "Active User:" in out
 
 

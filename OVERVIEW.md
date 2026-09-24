@@ -1,6 +1,6 @@
-# Shango Architecture & Execution Flow
+# Cmdiqo Architecture & Execution Flow
 
-Shango is a hybrid home-lab management system that bridges **Slack Socket Mode** to your local network and distributed machines with **zero open ports** and **zero port forwarding**.
+Cmdiqo is a hybrid home-lab management system that bridges **Slack Socket Mode** to your local network and distributed machines with **zero open ports** and **zero port forwarding**.
 
 This document details the system architecture, end-to-end execution lifecycle, communication protocol, and logging observability.
 
@@ -10,13 +10,13 @@ This document details the system architecture, end-to-end execution lifecycle, c
 
 The system consists of three decoupled layers:
 1. **Slack Cloud**: Interacts with users via Socket Mode (outbound WebSocket from the bot).
-2. **shango-bot Container & slacksim**: Hosts the Slack event dispatcher, local command runner, and the WebSocket **Agent Hub**. `slacksim` provides an interactive console REPL for local testing and debugging without Slack credentials.
-3. **shango-agent Instances**: Lightweight standalone binaries running on LAN nodes (Windows PCs, Linux servers, NAS units, Raspberry Pis) that maintain persistent outbound WebSocket connections to the Hub.
+2. **cmdiqo-bot Container & slacksim**: Hosts the Slack event dispatcher, local command runner, and the WebSocket **Agent Hub**. `slacksim` provides an interactive console REPL for local testing and debugging without Slack credentials.
+3. **cmdiqo-agent Instances**: Lightweight standalone binaries running on LAN nodes (Windows PCs, Linux servers, NAS units, Raspberry Pis) that maintain persistent outbound WebSocket connections to the Hub.
 
 ```mermaid
 graph TD
     User([Slack User]) <-->|Socket Mode TLS| Slack[Slack Platform]
-    Slack <-->|WSS Outbound| BotApp["shango-bot (Slack Bolt)"]
+    Slack <-->|WSS Outbound| BotApp["cmdiqo-bot (Slack Bolt)"]
     DevUser([Developer / Operator]) <-->|Console REPL| SlackSim["slacksim (CLI Emulator)"]
 
     subgraph BotHost ["Bot Host (Docker Container / Local Server)"]
@@ -27,9 +27,9 @@ graph TD
     end
 
     subgraph RemoteAgents ["Distributed LAN Machines (Behind NAT)"]
-        Hub <-->|"Outbound WS (HMAC Auth)"| AgentWin["shango-agent (Windows PC)\nPowerShell / CMD"]
-        Hub <-->|"Outbound WS (HMAC Auth)"| AgentLinux["shango-agent (Linux NAS)\nBash / Coreutils"]
-        Hub <-->|"Outbound WS (HMAC Auth)"| AgentPi["shango-agent (Raspberry Pi)\nBash / Docker"]
+        Hub <-->|"Outbound WS (HMAC Auth)"| AgentWin["cmdiqo-agent (Windows PC)\nPowerShell / CMD"]
+        Hub <-->|"Outbound WS (HMAC Auth)"| AgentLinux["cmdiqo-agent (Linux NAS)\nBash / Coreutils"]
+        Hub <-->|"Outbound WS (HMAC Auth)"| AgentPi["cmdiqo-agent (Raspberry Pi)\nBash / Docker"]
     end
 ```
 
@@ -44,9 +44,9 @@ sequenceDiagram
     autonumber
     actor User as Slack User
     participant Slack as Slack API (Socket Mode)
-    participant Bot as shango-bot (app.py)
+    participant Bot as cmdiqo-bot (app.py)
     participant Hub as Hub Server (hub.py)
-    participant Agent as shango-agent (agent.py)
+    participant Agent as cmdiqo-agent (agent.py)
     participant OS as Agent Subprocess (PowerShell/Bash)
 
     Note over User,Slack: 1. User Triggers Command

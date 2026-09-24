@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build.sh — Forwarding script for Shango build system
+# build.sh — Forwarding script for Cmdiqo build system
 # All build scripts and logic are maintained in the development/ directory.
 
 set -e

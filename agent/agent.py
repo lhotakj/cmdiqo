@@ -1,4 +1,4 @@
-"""shango-agent: tiny agent that connects OUTBOUND to the shango-bot hub
+"""cmdiqo-agent: tiny agent that connects OUTBOUND to the cmdiqo-bot hub
 and executes commands on this host on request.
 
 Cross-platform: Windows (PowerShell via kind 'ps1', cmd/bash via 'shell') and
@@ -30,7 +30,7 @@ logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
-log = logging.getLogger("shango-agent")
+log = logging.getLogger("cmdiqo-agent")
 
 IS_WINDOWS = platform.system().lower() == "windows"
 
@@ -73,6 +73,7 @@ class AgentConfig:
     token: str
     name: str
     reconnect_delay: float = 5.0
+    agent_connection_notify: bool = False
 
     @classmethod
     def from_env(cls) -> AgentConfig:
@@ -82,9 +83,9 @@ class AgentConfig:
     @classmethod
     def load(cls, args: list[str] | None = None) -> AgentConfig:
         """Load configuration with precedence: CLI flags > Env vars > Config file."""
-        parser = argparse.ArgumentParser(description="shango-agent: LAN command agent")
+        parser = argparse.ArgumentParser(description="cmdiqo-agent: LAN command agent")
         parser.add_argument(
-            "-v", "--version", action="version", version=f"shango-agent {get_version()}"
+            "-v", "--version", action="version", version=f"cmdiqo-agent {get_version()}"
         )
         parser.add_argument(
             "-u",
@@ -112,6 +113,12 @@ class AgentConfig:
             "--log-level",
             default=None,
             help="Logging level (DEBUG, INFO, WARNING, ERROR)",
+        )
+        parser.add_argument(
+            "--agent-connection-notify",
+            action="store_true",
+            default=False,
+            help="Enable Slack notification on agent connect/disconnect",
         )
         parser.add_argument(
             "--service",
@@ -204,6 +211,15 @@ class AgentConfig:
         if issues:
             raise ConfigurationError(issues)
 
+        notify_env = os.environ.get("AGENT_NOTIFICATION_NOTIFY") or os.environ.get("AGENT_CONNECTION_NOTIFY")
+        if notify_env is not None:
+            agent_notify = notify_env.strip().lower() in ("true", "1", "yes", "on")
+        elif "agent_connection_notify" in file_cfg:
+            val = file_cfg["agent_connection_notify"]
+            agent_notify = str(val).strip().lower() in ("true", "1", "yes", "on")
+        else:
+            agent_notify = bool(parsed.agent_connection_notify)
+
         name = (
             parsed.name
             or os.environ.get("AGENT_NAME")
@@ -211,7 +227,11 @@ class AgentConfig:
             or socket.gethostname()
         )
         return cls(
-            hub_url=hub_url, token=token, name=name, reconnect_delay=reconnect_delay
+            hub_url=hub_url,
+            token=token,
+            name=name,
+            reconnect_delay=reconnect_delay,
+            agent_connection_notify=agent_notify,
         )
 
 
@@ -348,6 +368,7 @@ async def run_agent(
                             "name": config.name,
                             "version": get_version(),
                             "platform": f"{platform.system()}/{platform.release()}",
+                            "agent_connection_notify": config.agent_connection_notify,
                         }
                     )
                 )
@@ -386,7 +407,7 @@ def format_preflight_error(issues: list[tuple[str, str, str]]) -> str:
     sep = "=" * width
     lines = [
         sep,
-        "[SHANGO-AGENT] PREFLIGHT CONFIGURATION CHECK FAILED".center(width),
+        "[CMDIQO-AGENT] PREFLIGHT CONFIGURATION CHECK FAILED".center(width),
         sep,
         "The agent cannot start because required configuration parameters are missing",
         "or invalid. Please review the following issues:",
@@ -401,9 +422,9 @@ def format_preflight_error(issues: list[tuple[str, str, str]]) -> str:
     lines.extend(
         [
             "Quick setup alternatives:",
-            "  - CLI:  shango-agent --hub-url ws://<HUB_IP>:8765 --token <AGENT_TOKEN>",
+            "  - CLI:  cmdiqo-agent --hub-url ws://<HUB_IP>:8765 --token <AGENT_TOKEN>",
             "  - Env:  set HUB_URL=ws://<HUB_IP>:8765 && set AGENT_TOKEN=<AGENT_TOKEN>",
-            "  - Help: shango-agent --help",
+            "  - Help: cmdiqo-agent --help",
             sep,
         ]
     )
@@ -411,7 +432,7 @@ def format_preflight_error(issues: list[tuple[str, str, str]]) -> str:
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Main entry point for shango-agent with robust error handling and preflight checks."""
+    """Main entry point for cmdiqo-agent with robust error handling and preflight checks."""
     effective_args = argv if argv is not None else sys.argv[1:]
     if "--service" in effective_args:
         if not IS_WINDOWS:
@@ -426,7 +447,7 @@ def main(argv: list[str] | None = None) -> None:
             cfg = AgentConfig.load(args=argv)
             await run_agent(cfg, stop_event=stop_evt)
 
-        run_as_windows_service("ShangoAgent", _service_worker)
+        run_as_windows_service("CmdiqoAgent", _service_worker)
         return
 
     try:
