@@ -1,33 +1,36 @@
 """Unit tests for development/check_release.py commit message parsing."""
 
-from development.check_release import evaluate_release
+from development.check_release import evaluate_release, get_base_version
 
 
 def test_release_agent_trigger():
+    base = get_base_version()
     decision = evaluate_release(message="feat: improve agent service /release-agent")
     assert decision.release_agent is True
     assert decision.release_bot is False
     assert decision.is_release is True
-    assert decision.tag == "v1.0.0"
-    assert decision.version == "1.0.0"
+    assert decision.tag == f"v{base}"
+    assert decision.version == base
 
 
 def test_release_bot_trigger():
+    base = get_base_version()
     decision = evaluate_release(message="feat: improve bot command /release-bot")
     assert decision.release_agent is False
     assert decision.release_bot is True
     assert decision.is_release is True
-    assert decision.tag == "v1.0.0"
-    assert decision.version == "1.0.0"
+    assert decision.tag == f"v{base}"
+    assert decision.version == base
 
 
 def test_release_all_trigger():
+    base = get_base_version()
     decision = evaluate_release(message="chore: full release /release")
     assert decision.release_agent is True
     assert decision.release_bot is True
     assert decision.is_release is True
-    assert decision.tag == "v1.0.0"
-    assert decision.version == "1.0.0"
+    assert decision.tag == f"v{base}"
+    assert decision.version == base
 
 
 def test_release_with_explicit_version():

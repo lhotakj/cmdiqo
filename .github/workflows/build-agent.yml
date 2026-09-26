@@ -38,7 +38,7 @@ jobs:
   build-binaries:
     name: Build ${{ matrix.os }} Standalone Binary
     needs: [check-release]
-    if: needs.check-release.outputs.release_agent == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.check-release.outputs.release_agent == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -76,13 +76,20 @@ jobs:
             choco install upx -y || true
           fi
 
-      - name: Build and Sign Standalone Binary
+      - name: Build Linux agent and Tkinter installer
+        if: matrix.os == 'ubuntu-24.04'
         shell: bash
+        run: |
+          ./build.sh --clean --platform linux64 --target agent --version ${{ needs.check-release.outputs.version }}
+
+      - name: Build and sign Windows agent and Tkinter installer
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
         env:
           SIGNING_CERT_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}
           SIGNING_CERT_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERT_PASSWORD }}
         run: |
-          python development/build_agent.py --version ${{ needs.check-release.outputs.version }}
+          .\build.ps1 -Clean -Platform win64 -Target Agent -Version ${{ needs.check-release.outputs.version }}
 
       - name: Verify Windows Signature & Certificate
         if: matrix.os == 'windows-latest'
@@ -90,6 +97,22 @@ jobs:
         run: |
           Write-Host "[+] Verifying Authenticode signature of ${{ matrix.binary_src }}:"
           Get-AuthenticodeSignature "${{ matrix.binary_src }}" | Format-List Status, StatusMessage, SignatureType, SignerCertificate, TimeStamperCertificate
+
+      - name: Verify distribution archive and installer
+        shell: bash
+        run: |
+          if [[ "${{ matrix.os }}" == "windows"* ]]; then
+            installer="dist/cmdiqo-agent-setup.exe"
+            expected=(cmdiqo-agent.exe install-service.ps1 uninstall-service.ps1 agent.env.example agent.json.example)
+          else
+            installer="dist/cmdiqo-agent-setup"
+            expected=(cmdiqo-agent install-service.sh uninstall-service.sh cmdiqo-agent.service agent.env.example agent.json.example)
+          fi
+
+          test -f "${{ matrix.binary_src }}"
+          test -f "$installer"
+          python -c "import sys, zipfile; archive, *expected = sys.argv[1:]; names = set(zipfile.ZipFile(archive).namelist()); missing = set(expected) - names; assert not missing, f'{archive} is missing: {sorted(missing)}'" \
+            "dist/${{ matrix.zip_name }}" "${expected[@]}"
 
       - name: Stage Package Files
         shell: bash
@@ -120,6 +143,8 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: |
             dist/${{ matrix.zip_name }}
+            ${{ matrix.binary_src }}
+            dist/cmdiqo-agent-setup*
             dist/package/*
           retention-days: 90
           if-no-files-found: error
@@ -146,6 +171,7 @@ jobs:
           mkdir -p dist/release-assets
           find dist/downloaded -name "*.zip" -exec cp {} dist/release-assets/ \;
           find dist/downloaded -name "cmdiqo-agent.cer" -exec cp {} dist/release-assets/ \; 2>/dev/null || true
+          find dist/downloaded -type f \( -name "cmdiqo-agent" -o -name "cmdiqo-agent.exe" -o -name "cmdiqo-agent-setup" -o -name "cmdiqo-agent-setup.exe" \) -exec cp {} dist/release-assets/ \;
           for d in dist/downloaded/*; do
             if [ -d "$d" ]; then
               name=$(basename "$d")

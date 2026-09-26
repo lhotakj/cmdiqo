@@ -130,6 +130,12 @@ All build and maintenance scripts are organized across the repository:
 - `development/update_version.py`: Resolves version and propagates to `version.txt`, `short_version.txt`, and bundled `_version.py` / `__version__.py` modules across `agent`, `bot`, and `slacksim`.
 - `development/build_agent.py`: Unified standalone compiler (PyInstaller, UPX, Authenticode signer).
 
+### Native Binary Release Pipeline
+- `build.sh --clean --target installer` produces Linux x64 artifacts only: `cmdiqo-agent`, `cmdiqo-agent-linux-x64.zip`, and `cmdiqo-agent-setup`. Docker builds use Bullseye/glibc 2.31 when available.
+- `build.ps1 -Clean -Platform win64 -Target Agent` produces the Windows PE agent, service ZIP, and Tkinter installer: `cmdiqo-agent.exe`, `cmdiqo-agent-windows-x64.zip`, and `cmdiqo-agent-setup.exe`.
+- Do not attempt Linux-to-Windows PyInstaller cross-compilation. Use the native Windows matrix runner in `.github/workflows/build-agent.yml`.
+- A manual **Build Agent Binaries (Windows & Linux x64)** workflow run retains both platform artifact sets for 90 days. `/release-agent` and `/release` publish the two ZIP service packages, two raw agent binaries, and two GUI installers to the GitHub Release.
+
 ### Versioning Rules:
 - **CI Builds (GitHub Actions):** Derived dynamically as `<major>.<minor>.<GITHUB_RUN_NUMBER>` (e.g. `1.0.42`).
 - **Local Builds:** Derived dynamically using the hex Linux timestamp with `.dev`: `<major>.<minor>.dev<HEX_TIMESTAMP>` (e.g. `1.0.dev6AB4BAC9`).
@@ -138,4 +144,3 @@ All build and maintenance scripts are organized across the repository:
 ### Windows Authenticode Digital Signing:
 - Binaries are digitally signed with SHA256 and RFC 3161 timestamps (`http://timestamp.digicert.com`).
 - Public certificate is exported to `cmdiqo-agent.cer` and registered in `Cert:\CurrentUser\TrustedPublisher` for local trust.
-

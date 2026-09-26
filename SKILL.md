@@ -50,6 +50,12 @@ All build and maintenance scripts are organized across the repository:
 - `development/update_version.py`: Resolves version from `version.txt` and propagates to bundled `_version.py` / `__version__.py` modules across `agent`, `bot`, and `slacksim`.
 - `development/build_agent.py`: Unified standalone compiler (PyInstaller, UPX, Authenticode signer).
 
+### Native Binary Release Pipeline
+- `build.sh --clean --target installer` produces Linux x64 artifacts only: `cmdiqo-agent`, `cmdiqo-agent-linux-x64.zip`, and `cmdiqo-agent-setup`. Docker builds use Bullseye/glibc 2.31 when available.
+- `build.ps1 -Clean -Platform win64 -Target Agent` produces the Windows PE agent, service ZIP, and Tkinter installer: `cmdiqo-agent.exe`, `cmdiqo-agent-windows-x64.zip`, and `cmdiqo-agent-setup.exe`.
+- Never attempt to produce a Windows PE file with Linux PyInstaller. The `.github/workflows/build-agent.yml` Windows matrix runner is the supported automated Windows build path.
+- A manual **Build Agent Binaries (Windows & Linux x64)** workflow run uploads both platform artifact sets for 90 days. `/release-agent` and `/release` also publish the two ZIP service packages, two raw agent binaries, and two GUI installers to the GitHub Release.
+
 ### Dynamic Versioning Rules:
 - **CI Builds (GitHub Actions):** Derived dynamically as `<major>.<minor>.<GITHUB_RUN_NUMBER>` (e.g. `1.0.42`).
 - **Local Builds:** Derived dynamically using the hex Linux timestamp with `.dev`: `<major>.<minor>.dev<HEX_TIMESTAMP>` (e.g. `1.0.dev6AB4BAC9`).
@@ -98,4 +104,3 @@ commands:
 > **Command Resolution & Help Discovery**: Triggers containing `{host}` automatically target that host agent (no redundant `target: "{host}"`). The `command` mapping dynamically selects `shell` on Linux agents and `ps1` on Windows agents. Category is automatically inferred (or can be explicitly set), feeding into Slack `/help` and `/help <category>`. Arbitrary command configuration is supported under `config:`.
 
 Always add corresponding unit tests in `tests/`.
-

@@ -160,8 +160,8 @@ Supporting utilities (`build_agent.py`, `update_version.py`, certificates, and e
 Run `.\build.ps1`:
 
 ```powershell
-# 1. Build standalone Windows agent executable (dist\cmdiqo-agent.exe):
-.\build.ps1
+# 1. Build the Windows agent ZIP, PE binary, and Tkinter GUI installer:
+.\build.ps1 -Clean -Platform win64 -Target Agent
 
 # 2. Build and copy directly to a test location (e.g. C:\tmp\):
 .\build.ps1 -CopyTo "C:\tmp\cmdiqo-agent-windows-x64.exe"
@@ -180,10 +180,12 @@ Run `.\build.ps1`:
 ```
 
 #### Parameters for `build.ps1`:
-- `-Agent`: Switch to build standalone Windows agent executable (default).
+- `-Agent`: Switch to build standalone Windows agent executable and installer (default).
+- `-Installer`: Switch to build standalone agent executable and Tkinter installer.
 - `-Bot`: Switch to build `cmdiqo-bot` Docker container image.
-- `-All`: Switch to build both standalone agent binary and bot container.
-- `-Target <Agent|Bot|All>`: Explicit target selection parameter.
+- `-All`: Switch to build standalone agent binary, installer package, and bot container.
+- `-Target <Agent|Installer|Bot|All>`: Explicit target selection parameter.
+- `-Platform, -p <win64|linux64|all>`: Target platform selection (default: `win64`). Use `all` with Docker Desktop to build Linux binaries too.
 - `-Version, -v <string>`: Explicit version string override (e.g. `1.2.0`).
 - `-Dev`: Force development build format `<major>.<minor>.dev<HEX>`.
 - `-Clean`: Clean `build/` and `dist/` directories before compiling.
@@ -198,35 +200,56 @@ Run `.\build.ps1`:
 Run `./build.sh`:
 
 ```bash
-# 1. Build standalone Linux agent binary (dist/cmdiqo-agent):
-./build.sh
+# 1. Build the Linux agent ZIP, ELF binary, and Tkinter GUI installer:
+./build.sh --clean --target installer
 
-# 2. Build with explicit version and clean artifacts:
+# 2. Build Linux artifacts explicitly:
+./build.sh --platform linux64
+
+# 3. Build with explicit version and clean artifacts:
 ./build.sh -v 1.2.0 --clean
 
-# 3. Build Docker container for cmdiqo-bot:
+# 4. Build Docker container for cmdiqo-bot:
 ./build.sh --bot
 
-# 4. Build both standalone agent and Docker bot:
+# 5. Build both standalone agent and Docker bot:
 ./build.sh --all
 
-# 5. Build and push multi-arch Docker container:
+# 6. Build and push multi-arch Docker container:
 ./build.sh --bot --push
 ```
 
 #### Parameters for `build.sh`:
-- `--agent, -a`: Build standalone agent binary (default).
+- `--agent, -a`: Build standalone agent binary and GUI installer (default).
+- `--installer, -i`: Build standalone agent binary and Tkinter installer.
 - `--bot, -b, --docker`: Build Docker container for `cmdiqo-bot`.
-- `--all`: Build both agent binary and bot container.
-- `--target <agent|bot|all>`: Explicit target selection parameter.
+- `--all`: Build Linux agent binary, Tkinter installer, and bot container.
+- `--target <agent|installer|bot|all>`: Explicit target selection parameter.
+- `--platform, -p <linux64>`: Linux target selection (default: `linux64`).
 - `-v, --version <string>`: Explicit version override (e.g. `1.2.0`).
 - `--dev`: Force development build format `<major>.<minor>.dev<HEX>`.
 - `--clean`: Clean `build/` and `dist/` directories before compiling.
-- `--skip-sign`: Skip digital signing on Windows environments.
 - `--copy-to <path>`: Automatically copy built binary to destination path upon completion.
 - `--push`: Build and push multi-architecture Docker image to registry (`linux/amd64,linux/arm64`).
 - `--docker-user <string>`: Docker Hub registry namespace/username (defaults to `$DOCKERHUB_USERNAME` or `lhotakj`).
 - `-h, --help`: Display detailed usage instructions.
+
+> [!TIP]
+> **Cross-Distro Linux & SUSE Compatibility (glibc 2.31)**:
+> When Docker is present on the Linux build host, `build.sh` automatically compiles the Linux agent and installer inside a lightweight container (`python:3.11-slim-bullseye`, glibc 2.31). This guarantees that binaries built on newer Ubuntu systems (with glibc 2.38+) run without version errors on **openSUSE Leap 15.x**, **SUSE Linux Enterprise Server (SLES) 15**, Ubuntu 20.04+, and Debian 11+. If Docker is not available, it cleanly falls back to the host Python.
+
+> **Windows artifacts:** PyInstaller produces native binaries and does not cross-compile. `build.sh` produces Linux artifacts only. Run `build.ps1 -Platform win64` on Windows, or use the Windows GitHub Actions job, which publishes the native Windows agent and Tkinter installer alongside the Linux artifacts.
+
+### Distribution Files
+
+Each native build produces a platform ZIP containing the agent binary, command-line service installer/uninstaller scripts, and configuration examples. Release builds also upload the raw agent binary and GUI installer:
+
+| Platform | ZIP service package | Raw agent | Tkinter GUI installer |
+|---|---|---|---|
+| Linux x64 | `cmdiqo-agent-linux-x64.zip` | `cmdiqo-agent` | `cmdiqo-agent-setup` |
+| Windows x64 | `cmdiqo-agent-windows-x64.zip` | `cmdiqo-agent.exe` | `cmdiqo-agent-setup.exe` |
+
+Use the ZIP package for command-line installation. The raw installer is the graphical Tkinter installer for that platform. Linux binaries downloaded outside the ZIP may need `chmod +x`.
 
 ### Building Container with Docker CLI & Compose
 
@@ -356,7 +379,7 @@ Cmdiqo CI/CD uses smart commit-message trigger commands to control formal releas
 
 | Commit Flag | Action Taken | Artifacts & Destination |
 | :--- | :--- | :--- |
-| **`/release-agent`** | Builds standalone agent binaries on Linux and Windows x64. | Creates/updates GitHub Release tag (`v<version>`) and uploads `cmdiqo-agent-windows-x64.zip` and `cmdiqo-agent-linux-x64.zip`. |
+| **`/release-agent`** | Builds the agent and Tkinter installer on native Linux and Windows runners. | Creates/updates GitHub Release tag (`v<version>`) and uploads both ZIP service packages, both raw agent binaries, and both GUI installers. |
 | **`/release-bot`** | Builds multi-arch Docker image for `cmdiqo-bot`. | Creates/updates GitHub Release tag (`v<version>`) and pushes multi-arch image (`linux/amd64,linux/arm64`) to Docker Hub (`:latest`, `:<version>`, `:<major>.<minor>`). |
 | **`/release`** | **Executes both** agent build/release and bot build/release in parallel. | Full production release: GitHub Release tag + agent `.zip` assets + Docker Hub container push. |
 
@@ -384,14 +407,16 @@ git push origin main
 > Pushing regular commits (without `/release*`) runs continuous integration tests and linting (`ci.yml`) in seconds, without triggering PyInstaller compilation or pushing unwanted intermediate images to Docker Hub.
 
 #### Automated Decision via Commit Message:
-The GitHub Actions build pipelines do not use manual configuration menus or dropdown options. Every workflow evaluates the commit message of the commit being pushed to `main`:
+Push-triggered release publication evaluates the commit message of the commit pushed to `main`:
 - If the commit message contains `/release-agent` $\rightarrow$ Agent binaries are built, signed, and published to GitHub Releases.
 - If the commit message contains `/release-bot` $\rightarrow$ Bot Docker image is built and pushed to Docker Hub, and GitHub Release tag is created.
 - If the commit message contains `/release` $\rightarrow$ Both Agent and Bot are built, released to GitHub, and pushed to Docker Hub.
 - If none of the flags are found $\rightarrow$ Workflows exit immediately without compiling binaries, tagging releases, or publishing Docker images.
 
+The **Build Agent Binaries (Windows & Linux x64)** workflow can also be started manually from the Actions tab. A manual run builds and retains both platform artifact sets for 90 days, but does not create or modify a GitHub Release.
+
 #### Downloading Built Binaries:
 1. Navigate to **Releases** on GitHub (`https://github.com/<user>/Cmdiqo/releases`):
-   - Every `/release-agent` or `/release` run attaches `cmdiqo-agent-windows-x64.zip` and `cmdiqo-agent-linux-x64.zip` to the release.
+   - Every `/release-agent` or `/release` run attaches both platform ZIP service packages, raw agent binaries, and Tkinter GUI installers listed in [Distribution Files](#distribution-files).
 2. Or open any completed workflow run under the **Actions** tab:
    - Scroll to **Artifacts** to download build packages directly.

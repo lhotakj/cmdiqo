@@ -4,12 +4,15 @@
 from __future__ import annotations
 
 import argparse
+import os
 import platform
+import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).absolute().parent.parent
 AGENT_DIR = ROOT / "agent"
 AGENT_SCRIPT = AGENT_DIR / "agent.py"
 REQUIREMENTS = AGENT_DIR / "requirements.txt"
@@ -97,8 +100,16 @@ def package_agent_zip(system: str, dist_path: Path) -> Path:
         cer_path = dist_dir / "cmdiqo-agent.cer"
         if cer_path.exists():
             files_to_pack.append((cer_path, "cmdiqo-agent.cer"))
+        ico_file = ROOT / "development" / "cmdiqo.ico"
+        if ico_file.exists():
+            files_to_pack.append((ico_file, "cmdiqo.ico"))
     else:
         zip_name = "cmdiqo-agent-linux-x64.zip"
+        if dist_path.exists():
+            try:
+                os.chmod(dist_path, 0o755)
+            except OSError:
+                pass
         files_to_pack = [
             (dist_path, "cmdiqo-agent"),
             (AGENT_DIR / "install-service.sh", "install-service.sh"),
@@ -108,11 +119,14 @@ def package_agent_zip(system: str, dist_path: Path) -> Path:
             (AGENT_DIR / "agent.json.example", "agent.json.example"),
         ]
 
-    # Populate dist/package/ for GitHub Actions artifact staging
-    import shutil
-    for src_path, arc_name in files_to_pack:
-        if src_path.exists():
-            shutil.copy2(src_path, pkg_dir / arc_name)
+    # Populate dist/package/ for GitHub Actions artifact staging (best-effort)
+    try:
+        pkg_dir.mkdir(parents=True, exist_ok=True)
+        for src_path, arc_name in files_to_pack:
+            if src_path.exists():
+                shutil.copy2(src_path, pkg_dir / arc_name)
+    except Exception:
+        pass
 
     zip_path = dist_dir / zip_name
     print(f"\n[*] Packaging zip archive: {zip_path}")
@@ -236,7 +250,7 @@ def main() -> None:
     if system != "windows":
         pyinstaller_cmd.append("--strip")
 
-    if icon_file.exists():
+    if system in ("windows", "darwin") and icon_file.exists():
         pyinstaller_cmd.extend(["--icon", str(icon_file)])
 
     if system == "windows" and version_file.exists():
@@ -260,8 +274,6 @@ def main() -> None:
         if args.copy_to:
             dest = Path(args.copy_to)
             dest.parent.mkdir(parents=True, exist_ok=True)
-            import shutil
-
             shutil.copy2(dist_path, dest)
             print(f"[+] Copied binary to {dest}")
             if dest.suffix == ".exe" or dest.name == "cmdiqo-agent":

@@ -451,45 +451,33 @@ The agent supports 3 configuration methods with the following precedence:
 
 You can compile the agent into a single, standalone binary that has **zero Python runtime dependencies** on target machines. Full build documentation is available in [BUILD.md](BUILD.md).
 
-#### 1. Build Windows 64-bit Executable (`cmdiqo-agent.exe`)
+#### 1. Build Windows 64-bit Agent and GUI Installer
 
 On any Windows machine:
 ```powershell
-# Using the PowerShell build script (compiles, signs, and embeds version metadata):
-.\build.ps1
-
-# Or with python:
-python development/build_agent.py
+# Compiles the PE agent, Windows service ZIP, and Tkinter GUI installer:
+.\build.ps1 -Clean -Platform win64 -Target Agent
 ```
-Output binary: `dist/cmdiqo-agent.exe` (digitally signed, with PE version resource).
+Outputs: `dist/cmdiqo-agent.exe`, `dist/cmdiqo-agent-windows-x64.zip`, and `dist/cmdiqo-agent-setup.exe`.
 
-#### 2. Build Linux 64-bit Binary (`cmdiqo-agent`)
+#### 2. Build Linux 64-bit Agent and GUI Installer
 
-**Option A — Cross-compile on Windows or macOS using Docker:**
+On Linux:
 ```bash
-docker run --rm -v "${PWD}:/src" -w /src python:3.12-slim bash -c \
-  "pip install pyinstaller -r agent/requirements.txt && python development/build_agent.py"
+./build.sh --clean --target installer
 ```
-Output binary: `dist/cmdiqo-agent`.
+Outputs: `dist/cmdiqo-agent`, `dist/cmdiqo-agent-linux-x64.zip`, and `dist/cmdiqo-agent-setup`. When Docker is available, the build uses a Debian Bullseye (glibc 2.31) image for broad Linux compatibility.
 
-**Option B — Directly on a Linux host:**
-```bash
-./build.sh
-# Or with python:
-python development/build_agent.py
-```
-Output binary: `dist/cmdiqo-agent`.
+`build.sh` produces Linux executables only. PyInstaller emits Windows PE files only when run by Windows Python, so use `build.ps1` on Windows or the native Windows GitHub Actions runner for `.exe` files.
 
 #### 3. Automated CI Builds via GitHub Actions (Direct Download)
-The repository includes [`.github/workflows/build-agent.yml`](.github/workflows/build-agent.yml) which automatically compiles and signs both binaries on every push to `main` or manual workflow dispatch:
+The repository includes [`.github/workflows/build-agent.yml`](.github/workflows/build-agent.yml). Select **Actions → Build Agent Binaries (Windows & Linux x64) → Run workflow** to create downloadable artifacts without a release:
 1. Go to your GitHub repository and click the **Actions** tab.
 2. Select the latest **Build Agent Binaries** workflow run.
 3. Scroll down to the **Artifacts** section at the bottom of the summary page.
-4. Click on either artifact to download:
-   - `cmdiqo-agent-windows-x64` (contains `cmdiqo-agent-windows-x64.exe` digitally signed, and `cmdiqo-agent.cer`)
-   - `cmdiqo-agent-linux-x64` (contains executable Linux x64 ELF binary)
+4. Download `cmdiqo-agent-windows-x64` or `cmdiqo-agent-linux-x64`. Each contains the platform ZIP service package, raw agent binary, and Tkinter GUI installer.
 
-> **No Release Required:** Binaries are stored directly as downloadable build artifacts (retained for 90 days), so you can download fresh builds anytime without tagging a release.
+Commit `/release-agent` or `/release` on `main` to publish the same six files to a GitHub Release: two ZIP service packages, two raw agent binaries, and two GUI installers. CI verifies every ZIP includes its platform binary and command-line service installation scripts before upload.
 
 ---
 

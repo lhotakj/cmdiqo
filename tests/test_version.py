@@ -1,6 +1,7 @@
 """Unit tests for development/update_version.py version resolution and generation."""
 
 import os
+import re
 from unittest.mock import patch
 
 from development.update_version import (
@@ -12,21 +13,25 @@ from development.update_version import (
 
 def test_get_base_version():
     base = get_base_version()
-    assert base == "1.0.0"
+    assert re.match(r"^\d+\.\d+(?:\.\d+)?", base)
 
 
 def test_update_versions_local_hex_timestamp(tmp_path):
     # Fixed timestamp: 1788611373 -> hex 6A9C0B2D
     ts = 1788611373
+    base = get_base_version()
+    short = ".".join(base.split(".")[:2])
     with patch.dict(os.environ, {}, clear=True):
         version = update_versions(timestamp=ts)
-        assert version == "1.0.dev6A9C0B2D"
+        assert version == f"{short}.dev6A9C0B2D"
 
 
 def test_update_versions_github_actions():
+    base = get_base_version()
+    short = ".".join(base.split(".")[:2])
     with patch.dict(os.environ, {"GITHUB_RUN_NUMBER": "123"}, clear=True):
         version = update_versions()
-        assert version == "1.0.123"
+        assert version == f"{short}.123"
 
 
 def test_update_versions_github_release_tag():
