@@ -49,11 +49,13 @@ nothing to expose, TLS handled for you. Ideal for a home server.
 
 ```
 .
-├── Dockerfile                      # all-in-one image (python + arp-scan + docker CLI)
-├── docker-compose.yml              # ready-to-run compose file
+├── docker/
+│   ├── Dockerfile                  # all-in-one image (python + arp-scan + docker CLI)
+│   ├── docker-compose.yml          # ready-to-run compose file
+│   └── docker-compose.example.yml  # standalone deployment compose template
 ├── requirements.txt
-├── build.ps1                       # native Windows build wrapper
-├── build.sh                        # native Linux/macOS build wrapper
+├── build.ps1                       # local Windows build script (agent binary + bot Docker)
+├── build.sh                        # local Linux/macOS build script (agent binary + bot Docker)
 ├── bot/
 │   ├── app.py                      # Slack app, dispatch, auth
 │   ├── hub.py                      # WebSocket hub for remote agents
@@ -65,8 +67,6 @@ nothing to expose, TLS handled for you. Ideal for a home server.
 │   ├── install-service.ps1         # Windows service installer
 │   └── install-service.sh          # Linux systemd service installer
 ├── development/                    # build machinery, versioning, environment setup
-│   ├── build.ps1                   # local PowerShell build script
-│   ├── build.sh                    # local Bash build script
 │   ├── build_agent.py              # PyInstaller & Authenticode signer
 │   ├── update_version.py           # semantic & dev hex timestamp versioning
 │   ├── setup-env.ps1               # Windows venv setup
@@ -126,33 +126,37 @@ SLACK_APP_TOKEN=xapp-your-app-token
 
 Edit `config/commands.yaml` to define your commands and aliases (see **Adding your own commands** below). The defaults give you:
 
-| You type in Slack                  | What happens                                             |
-|------------------------------------|----------------------------------------------------------|
-| `/lan devices list`                | ARP-scans the LAN, prints IP / MAC / vendor table        |
-| `/lan wake 00:11:22:33:44:55`      | Sends Wake-on-LAN magic packet to boot a device          |
-| `/lan ping 192.168.1.1`            | Pings a device or IP from the Hub container              |
-| `/lan agents list`                 | Lists connected agents, operating systems, and IPs       |
-| `/lan version`                     | Displays bot version                                     |
-| `/host <host> uptime`              | System uptime & boot time (Linux & Windows)              |
-| `/host <host> memory`              | Free and used RAM memory (Linux & Windows)               |
-| `/host <host> disk`                | Disk space and drive usage (Linux & Windows)             |
-| `/host <host> top`                 | Top CPU-consuming processes (Linux & Windows)            |
-| `/host <host> reboot`              | Safely reboots remote machine (Linux & Windows)          |
-| `/host <host> shutdown`            | Safely shuts down remote machine (Linux & Windows)        |
-| `/host <host> services`            | Lists active running system services (Linux & Windows)   |
-| `/host <host> service status <svc>`| Queries service status (Linux systemd / Windows SCM)     |
-| `/host <host> service restart <svc>`| Restarts system service (Linux systemd / Windows SCM)   |
-| `/host <host> docker ps`           | Lists running docker containers                          |
-| `/host <host> docker logs <svc>`   | Tails last 50 log lines of a docker container            |
-| `/host <host> docker restart <svc>`| Restarts docker compose project in `/docker/<svc>`       |
-| `/host <host> docker stats`        | Snapshot of container CPU, RAM, and network usage        |
-| `/host <host> win updates`         | Queries installed Windows hotfixes on Windows agent      |
-| `/host <host> parental on`         | Blocks YouTube, Roblox, Minecraft, & Discord in hosts, flushes DNS (Win/Linux)|
-| `/host <host> parental off`        | Unblocks YouTube, Roblox, Minecraft, & Discord in hosts, flushes DNS          |
-| `/host <host> parental status`     | Displays active parental blocking status (Win/Linux)     |
-| `/wol 00:11:22:33:44:55`           | *(alias)* auto-translates to `/lan wake ...`             |
-| `/home docker ps`                  | *(alias)* auto-translates to `/host home docker ps`      |
-| `/lan` or `/host` (no arguments)   | Built-in help showing commands and configured aliases    |
+| You type in Slack                  | Target / Platform       | What happens                                             |
+|------------------------------------|-------------------------|----------------------------------------------------------|
+| `/lan devices list`                | Local container         | ARP-scans the LAN, prints IP / MAC / vendor table        |
+| `/lan wake <target>`               | Local container         | Sends Wake-on-LAN magic packet to boot a device (MAC/IP) |
+| `/lan ping <host>`                 | Local container         | Pings a device or IP from the Hub container              |
+| `/lan agents list`                 | Hub registry            | Lists connected agents, operating systems, and IPs       |
+| `/lan version`                     | Local container         | Displays bot version                                     |
+| `/host <host> users`               | Remote host (All OS)    | Lists all local OS users (active ✔️ or locked 🚫)         |
+| `/host <host> user <user> status`  | Remote host (All OS)    | Shows user profile info, status, and active session time |
+| `/host <host> user <user> disable` | Remote host (All OS)    | Locks / disables user account login                      |
+| `/host <host> user <user> enable`  | Remote host (All OS)    | Unlocks / enables user account login                     |
+| `/host <host> uptime`              | Remote host (Linux/Win) | System uptime & boot time                                |
+| `/host <host> memory`              | Remote host (Linux/Win) | Free and used physical RAM memory                        |
+| `/host <host> disk`                | Remote host (Linux/Win) | Filesystem and drive usage breakdown                     |
+| `/host <host> top`                 | Remote host (Linux/Win) | Top CPU-consuming processes                              |
+| `/host <host> reboot`              | Remote host (Linux/Win) | Safely reboots remote machine                            |
+| `/host <host> shutdown`            | Remote host (Linux/Win) | Safely shuts down remote machine                         |
+| `/host <host> services`            | Remote host (Linux/Win) | Lists active running system services                     |
+| `/host <host> service status <svc>`| Remote host (Linux/Win) | Queries service status (systemd / Windows SCM)           |
+| `/host <host> service restart <svc>`| Remote host (Linux/Win)| Restarts system service (systemd / Windows SCM)          |
+| `/host <host> docker ps`           | Remote host (Linux)     | Lists running docker containers                          |
+| `/host <host> docker logs <svc>`   | Remote host (Linux)     | Tails last 50 log lines of a docker container            |
+| `/host <host> docker restart <svc>`| Remote host (Linux)     | Restarts docker compose project in `/docker/<svc>`       |
+| `/host <host> docker stats`        | Remote host (Linux)     | Snapshot of container CPU, RAM, and network usage        |
+| `/host <host> win updates`         | Remote host (Windows)   | Queries 10 most recent installed Windows hotfixes/updates|
+| `/host <host> parental on`         | Remote host (Linux/Win) | Blocks configured domains in hosts file & flushes DNS    |
+| `/host <host> parental off`        | Remote host (Linux/Win) | Unblocks configured domains in hosts file & flushes DNS  |
+| `/host <host> parental status`     | Remote host (Linux/Win) | Displays active parental blocking status & domain count  |
+| `/wol <target>`                    | *(alias)*               | Auto-translates to `/lan wake <target>`                  |
+| `/home <command>`                  | *(alias)*               | Auto-translates to `/host home <command>`                |
+| `/help [topic]`                    | Bot App                 | Interactive manual with nested topics (`lan`, `docker`...)|
 
 > The bot also understands the same commands typed **without** the leading
 > slash as plain channel messages (e.g. `lan devices list` or `home docker ps`),
@@ -219,7 +223,12 @@ slack [#general] @U0123ABCDEF > /host AMD uptime
 ## 4. Run with Docker Compose
 
 ```bash
-docker compose up -d --build
+# In the cloned repository:
+docker compose -f docker/docker-compose.yml up -d
+docker compose -f docker/docker-compose.yml logs -f cmdiqo-bot
+
+# Or standalone using docker/docker-compose.example.yml:
+docker compose up -d
 docker compose logs -f cmdiqo-bot
 ```
 
@@ -236,7 +245,7 @@ Notes on the compose file:
   **host** Docker daemon (this is equivalent to root on the host — see Security).
 - `/docker` is mounted at the same path so `cwd: /docker/{service}` works. If
   your compose projects live elsewhere, adjust both the mount and `cwd`.
-- `./config` is mounted read-only: edit commands without rebuilding the image,
+- `./config` is mounted read-only to `/config`: edit commands without rebuilding the image,
   then restart the container (`docker compose restart`).
 
 Plain `docker run` equivalent:
@@ -249,8 +258,8 @@ docker run -d --name cmdiqo-bot --restart unless-stopped \
   -e ALLOWED_USERS=U0123ABCDEF \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v /docker:/docker \
-  -v "$PWD/config:/app/config:ro" \
-  youruser/cmdiqo-bot:latest
+  -v "$PWD/config:/config:ro" \
+  lhotakj/cmdiqo-bot:latest
 ```
 
 ## 4. Interactive Help & Adding Your Own Commands
@@ -268,7 +277,22 @@ Cmdiqo features a built-in, dynamically generated command manual:
 
 ### Adding Your Own Commands (`config/commands.yaml`)
 
-Everything is data-driven via `config/commands.yaml`, supporting top-level `aliases:` and `commands:`. You can specify rich metadata (`category`, `details`, `examples`) which automatically feeds into the `/help` engine:
+Everything is data-driven via `config/commands.yaml`, supporting top-level `aliases:` and `commands:`. Commands are designed to be **OS-agnostic**, using a unified `command:` element that specifies what to execute across platforms:
+
+#### Command Structure & OS Agnosticism
+
+Each command entry contains:
+- `name`: Unique identifier for logging and reply headers.
+- `trigger`: Slack trigger pattern. Any trigger containing `{host}` automatically targets that host agent; triggers without `{host}` (like `/lan ...`) run locally in the bot container. **No redundant `target: "{host}"` is needed.**
+- `description` & `details`: Summary and detailed operational notes shown in Slack `/help`.
+- `examples`: Copy-pasteable invocation examples for documentation and `/help`.
+- `command` *(mandatory)*: Mapping of execution commands supporting up to three kinds:
+  - `python`: Function path inside the `bot` package (e.g. `commands.users:manage_users`). **Executes on any OS.**
+  - `shell`: Bash command string. **Executes on Linux agents (or local container).**
+  - `ps1`: PowerShell command string. **Executes on Windows agents.**
+  - **Dual `shell` + `ps1`**: For cross-platform host commands, define both! Cmdiqo inspects the target agent's reported OS platform and automatically dispatches `shell` to Linux agents and `ps1` to Windows agents.
+- `config` *(optional)*: Arbitrary configuration object (dictionary, list, or primitive) accessible to command handlers or parameterized in execution strings via `{config.<key>}` (for example, `config.domains: [list]`).
+- `timeout` *(optional)*: Execution timeout in seconds (default: 120s).
 
 ```yaml
 aliases:
@@ -282,45 +306,60 @@ aliases:
       - "/home uptime"
 
 commands:
+  # Linux-only command (only shell defined)
   - name: host-docker-logs
-    category: docker
     trigger: "/host {host} docker logs {service}"
     description: "Tail last 50 log lines of a docker container"
     details: "Fetches recent standard output and error logs via 'docker logs --tail 50 {service}'."
     examples:
       - "/host home docker logs pihole"
       - "/host home docker logs plex"
-    kind: shell
-    target: "{host}"
-    run: "docker logs --tail 50 {service}"
+    command:
+      shell: "docker logs --tail 50 {service}"
     timeout: 60
 
-  # Cross-platform command example (Linux & Windows)
+  # Cross-platform OS-agnostic command (both shell and ps1 defined)
   - name: host-uptime
-    category: system
     trigger: "/host {host} uptime"
     description: "Show system uptime and load average"
     details: "Displays system uptime. Runs 'uptime' on Linux or queries Win32_OperatingSystem via PowerShell on Windows."
     examples:
       - "/host home uptime"
       - "/host AMD uptime"
-    kind: shell
-    target: "{host}"
-    run: "uptime"
-    windows_kind: ps1
-    windows_run: "$b = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime; $u = (Get-Date) - $b; 'Uptime: {0}d {1}h {2}m {3}s (Booted: {4:yyyy-MM-dd HH:mm:ss})' -f [int]$u.TotalDays, $u.Hours, $u.Minutes, $u.Seconds, $b"
+    command:
+      shell: "uptime"
+      ps1: "$b = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime; $u = (Get-Date) - $b; 'Uptime: {0}d {1}h {2}m {3}s (Booted: {4:yyyy-MM-dd HH:mm:ss})' -f [int]$u.TotalDays, $u.Hours, $u.Minutes, $u.Seconds, $b"
+
+  # Command with general config (e.g. custom domain list for parental control)
+  - name: host-parental
+    trigger: "/host {host} parental {action}"
+    description: "Manage parental domain blocking on Windows or Linux (on | off | status)"
+    details: "Configures system-level hosts file blocking on target Windows or Linux agent. Redirects configured domains to 0.0.0.0 and flushes DNS cache."
+    examples:
+      - "/host AMD parental on"
+      - "/host nas parental on"
+    command:
+      python: "commands.parental:manage_parental"
+    config:
+      domains:
+        - youtube.com
+        - roblox.com
+        - minecraft.net
+        - discord.com
 ```
 
-### Python Command
+### Python Command Handlers
 
-Point `handler` at `module.function` inside the `bot` package:
+Python commands can execute on any OS. Point `python:` at `module.function` inside the `bot` package:
 
 ```yaml
 - name: lan-whois
   trigger: "/lan whois {ip}"
   description: "Reverse-DNS lookup of an IP"
-  kind: python
-  handler: "commands.network:reverse_dns"
+  command:
+    python: "commands.network:reverse_dns"
+  config:
+    default_timeout: 5
 ```
 
 `bot/commands/network.py`:
@@ -328,9 +367,11 @@ Point `handler` at `module.function` inside the `bot` package:
 ```python
 import socket
 
-def reverse_dns(params):
+def reverse_dns(params, config=None):
     ip = params["ip"]
+    timeout = config.get("default_timeout", 5) if config else 5
     try:
+        socket.setdefaulttimeout(timeout)
         return f"{ip} -> {socket.gethostbyaddr(ip)[0]}"
     except Exception as e:
         return f"{ip} -> no PTR record ({e})"
@@ -389,7 +430,7 @@ The agent supports 3 configuration methods with the following precedence:
 |---|---|---|---|---|
 | `-u`, `--hub-url` | `HUB_URL` | `hub_url` | *(required)* | WebSocket URL of the hub (e.g. `ws://192.168.1.10:8765`) |
 | `-t`, `--token` | `AGENT_TOKEN` | `token` | *(required)* | Shared secret matching the hub's `AGENT_TOKEN` |
-| `-n`, `--name` | `AGENT_NAME` | `name` | Hostname | Unique name for this agent, used in `target:` commands |
+| `-n`, `--name` | `AGENT_NAME` | `name` | Hostname | Unique name for this agent, matched by `/host {host} ...` commands |
 | `-c`, `--config` | `AGENT_CONFIG` | — | `None` | Path to JSON config file (e.g. `/etc/cmdiqo-agent/agent.json`) |
 | `-d`, `--reconnect-delay` | `RECONNECT_DELAY` | `reconnect_delay` | `5.0` | Initial reconnect delay in seconds (uses exponential backoff) |
 | `--log-level` | `LOG_LEVEL` | — | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
@@ -518,32 +559,35 @@ aliases:
     output: "/host home"
 
 commands:
-  # Linux agent (or local fallback)
+  # OS-agnostic host storage check (runs df -h on Linux, Get-CimInstance on Windows)
   - name: host-disk
     trigger: "/host {host} disk"
     description: "Check storage on host"
-    kind: shell
-    target: "{host}"
-    run: "df -h"
+    command:
+      shell: "df -h"
+      ps1: 'Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID, VolumeName, @{Name=''Total_GB'';Expression={[math]::Round($_.Size/1GB,2)}}, @{Name=''Free_GB'';Expression={[math]::Round($_.FreeSpace/1GB,2)}}, @{Name=''Used_GB'';Expression={[math]::Round(($_.Size - $_.FreeSpace)/1GB,2)}} | Format-Table -AutoSize'
 
-  # Windows agent, dynamically targeting the specified host
-  - name: host-win-reboot
-    trigger: "/host {host} win reboot"
-    description: "Reboot a Windows PC"
-    kind: ps1
-    target: "{host}"
-    run: "shutdown /r /t 10 /c 'Reboot requested from Slack'"
+  # Windows-only updates inspection
+  - name: host-win-updates
+    trigger: "/host {host} win updates"
+    description: "Installed Windows hotfixes on host"
+    command:
+      ps1: "Get-CimInstance Win32_QuickFixEngineering | Sort-Object InstalledOn -Descending | Select-Object -First 10 HotFixID, InstalledOn | Format-Table -AutoSize"
+    timeout: 180
 
-  - name: host-win-shutdown
-    trigger: "/host {host} win shutdown"
-    description: "Shutdown a Windows PC"
-    kind: ps1
-    target: "{host}"
-    run: "shutdown /s /t 10 /c 'Shutdown requested from Slack'"
+  # Cross-platform host reboot
+  - name: host-reboot
+    trigger: "/host {host} reboot"
+    description: "Reboot host after warning"
+    command:
+      shell: "shutdown -r +1 'Reboot requested from Slack'"
+      ps1: "shutdown /r /t 10 /c 'Reboot requested from Slack'"
+    timeout: 60
 ```
 
-Typing `/host PC-OLO win reboot` in Slack runs that PowerShell command on the agent named `PC-OLO` and streams the output back into the Slack thread.
-Or typing `/home docker ps` translates via the configured alias to `/host home docker ps`.
+Typing `/host PC-OLO reboot` in Slack safely reboots the machine whether it runs Windows or Linux.
+Typing `/host PC-OLO win updates` executes the PowerShell query on the Windows agent and returns the output to Slack.
+Typing `/home docker ps` translates via alias to `/host home docker ps` and queries Docker containers on host `home`.
 
 ### Built-in System Commands
 - `/lan agents list` (or `/host agents list`) in Slack at any time to see every connected agent, its operating system, version, connection uptime, and LAN IP address.
@@ -571,8 +615,13 @@ to `main` and every `v*` tag.
 ### Manual push (without CI)
 
 ```bash
-docker build -t youruser/cmdiqo-bot:latest .
+# Direct Docker build:
+docker build -t youruser/cmdiqo-bot:latest -f docker/Dockerfile .
 docker push youruser/cmdiqo-bot:latest
+
+# Or using repository build scripts:
+./build.sh --bot          # Linux / macOS
+.\build.ps1 -Target Bot   # Windows
 ```
 
 ## Environment variable reference
@@ -584,7 +633,7 @@ docker push youruser/cmdiqo-bot:latest
 | `ALLOWED_USERS`    | no       | *(everyone)*           | Comma-separated Slack user IDs allow-list |
 | `ALLOWED_CHANNELS` | no       | *(every channel)*      | Comma-separated channel IDs allow-list    |
 | `SHELL_TIMEOUT`    | no       | `120`                  | Default shell command timeout (seconds)   |
-| `COMMANDS_CONFIG`  | no       | `/app/config/commands.yaml` | Path to commands YAML                |
+| `COMMANDS_CONFIG`  | no       | `/config/commands.yaml` | Path to commands YAML                |
 | `AGENT_TOKEN`      | no (recommended) | *(empty)*      | Shared secret for hub agent connections         |
 | `HUB_ENABLED`      | no       | `true`                 | Enable/disable the agent hub                          |
 | `HUB_HOST`         | no       | `0.0.0.0`              | Hub bind address                                      |
@@ -616,7 +665,7 @@ docker push youruser/cmdiqo-bot:latest
 | `cwd` errors for `/host home docker ...` / `/home ...` | Mount the host directory (e.g. `/docker:/docker`) so the `cwd` path exists. |
 | Changes to `commands.yaml` ignored | Restart the container: `docker compose restart`. |
 | `/lan agents list` shows no agents | Check `AGENT_TOKEN` matches on both sides; check `HUB_URL` host/port and that the hub port is reachable on the LAN (`Test-NetConnection 192.168.1.10 -Port 8765`). |
-| `agent 'x' is not connected` | Agent not running / failed auth / wrong `AGENT_NAME` (`target:` must equal the agent's name). |
+| `agent 'x' is not connected` | Agent not running / failed auth / wrong `AGENT_NAME` (the `{host}` parameter in the command must match the agent's name). |
 | `ps1` on Windows: "executable not found" | PowerShell is in PATH on Windows by default; if using PowerShell Core on Linux install `pwsh`. |
 
 ## Development, Testing & Code Quality

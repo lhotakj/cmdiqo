@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from bot.hub import Hub
@@ -183,10 +183,14 @@ exit 1
 """
 
 
-async def manage_users(params: dict[str, str], hub: Hub | None = None) -> str:
+async def manage_users(
+    params: dict[str, Any],
+    hub: Hub | None = None,
+    config: dict[str, Any] | None = None,
+) -> str:
     """Handle /host {host} users and /host {host} user {user} [status|disable|enable] requests."""
-    host = params.get("host", "").strip()
-    username = params.get("user", "").strip()
+    host = str(params.get("host", "")).strip()
+    username = str(params.get("user", "")).strip()
 
     # Deduce action based on params or text
     action = params.get("action", "").lower().strip()

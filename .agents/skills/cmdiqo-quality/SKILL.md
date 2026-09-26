@@ -86,24 +86,26 @@ python run.py sim -c "/host AMD uptime" # Non-interactive single-command executi
 
 When adding a new command in `config/commands.yaml`:
 
-1. **Trigger & Help Metadata Definition:**
+1. **Trigger & Host Targeting:**
    - Use clear prefixes: `/lan` for local network queries, `/host` for host and remote operations (e.g. `/host {host} service restart {name}`).
    - Define custom shortcuts in the top-level `aliases:` section (e.g. mapping `input: "/home"` to `output: "/host home"`).
    - Use `{param}` for dynamic arguments (e.g. `/host {host} docker restart {service}`).
-   - **Enrich for Help Engine**: Provide `category` (`lan`, `system`, `services`, `docker`, `windows`), `description` (short one-liner), `details` (operational notes), and `examples` (copy-pasteable examples). These dynamically populate the Slack `/help` and `/help <category>` interactive manual.
-2. **Backend Kind & Cross-Platform Execution:**
-   - **Host-Agnostic / Cross-Platform Commands:** When a command can run on both Linux and Windows agents (e.g., uptime, memory, disk, top, reboot, services):
-     - Specify `run: "linux command"` with `kind: shell` (default).
-     - Specify `windows_run: "powershell command"` with `windows_kind: ps1`.
-     - `execute_command()` automatically checks the agent's reported OS platform (`hub.agents[target]["platform"]`) and switches to `windows_run` / `windows_kind` on Windows.
-     - Common Linux commands (`uptime`, `free -h`, `df -h`, `ps aux`) automatically fallback to PowerShell via `WINDOWS_COMMAND_FALLBACKS` even without explicit `windows_run`.
-   - `kind: python`: For internal bot logic. Must define `handler: "module.submodule:function"`. If the function accepts a `hub` keyword argument, the running `Hub` instance is injected automatically.
-   - `kind: shell`: Executes locally in the container or on a Linux agent.
-   - `kind: ps1`: Executes PowerShell on a Windows agent. Must specify `target: "{host}"`.
-3. **Execution Limits:**
+   - **Target Resolution**: Triggers containing `{host}` automatically target that host agent without needing a redundant `target: "{host}"`. Triggers without `{host}` execute locally.
+   - **Help Discovery**: Categories are automatically inferred (`lan`, `docker`, `services`, `windows`, `system`). Provide `description` (short one-liner), `details` (operational notes), and `examples` (copy-pasteable examples) to populate the Slack `/help` and `/help <category>` interactive manual.
+2. **OS-Agnostic `command` Mapping (`python | shell | ps1`):**
+   - Each command object MUST contain a mandatory `command:` mapping:
+     - `command.python`: Pure Python handler executed in the bot container or remote agent (e.g. `"commands.devices:list_devices"`). Receives `params`, `hub`, and `config`.
+     - `command.shell`: Shell command string executed on Linux agents (or locally in the bot container).
+     - `command.ps1`: PowerShell command string executed on Windows agents.
+   - **Dual OS-Agnostic Execution**: If both `shell` and `ps1` are specified, Cmdiqo inspects the remote agent's reported OS platform (`hub.agents[host]["platform"]`) and dispatches the appropriate command dialect dynamically.
+   - **Single OS Restriction**: If only `shell` is provided, attempting to execute on a Windows agent yields an unsupported OS error. If only `ps1` is provided, attempting to execute on a Linux agent yields an unsupported OS error.
+3. **General `config` Object:**
+   - Any command can define a `config:` dictionary containing arbitrary primitives, lists, or nested maps (e.g. `config.domains: [list]`).
+   - Referenced in commands via `{config.<key>}` or passed directly to Python handlers.
+4. **Execution Limits:**
    - Always define an explicit `timeout` in seconds (e.g., `timeout: 180`).
-4. **Validation:**
-   - Write a corresponding unit test in `tests/test_commands.py` verifying that the trigger regex matches valid inputs and rejects malicious characters.
+5. **Validation:**
+   - Write a corresponding unit test in `tests/test_commands.py` verifying that the trigger regex matches valid inputs, validates the `command` mapping, and rejects malicious characters.
 
 ---
 
@@ -123,10 +125,10 @@ sonar.python.version=3.12,3.13
 
 ## 5. Build Machinery, Dynamic Versioning & Signing Protocols
 
-All build and maintenance scripts are centralized in `development/`:
-- `development/update_version.py`: Resolves version and propagates to `version.txt`, `short_version.txt`, `agent/_version.py`, `bot/_version.py`, and `agent/version_info.txt`.
+All build and maintenance scripts are organized across the repository:
+- `build.ps1` & `build.sh`: Local native build scripts at the repository root.
+- `development/update_version.py`: Resolves version and propagates to `version.txt`, `short_version.txt`, and bundled `_version.py` / `__version__.py` modules across `agent`, `bot`, and `slacksim`.
 - `development/build_agent.py`: Unified standalone compiler (PyInstaller, UPX, Authenticode signer).
-- `development/build.ps1` & `development/build.sh`: Local build scripts. Root `build.ps1` and `build.sh` forward to them.
 
 ### Versioning Rules:
 - **CI Builds (GitHub Actions):** Derived dynamically as `<major>.<minor>.<GITHUB_RUN_NUMBER>` (e.g. `1.0.42`).

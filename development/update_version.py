@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 """Synchronize and propagate version information across Cmdiqo.
 
-Version resolution:
-- Reads version.template (e.g. 1.0.0).
-- If running in GitHub Actions (GITHUB_RUN_NUMBER is present):
-    VERSION = <major>.<minor>.<GITHUB_RUN_NUMBER> (e.g. 1.0.42)
-- If running locally (GITHUB_RUN_NUMBER is not present):
+Single Source of Truth:
+- version.txt in the repository root holds the true baseline version (e.g. 1.0.0).
+
+Build Version Resolution:
+- On GitHub Actions (GITHUB_RUN_NUMBER or GITHUB_RUN_ID is present):
+    VERSION = <major>.<minor>.<BUILD_ID> (e.g. 1.0.42)
+- On Local Builds (GitHub build ID not present):
     VERSION = <major>.<minor>.dev<HEX_TIMESTAMP> (e.g. 1.0.dev6A9C0B2D)
-- Propagates version to:
-    * version.txt
-    * short_version.txt
-    * agent/_version.py & bot/_version.py
-    * agent/version_info.txt (Windows PE resource metadata for PyInstaller)
+- Explicit override via --version:
+    VERSION = <override_version>
+
+Propagates the resolved build version to:
+- agent/_version.py
+- bot/_version.py
+- slacksim/_version.py
+- agent/version_info.txt (Windows PE resource manifest for PyInstaller)
 """
 
 from __future__ import annotations
@@ -23,9 +28,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-TEMPLATE_FILE = ROOT / "version.template"
 VERSION_TXT = ROOT / "version.txt"
-SHORT_VERSION_TXT = ROOT / "short_version.txt"
 AGENT_VERSION_PY = ROOT / "agent" / "_version.py"
 BOT_VERSION_PY = ROOT / "bot" / "_version.py"
 SLACKSIM_VERSION_PY = ROOT / "slacksim" / "_version.py"
@@ -33,9 +36,12 @@ AGENT_VERSION_INFO = ROOT / "agent" / "version_info.txt"
 
 
 def get_base_version() -> str:
-    """Read base version from version.template."""
-    if TEMPLATE_FILE.exists():
-        raw = TEMPLATE_FILE.read_text(encoding="utf-8").strip()
+    """Read base version from version.txt (the single source of truth)."""
+    if VERSION_TXT.exists():
+        raw = VERSION_TXT.read_text(encoding="utf-8").strip()
+        m = re.match(r"^(\d+\.\d+(?:\.\d+)?)", raw)
+        if m:
+            return m.group(1)
         if raw:
             return raw
     return "1.0.0"
@@ -85,15 +91,28 @@ VSVersionInfo(
 
 
 def update_versions(
-    override_version: str | None = None, timestamp: int | None = None
+    override_version: str | None = None,
+    timestamp: int | None = None,
+    silent: bool = False,
 ) -> str:
-    """Resolve version and propagate to all files."""
+    """Resolve build version and propagate to internal Python modules and PE metadata."""
     base = get_base_version()
     parts = base.split(".")
     major = parts[0] if len(parts) > 0 else "1"
     minor = parts[1] if len(parts) > 1 else "0"
 
-    github_run = os.environ.get("GITHUB_RUN_NUMBER")
+    github_ref_name = os.environ.get("GITHUB_REF_NAME", "")
+    github_ref_type = os.environ.get("GITHUB_REF_TYPE", "")
+    github_run = (
+        os.environ.get("GITHUB_RUN_NUMBER")
+        or os.environ.get("GITHUB_RUN_ID")
+        or os.environ.get("BUILD_ID")
+    )
+
+    # If triggered by a release tag in GitHub Actions (e.g. v1.1.0 or 1.1.0)
+    tag_match = re.match(r"^v?(\d+\.\d+(?:\.\d+)?.*)$", github_ref_name)
+    if not override_version and github_ref_type == "tag" and tag_match:
+        override_version = tag_match.group(1)
 
     if override_version:
         version = override_version.strip()
@@ -102,12 +121,12 @@ def update_versions(
             digits.append(0)
         pe_tuple = (digits[0], digits[1], digits[2], digits[3])
     elif github_run:
-        # CI build: third number is GitHub build run number
+        # CI build on GitHub Actions: third number (patch) is taken from GitHub build ID
         version = f"{major}.{minor}.{github_run}"
-        run_num = int(github_run)
+        run_num = int(re.sub(r"\D", "", str(github_run)) or "0")
         pe_tuple = (int(major), int(minor), run_num & 0xFFFF, 0)
     else:
-        # Local build: third component uses hex Linux timestamp and dev prefix
+        # Local build: third component keeps dev+timestamp (hex / base16)
         ts = int(time.time()) if timestamp is None else timestamp
         hex_ts = f"{ts:X}"
         version = f"{major}.{minor}.dev{hex_ts}"
@@ -115,28 +134,29 @@ def update_versions(
 
     short_version = f"{major}.{minor}"
 
-    # 1. Write version.txt & short_version.txt
-    VERSION_TXT.write_text(f"{version}\n", encoding="utf-8")
-    SHORT_VERSION_TXT.write_text(f"{short_version}\n", encoding="utf-8")
-
-    # 2. Write Python version files
+    # Write Python runtime version files (_version.py)
     py_content = (
         "# Generated automatically by development/update_version.py. Do not edit manually.\n"
         f'__version__ = "{version}"\n'
     )
-    AGENT_VERSION_PY.write_text(py_content, encoding="utf-8")
-    BOT_VERSION_PY.write_text(py_content, encoding="utf-8")
-    SLACKSIM_VERSION_PY.write_text(py_content, encoding="utf-8")
+    for py_file in (
+        AGENT_VERSION_PY,
+        BOT_VERSION_PY,
+        SLACKSIM_VERSION_PY,
+    ):
+        py_file.write_text(py_content, encoding="utf-8")
 
-    # 3. Write Windows PE version_info.txt
+    # Write Windows PE version_info.txt
     AGENT_VERSION_INFO.write_text(
         generate_version_info_txt(version, pe_tuple), encoding="utf-8"
     )
 
-    print(
-        f"\033[0;32m[INFO]\033[0m Version synchronized: \033[34m{version}\033[0m (Short: {short_version})"
-    )
-    print(f"\033[0;32m[INFO]\033[0m PE Tuple: {pe_tuple}")
+    if not silent:
+        print(
+            f"\033[0;32m[INFO]\033[0m Version synchronized: \033[34m{version}\033[0m (Short: {short_version})"
+        )
+        print(f"\033[0;32m[INFO]\033[0m PE Tuple: {pe_tuple}")
+
     return version
 
 
@@ -150,9 +170,19 @@ def main() -> None:
         action="store_true",
         help="Force development build with hex timestamp (default for local builds)",
     )
+    parser.add_argument(
+        "--print-version",
+        action="store_true",
+        help="Print only the resolved version string to stdout",
+    )
     args = parser.parse_args()
 
-    update_versions(override_version=args.version)
+    version = update_versions(
+        override_version=args.version,
+        silent=args.print_version,
+    )
+    if args.print_version:
+        print(version)
 
 
 if __name__ == "__main__":

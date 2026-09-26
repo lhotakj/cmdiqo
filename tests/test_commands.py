@@ -80,12 +80,47 @@ def test_load_commands_valid_file():
     # Verify no legacy /home commands remain in commands:
     assert not any(t.startswith("/home") for t in triggers)
 
-    # Verify cross-platform Windows specs
+    # Verify cross-platform OS-agnostic specs (contain both shell and ps1)
     specs_by_name = {c["spec"]["name"]: c["spec"] for c in commands}
-    for name in ("host-uptime", "host-memory", "host-disk", "host-top", "host-reboot", "host-shutdown", "host-services"):
+    for name in (
+        "host-uptime",
+        "host-memory",
+        "host-disk",
+        "host-top",
+        "host-reboot",
+        "host-shutdown",
+        "host-services",
+        "host-service-status",
+        "host-service-restart",
+    ):
         assert name in specs_by_name
-        assert "windows_run" in specs_by_name[name]
-        assert specs_by_name[name].get("windows_kind") == "ps1"
+        cmd = specs_by_name[name]["command"]
+        assert "shell" in cmd
+        assert "ps1" in cmd
+
+    # Verify no target or category in commands.yaml
+    for c in commands:
+        spec = c["spec"]
+        assert "target" not in spec, f"Found target in command '{spec.get('name')}'"
+        assert "category" not in spec, f"Found category in command '{spec.get('name')}'"
+
+    # Verify parental command with general config.domains list
+    assert "host-parental" in specs_by_name
+    parental_spec = specs_by_name["host-parental"]
+    assert "command" in parental_spec
+    assert parental_spec["command"]["python"] == "commands.parental:manage_parental"
+    assert "config" in parental_spec
+    assert isinstance(parental_spec["config"], dict)
+    assert "domains" in parental_spec["config"]
+    assert isinstance(parental_spec["config"]["domains"], list)
+    assert len(parental_spec["config"]["domains"]) >= 50
+    assert "youtube.com" in parental_spec["config"]["domains"]
+
+    # Verify unified user commands
+    assert "host-users" in specs_by_name
+    assert specs_by_name["host-users"]["command"]["python"] == "commands.users:manage_users"
+    assert "host-user" in specs_by_name
+    assert specs_by_name["host-user"]["trigger"] == "/host {host} user {user} {action}"
 
 
 def test_load_commands_nonexistent_file():

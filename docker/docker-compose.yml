@@ -1,7 +1,9 @@
 services:
   cmdiqo-bot:
-    image: ${DOCKERHUB_USER:-your-dockerhub-user}/cmdiqo-bot:latest
-    build: .
+    image: lhotakj/cmdiqo-bot:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     container_name: cmdiqo-bot
     restart: unless-stopped
 
@@ -37,4 +39,4 @@ services:
       # Needed if your cwd paths (e.g. /docker/{service}) live on the host.
       - /docker:/docker
       # Mount your own command config here to customize without rebuilding.
-      - ./config:/app/config:ro
+      - ../config:/config:ro

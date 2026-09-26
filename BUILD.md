@@ -2,7 +2,7 @@
 
 This guide covers:
 1. **Local Environment Setup**: Automated environment activation via `.direnv` or PowerShell.
-2. **Local Build System**: Unified native build scripts (`build.ps1` / `build.sh`) located in `development/` for standalone binaries and Docker images.
+2. **Local Build System**: Unified native build scripts (`build.ps1` / `build.sh`) located at the repository root for standalone binaries and Docker images.
 3. **Dynamic Versioning System**: Semantic versioning with GitHub Actions CI run numbers and hexadecimal Linux timestamp dev versions.
 4. **Windows Authenticode Digital Signing & Trust**: How executables are signed, timestamped, and trusted across machines.
 5. **GitHub Actions CI/CD & Secrets Guide**: Step-by-step tutorial for hosted builds, secrets configuration, and artifact downloads.
@@ -62,32 +62,42 @@ python run.py sim
 
 ## 2. Dynamic Versioning System
 
-Version numbers are maintained centrally and dynamically propagated across the codebase:
+The **single, true, and ONLY file** holding the version in the entire repository is:
+$$\mathbf{version.txt}$$
+
+All redundant template and temporary text files (`version.template`, `short_version.txt`) have been completely eliminated.
 
 ```text
-version.template (e.g. 1.0.0)
+version.txt (e.g. 1.0.0) — Single Source of Truth
        │
        ▼
 development/update_version.py
        │
-       ├──► version.txt               (e.g. 1.0.42 in CI or 1.0.dev6A9C0B2D locally)
-       ├──► short_version.txt         (e.g. 1.0)
-       ├──► agent/_version.py         (__version__ in Python agent)
-       ├──► bot/_version.py           (__version__ in Python bot)
-       └──► agent/version_info.txt    (Windows PE resource manifest for PyInstaller)
+       ├──► agent/_version.py                          (bundled in PyInstaller & agent binary)
+       ├──► bot/_version.py                            (bundled in Docker container & bot package)
+       ├──► slacksim/_version.py                        (bundled in simulator package)
+       └──► agent/version_info.txt                     (Windows PE resource manifest for PyInstaller)
 ```
 
+> [!NOTE]
+> All applications (`bot`, `agent`, and `slacksim`) bundle their version information directly via internal Python module **`_version.py`**. They never require or read `version.txt` at runtime. `version.txt` in the root is strictly the developer's source of truth.
+
 ### Version Resolution Rules:
-1. **Base Version (`version.template`):** Defines the `<major>.<minor>.<patch>` baseline (e.g., `1.0.0`).
+
+1. **Base Version (`version.txt`):**
+   Defines the `<major>.<minor>.<patch>` baseline (e.g., `1.0.0`).
+
 2. **CI Builds (GitHub Actions):**
-   - When running under GitHub Actions, the `GITHUB_RUN_NUMBER` environment variable is automatically detected.
-   - The third number is replaced with the GitHub run number:
-     $$\text{VERSION} = \langle\text{major}\rangle.\langle\text{minor}\rangle.\langle\text{GITHUB\_RUN\_NUMBER}\rangle$$
-     *(Example: `1.0.42` for run #42)*.
+   - When building on GitHub Actions (`GITHUB_RUN_NUMBER` or `GITHUB_RUN_ID` is present), the third part of the version (patch) is automatically taken from the **GitHub build ID**:
+     $$\text{VERSION} = \langle\text{major}\rangle.\langle\text{minor}\rangle.\langle\text{BUILD\_ID}\rangle$$
+     *(Example: `1.0.42` for GitHub Actions run #42)*.
+
 3. **Local Builds (Developer Machine):**
-   - When running locally (where `GITHUB_RUN_NUMBER` is not present), the build system takes the current Linux timestamp (seconds since Unix epoch), formats it as an uppercase **Hexadecimal** string, and prefixes it with `.dev`:
+   - When building locally (outside GitHub Actions), the build system keeps the current **`dev+timestamp`** format: the current Unix timestamp is encoded as an uppercase **hexadecimal** (base16) string:
      $$\text{VERSION} = \langle\text{major}\rangle.\langle\text{minor}\rangle.\text{dev}\langle\text{HEX\_TIMESTAMP}\rangle$$
      *(Example: If timestamp is `1788611373`, its hex representation is `6A9C0B2D`, resulting in `1.0.dev6A9C0B2D`)*.
+   - Hexadecimal formatting is fully compliant with PEP 440, Windows PE headers, and Docker image tag naming constraints (which disallow special base64 characters like `+`, `/`, and `=`).
+
 4. **Windows PE Executable Metadata (`version_info.txt`):**
    - Windows PE binary headers require fixed 16-bit unsigned integers (`0`–`65535`) in `filevers=(major, minor, patch, build)`. For local dev builds, the lower 16 bits of the timestamp (`ts & 0xFFFF`) populate the binary tuple, while the full string (`1.0.dev6A9C0B2D`) is written to `FileVersion` and `ProductVersion`.
    - Right-clicking `cmdiqo-agent.exe` $\rightarrow$ Properties $\rightarrow$ Details shows:
@@ -96,25 +106,58 @@ development/update_version.py
      - **Product name:** `Cmdiqo Agent`
      - **Legal copyright:** `Copyright (c) 2026 Jaroslav Lhotak. Verified GitHub build.`
 
-### Manual Version Synchronization:
-To manually synchronize version numbers across all files without compiling:
-```bash
-python development/update_version.py
-```
-Or with an explicit override:
-```bash
-python development/update_version.py --version 1.2.0
-```
+---
+
+### How to Bump or Update the Version (e.g. from 1.0 to 1.1)
+
+To change or bump the version, you only touch **ONE** file:
+
+#### Step-by-Step Workflow:
+
+1. **Edit `version.txt`**:
+   Update `version.txt` to the new `<major>.<minor>.<patch>` baseline:
+   ```text
+   1.1.0
+   ```
+
+2. **Propagate the Version (Optional / Automatic)**:
+   Run the updater script or any build command:
+   ```bash
+   python development/update_version.py
+   # Or run: .\build.ps1 / ./build.sh
+   ```
+   This automatically synchronizes:
+   - **`agent/_version.py`** $\rightarrow$ `__version__ = "1.1..."` (bundled into agent binary)
+   - **`bot/_version.py`** $\rightarrow$ `__version__ = "1.1..."` (bundled into Docker container)
+   - **`slacksim/_version.py`** $\rightarrow$ `__version__ = "1.1..."` (bundled into simulator)
+   - **`agent/version_info.txt`** $\rightarrow$ Windows PE binary manifest metadata
+
+3. **Commit the Baseline Change**:
+   ```bash
+   git add version.txt
+   git commit -m "Bump version to 1.1.0 /release"
+   git push origin main
+   ```
+
+#### One-Off Version Override (Without Changing `version.txt`):
+If you want to test-build an ad-hoc version without modifying `version.txt`:
+- **Python script**: `python development/update_version.py --version 1.2.0`
+- **PowerShell**: `.\build.ps1 -Version "1.2.0"`
+- **Bash**: `./build.sh -v 1.2.0`
 
 ---
 
 ## 3. Local Build System
 
-All build machinery resides in `development/`, with root-level wrapper scripts (`build.ps1` and `build.sh`) provided for developer convenience.
+Cmdiqo provides unified, self-contained native build scripts located at the repository root:
+- `build.ps1` for Windows (PowerShell)
+- `build.sh` for Linux, macOS, and WSL (Bash)
+
+Supporting utilities (`build_agent.py`, `update_version.py`, certificates, and environment setup scripts) reside in `development/`.
 
 ### Building on Windows (PowerShell)
 
-Use `.\build.ps1` (or `.\development\build.ps1`):
+Run `.\build.ps1`:
 
 ```powershell
 # 1. Build standalone Windows agent executable (dist\cmdiqo-agent.exe):
@@ -127,44 +170,75 @@ Use `.\build.ps1` (or `.\development\build.ps1`):
 .\build.ps1 -Clean -Version "1.2.0"
 
 # 4. Build both agent executable and bot Docker container:
-.\build.ps1 -Target All
+.\build.ps1 -All
 
 # 5. Build bot Docker container only:
-.\build.ps1 -Target Bot
+.\build.ps1 -Bot
+
+# 6. Build and push multi-arch Docker container:
+.\build.ps1 -Bot -Push
 ```
 
 #### Parameters for `build.ps1`:
-- `-Target <Agent|Bot|All>`: Target component to build (default: `Agent`).
-- `-Version <string>`: Explicit version string override.
+- `-Agent`: Switch to build standalone Windows agent executable (default).
+- `-Bot`: Switch to build `cmdiqo-bot` Docker container image.
+- `-All`: Switch to build both standalone agent binary and bot container.
+- `-Target <Agent|Bot|All>`: Explicit target selection parameter.
+- `-Version, -v <string>`: Explicit version string override (e.g. `1.2.0`).
+- `-Dev`: Force development build format `<major>.<minor>.dev<HEX>`.
+- `-Clean`: Clean `build/` and `dist/` directories before compiling.
 - `-SkipSign`: Skip Authenticode digital signing on Windows.
-- `-CopyTo <path>`: Automatically copy built executable to destination path.
-- `-Clean`: Remove `build/` and `dist/` directories before compiling.
+- `-CopyTo <path>`: Automatically copy built executable to destination path upon completion.
+- `-Push`: Build and push multi-architecture Docker image to registry (`linux/amd64,linux/arm64`).
+- `-DockerUser <string>`: Docker Hub registry namespace/username (defaults to `$env:DOCKERHUB_USERNAME` or `lhotakj`).
+- `-Help, -h, -?`: Display detailed usage instructions.
 
 ### Building on Linux / macOS / WSL (Bash)
 
-Use `./build.sh` (or `./development/build.sh`):
+Run `./build.sh`:
 
 ```bash
 # 1. Build standalone Linux agent binary (dist/cmdiqo-agent):
 ./build.sh
 
-# 2. Build with explicit version:
-./build.sh -v 1.2.0
+# 2. Build with explicit version and clean artifacts:
+./build.sh -v 1.2.0 --clean
 
 # 3. Build Docker container for cmdiqo-bot:
 ./build.sh --bot
 
 # 4. Build both standalone agent and Docker bot:
 ./build.sh --all
+
+# 5. Build and push multi-arch Docker container:
+./build.sh --bot --push
 ```
 
 #### Parameters for `build.sh`:
-- `--agent`: Build standalone agent binary (default).
-- `--bot`: Build Docker container for `cmdiqo-bot`.
+- `--agent, -a`: Build standalone agent binary (default).
+- `--bot, -b, --docker`: Build Docker container for `cmdiqo-bot`.
 - `--all`: Build both agent binary and bot container.
+- `--target <agent|bot|all>`: Explicit target selection parameter.
+- `-v, --version <string>`: Explicit version override (e.g. `1.2.0`).
 - `--dev`: Force development build format `<major>.<minor>.dev<HEX>`.
-- `--push`: Build and push multi-architecture Docker image to registry.
-- `-v, --version <string>`: Explicit version override.
+- `--clean`: Clean `build/` and `dist/` directories before compiling.
+- `--skip-sign`: Skip digital signing on Windows environments.
+- `--copy-to <path>`: Automatically copy built binary to destination path upon completion.
+- `--push`: Build and push multi-architecture Docker image to registry (`linux/amd64,linux/arm64`).
+- `--docker-user <string>`: Docker Hub registry namespace/username (defaults to `$DOCKERHUB_USERNAME` or `lhotakj`).
+- `-h, --help`: Display detailed usage instructions.
+
+### Building Container with Docker CLI & Compose
+
+You can also build the `cmdiqo-bot` container directly using Docker or Docker Compose:
+
+```bash
+# Build locally with Docker CLI:
+docker build -t lhotakj/cmdiqo-bot:latest -f docker/Dockerfile .
+
+# Or build using Docker Compose:
+docker compose -f docker/docker-compose.yml build
+```
 
 ---
 
@@ -276,20 +350,48 @@ If you own a commercial Authenticode `.pfx` certificate:
 
 ---
 
-### 4. How to Trigger Builds & Download Binaries
+### 4. Release Automation & Trigger Flags
 
-#### Automated Trigger
-Pushing any commit to the `main` branch automatically triggers CI tests and binary builds.
+Cmdiqo CI/CD uses smart commit-message trigger commands to control formal releases, GitHub Release tag generation, binary asset uploads, and Docker Hub image publishing:
 
-#### Manual Trigger (On Demand)
-1. Go to your GitHub repository $\rightarrow$ click the **Actions** tab.
-2. In the left sidebar, click **Build Agent Binaries (Windows & Linux x64)**.
-3. Click **Run workflow** $\rightarrow$ select branch `main` $\rightarrow$ click **Run workflow**.
+| Commit Flag | Action Taken | Artifacts & Destination |
+| :--- | :--- | :--- |
+| **`/release-agent`** | Builds standalone agent binaries on Linux and Windows x64. | Creates/updates GitHub Release tag (`v<version>`) and uploads `cmdiqo-agent-windows-x64.zip` and `cmdiqo-agent-linux-x64.zip`. |
+| **`/release-bot`** | Builds multi-arch Docker image for `cmdiqo-bot`. | Creates/updates GitHub Release tag (`v<version>`) and pushes multi-arch image (`linux/amd64,linux/arm64`) to Docker Hub (`:latest`, `:<version>`, `:<major>.<minor>`). |
+| **`/release`** | **Executes both** agent build/release and bot build/release in parallel. | Full production release: GitHub Release tag + agent `.zip` assets + Docker Hub container push. |
+
+#### Usage Examples in Git Commits:
+```bash
+# 1. Release both Agent and Bot using base version from version.txt:
+git commit -m "chore: release version 1.1.0 /release"
+git push origin main
+
+# 2. Release Agent only:
+git commit -m "feat(agent): support new telemetry metrics /release-agent"
+git push origin main
+
+# 3. Release Bot only and publish to Docker Hub:
+git commit -m "feat(hub): add wake-on-lan slash command /release-bot"
+git push origin main
+
+# 4. Release with an explicit version override directly in the commit message:
+git commit -m "chore: prepare hotfix release /release v1.1.1"
+git push origin main
+```
+
+> [!TIP]
+> **Standard Commits (No Flags):**
+> Pushing regular commits (without `/release*`) runs continuous integration tests and linting (`ci.yml`) in seconds, without triggering PyInstaller compilation or pushing unwanted intermediate images to Docker Hub.
+
+#### Automated Decision via Commit Message:
+The GitHub Actions build pipelines do not use manual configuration menus or dropdown options. Every workflow evaluates the commit message of the commit being pushed to `main`:
+- If the commit message contains `/release-agent` $\rightarrow$ Agent binaries are built, signed, and published to GitHub Releases.
+- If the commit message contains `/release-bot` $\rightarrow$ Bot Docker image is built and pushed to Docker Hub, and GitHub Release tag is created.
+- If the commit message contains `/release` $\rightarrow$ Both Agent and Bot are built, released to GitHub, and pushed to Docker Hub.
+- If none of the flags are found $\rightarrow$ Workflows exit immediately without compiling binaries, tagging releases, or publishing Docker images.
 
 #### Downloading Built Binaries:
-1. Click the completed workflow run.
-2. Scroll to the bottom to **Artifacts**:
-   - **`cmdiqo-agent-windows-x64`**: Complete zip bundle containing signed `cmdiqo-agent.exe` (and `cmdiqo-agent-windows-x64.exe`), `install-service.ps1`, `uninstall-service.ps1`, `agent.env.example`, `agent.json.example`, and Authenticode certificate (`cmdiqo-agent.cer`).
-   - **`cmdiqo-agent-linux-x64`**: Complete zip bundle containing `cmdiqo-agent` binary, `install-service.sh`, `uninstall-service.sh`, `cmdiqo-agent.service`, and configuration examples.
-   - **`cmdiqo-agent-windows-x64-zip` / `cmdiqo-agent-linux-x64-zip`**: Direct `.zip` package archives for distribution.
-3. Click to download the `.zip` archive.
+1. Navigate to **Releases** on GitHub (`https://github.com/<user>/Cmdiqo/releases`):
+   - Every `/release-agent` or `/release` run attaches `cmdiqo-agent-windows-x64.zip` and `cmdiqo-agent-linux-x64.zip` to the release.
+2. Or open any completed workflow run under the **Actions** tab:
+   - Scroll to **Artifacts** to download build packages directly.

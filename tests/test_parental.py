@@ -233,3 +233,50 @@ async def test_run_local_bash_errors():
         err_rc = await _run_local_bash("echo test")
         assert "permission denied" in err_rc
 
+
+@pytest.mark.asyncio
+async def test_manage_parental_with_custom_config_domains():
+    custom_domains = ["custom-game.net", "custom-video.com", "social-distraction.app"]
+    cfg = {"domains": custom_domains}
+
+    # Test Linux agent execution with custom config
+    mock_hub = MagicMock()
+    mock_hub.agents = {"nas": {"platform": "Linux/6.1.0"}}
+    captured_cmd = []
+
+    async def mock_exec(host, kind, cmd, timeout=60):
+        captured_cmd.append((host, kind, cmd))
+        return "SUCCESS:on:3"
+
+    mock_hub.exec = AsyncMock(side_effect=mock_exec)
+
+    res = await manage_parental({"host": "nas", "action": "on"}, hub=mock_hub, config=cfg)
+    assert "Parental controls ENABLED on `nas`" in res
+    assert "**Blocked:** 3 domains" in res
+    assert len(captured_cmd) == 1
+    host, kind, script = captured_cmd[0]
+    assert host == "nas"
+    assert kind == "shell"
+    for d in custom_domains:
+        assert f"0.0.0.0 {d}" in script
+
+    # Test Windows agent execution with custom config
+    mock_hub.agents = {"winpc": {"platform": "Windows/11"}}
+    captured_cmd.clear()
+
+    async def mock_win_exec(host, kind, cmd, timeout=60):
+        captured_cmd.append((host, kind, cmd))
+        return "SUCCESS:on:3"
+
+    mock_hub.exec = AsyncMock(side_effect=mock_win_exec)
+
+    res_win = await manage_parental({"host": "winpc", "action": "on"}, hub=mock_hub, config=cfg)
+    assert "Parental controls ENABLED on `winpc`" in res_win
+    assert len(captured_cmd) == 1
+    win_host, win_kind, win_script = captured_cmd[0]
+    assert win_host == "winpc"
+    assert win_kind == "ps1"
+    for d in custom_domains:
+        assert f"'{d}'" in win_script
+
+

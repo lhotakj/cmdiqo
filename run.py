@@ -119,6 +119,7 @@ Commands:
     {COLOR_GREEN}hub{COLOR_RESET}            Start the Cmdiqo Bot & WebSocket Hub only
     {COLOR_GREEN}agent{COLOR_RESET}          Start the Cmdiqo Remote Agent only
     {COLOR_GREEN}sim, slacksim{COLOR_RESET}  Start the interactive Slack emulator (no Slack tokens needed)
+    {COLOR_GREEN}-v, --version{COLOR_RESET}  Show bundled application version and exit
     {COLOR_GREEN}-h, --help{COLOR_RESET}     Show this help message and exit
 
 Examples:
@@ -246,6 +247,11 @@ def main() -> None:
 
     if cmd in ("-h", "--help", "help"):
         print_usage()
+        sys.exit(0)
+    elif cmd in ("-v", "--version", "version"):
+        from bot.app import get_version
+
+        print(f"Cmdiqo v{get_version()}")
         sys.exit(0)
     elif cmd == "hub":
         sys.exit(run_single(ROOT / "bot" / "app.py", "Hub", remaining))

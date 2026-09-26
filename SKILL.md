@@ -45,10 +45,10 @@ The interactive simulator supports full line editing: **Up/Down arrows** for his
 
 ## Build Machinery & Versioning Protocols
 
-All build and maintenance scripts are centralized in `development/`:
-- `development/update_version.py`: Resolves version and propagates to `version.txt`, `short_version.txt`, `agent/_version.py`, `bot/_version.py`, and `agent/version_info.txt`.
+All build and maintenance scripts are organized across the repository:
+- `build.ps1` & `build.sh`: Local native build scripts at the repository root.
+- `development/update_version.py`: Resolves version from `version.txt` and propagates to bundled `_version.py` / `__version__.py` modules across `agent`, `bot`, and `slacksim`.
 - `development/build_agent.py`: Unified standalone compiler (PyInstaller, UPX, Authenticode signer).
-- `development/build.ps1` & `development/build.sh`: Local build scripts. Root `build.ps1` and `build.sh` forward to them.
 
 ### Dynamic Versioning Rules:
 - **CI Builds (GitHub Actions):** Derived dynamically as `<major>.<minor>.<GITHUB_RUN_NUMBER>` (e.g. `1.0.42`).
@@ -73,35 +73,29 @@ aliases:
 commands:
   # Cross-platform command (Linux & Windows)
   - name: host-uptime
-    category: system
     trigger: "/host {host} uptime"
     description: "Show system uptime"
     details: "Runs uptime on Linux or queries Win32_OperatingSystem on Windows."
     examples:
       - "/host home uptime"
       - "/host AMD uptime"
-    kind: shell
-    target: "{host}"
-    run: "uptime"
-    windows_kind: ps1
-    windows_run: "$b = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime; $u = (Get-Date) - $b; 'Uptime: {0}d {1}h {2}m {3}s (Booted: {4:yyyy-MM-dd HH:mm:ss})' -f [int]$u.TotalDays, $u.Hours, $u.Minutes, $u.Seconds, $b"
+    command:
+      shell: "uptime"
+      ps1: "$b = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime; $u = (Get-Date) - $b; 'Uptime: {0}d {1}h {2}m {3}s (Booted: {4:yyyy-MM-dd HH:mm:ss})' -f [int]$u.TotalDays, $u.Hours, $u.Minutes, $u.Seconds, $b"
 
   - name: host-service-restart
-    category: services
     trigger: "/host {host} service restart {service}"
     description: "Restart a system service on host"
     details: "Issues systemctl restart on Linux or Restart-Service on Windows."
     examples:
       - "/host lab service restart nginx"
       - "/host AMD service restart Spooler"
-    kind: shell
-    target: "{host}"
-    run: "systemctl restart {service}"
-    windows_kind: ps1
-    windows_run: "Restart-Service -Name '{service}' -Force; Get-Service -Name '{service}' | Select-Object Name, DisplayName, Status"
+    command:
+      shell: "systemctl restart {service}"
+      ps1: "Restart-Service -Name '{service}' -Force; Get-Service -Name '{service}' | Select-Object Name, DisplayName, Status"
     timeout: 60
 ```
-> **Help Discovery**: The `category`, `description`, `details`, and `examples` fields dynamically feed into the Slack `/help` and `/help <category>` interactive manual.
+> **Command Resolution & Help Discovery**: Triggers containing `{host}` automatically target that host agent (no redundant `target: "{host}"`). The `command` mapping dynamically selects `shell` on Linux agents and `ps1` on Windows agents. Category is automatically inferred (or can be explicitly set), feeding into Slack `/help` and `/help <category>`. Arbitrary command configuration is supported under `config:`.
 
 Always add corresponding unit tests in `tests/`.
 

@@ -4,10 +4,11 @@ Uses Slack Socket Mode (outbound WebSocket only) so no ports need to be exposed
 to the internet. Also embeds a Hub server: LAN agents (Windows/Linux) connect
 OUTBOUND to the hub so you can run commands on any host from Slack.
 
-Commands are defined in a YAML file and can run:
-  - python  - a Python function inside the container
-  - shell   - a command locally in the container, or on a Linux agent (target:)
-  - ps1     - a PowerShell command on a Windows agent (requires target:)
+Commands are defined in a YAML file under `command:` mappings:
+  - python  - a Python function inside the container or on a remote agent
+  - shell   - a shell command on Linux agents (or local container)
+  - ps1     - a PowerShell command on Windows agents
+Commands with both `shell` and `ps1` run cross-platform based on agent OS.
 """
 
 from __future__ import annotations
@@ -40,9 +41,13 @@ log = logging.getLogger("cmdiqo-bot")
 MAX_BLOCK = 3500  # Slack message limit is ~4000 chars
 SAFE_PARAM_RE = re.compile(r"^[a-zA-Z0-9_\-\.:]+$")
 DEFAULT_COMMANDS_CONFIG = (
-    "/app/config/commands.yaml"
-    if os.path.exists("/app/config/commands.yaml")
-    else "config/commands.yaml"
+    "/config/commands.yaml"
+    if os.path.exists("/config/commands.yaml")
+    else (
+        "/app/config/commands.yaml"
+        if os.path.exists("/app/config/commands.yaml")
+        else "config/commands.yaml"
+    )
 )
 DEFAULT_SHELL_TIMEOUT = 120
 DEFAULT_HUB_PORT = 8765
@@ -50,7 +55,13 @@ DEFAULT_BIND_HOST = "0.0.0.0"  # nosec: B104
 
 
 def get_version() -> str:
-    """Return current bot version."""
+    """Return current bot version from bundled _version.py module."""
+    try:
+        from bot._version import __version__
+
+        return __version__
+    except ImportError:
+        pass
     try:
         from ._version import __version__
 
@@ -58,12 +69,15 @@ def get_version() -> str:
     except ImportError:
         pass
     try:
-        from bot._version import __version__
+        from _version import __version__
 
         return __version__
     except ImportError:
         pass
     return "1.0.0"
+
+
+__version__ = get_version()
 
 
 class BotConfigurationError(ValueError):
@@ -123,7 +137,7 @@ class BotConfig:
     def from_env(cls) -> BotConfig:
         """Load configuration cleanly from environment variables and config files without import-time side effects."""
         config_notify = False
-        for cfg_file in ("config.json", "config/config.json", os.getenv("CONFIG_FILE", "")):
+        for cfg_file in ("/config/config.json", "config.json", "config/config.json", os.getenv("CONFIG_FILE", "")):
             if cfg_file and os.path.exists(cfg_file):
                 try:
                     with open(cfg_file, "r", encoding="utf-8") as fh:
@@ -201,10 +215,34 @@ def load_commands(path: str) -> list[dict[str, Any]]:
     with open(path, "r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
 
+    global_config = data.get("config")
     commands: list[dict[str, Any]] = []
     for spec in data.get("commands", []):
         spec.setdefault("name", spec["trigger"])
         spec.setdefault("description", "")
+        if "config" not in spec and global_config is not None:
+            spec["config"] = global_config
+
+        # Normalize and validate 'command' mapping
+        if "command" not in spec:
+            cmd_map: dict[str, str] = {}
+            kind = spec.get("kind")
+            if kind == "python" and spec.get("handler"):
+                cmd_map["python"] = spec["handler"]
+            elif kind == "shell" and spec.get("run"):
+                cmd_map["shell"] = spec["run"]
+            elif kind == "ps1" and spec.get("run"):
+                cmd_map["ps1"] = spec["run"]
+            if spec.get("windows_run"):
+                cmd_map["ps1"] = spec["windows_run"]
+            spec["command"] = cmd_map
+        elif isinstance(spec["command"], str):
+            spec["command"] = {"shell": spec["command"]}
+        elif not isinstance(spec["command"], dict):
+            raise ValueError(
+                f"Command '{spec.get('name')}' has invalid 'command' field; must be mapping of python | shell | ps1."
+            )
+
         commands.append({"spec": spec, "regex": trigger_to_regex(spec["trigger"])})
     log.info("Loaded %d command(s) from %s", len(commands), path)
     return commands
@@ -256,33 +294,48 @@ def apply_aliases(text: str, aliases: list[dict[str, str]]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _run_python(spec: dict[str, Any], params: dict[str, str]) -> str:
-    module_name, func_name = spec["handler"].split(":", 1)
+def _run_python(spec: dict[str, Any], params: dict[str, Any]) -> str:
+    handler = spec.get("handler")
+    if not handler and isinstance(spec.get("command"), dict):
+        handler = spec["command"].get("python")
+    if not handler:
+        raise ValueError(f"No python handler defined for command '{spec.get('name')}'")
+    module_name, func_name = handler.split(":", 1)
     module = importlib.import_module(f"bot.{module_name}")
     func = getattr(module, func_name)
     return str(func(params))
 
 
 async def _run_python_handler(
-    spec: dict[str, Any], params: dict[str, str], hub: Hub | None = None
+    spec: dict[str, Any], params: dict[str, Any], hub: Hub | None = None
 ) -> str:
-    """Execute a Python handler function, passing hub if accepted and awaiting if coroutine."""
-    module_name, func_name = spec["handler"].split(":", 1)
+    """Execute a Python handler function, passing hub and config if accepted and awaiting if coroutine."""
+    handler = spec.get("handler")
+    if not handler and isinstance(spec.get("command"), dict):
+        handler = spec["command"].get("python")
+    if not handler:
+        raise ValueError(f"No python handler defined for command '{spec.get('name')}'")
+    module_name, func_name = handler.split(":", 1)
     module = importlib.import_module(f"bot.{module_name}")
     func = getattr(module, func_name)
 
     import inspect
 
-    merged_params = dict(params) if isinstance(params, dict) else params
-    if isinstance(merged_params, dict) and spec.get("name"):
+    merged_params = dict(params) if isinstance(params, dict) else {}
+    if spec.get("name"):
         merged_params["_spec_name"] = spec["name"]
-        if spec.get("trigger"):
-            merged_params["_spec_trigger"] = spec["trigger"]
+    if spec.get("trigger"):
+        merged_params["_spec_trigger"] = spec["trigger"]
+    if "config" in spec:
+        merged_params["_config"] = spec["config"]
+        merged_params["_spec_config"] = spec["config"]
 
     sig = inspect.signature(func)
     kwargs: dict[str, Any] = {}
     if "hub" in sig.parameters:
         kwargs["hub"] = hub
+    if "config" in sig.parameters:
+        kwargs["config"] = spec.get("config")
 
     if inspect.iscoroutinefunction(func):
         res = await func(merged_params, **kwargs)
@@ -291,16 +344,35 @@ async def _run_python_handler(
     return str(res)
 
 
-def format_params(template: str, params: dict[str, str]) -> str:
-    """Format template string by substituting only known parameter keys ({name}),
+def format_params(
+    template: str, params: dict[str, Any] | None = None, config: Any = None
+) -> str:
+    """Format template string by substituting parameter keys ({name}) and {config.<key>},
 
     leaving PowerShell scriptblocks (${...}) and format specifiers ({0}, {1:yyyy...}) intact.
     """
-    if not template or not params:
-        return template or ""
+    if not template:
+        return ""
+    if not params and not config:
+        return template
+
+    p_dict = params or {}
+
+    def _replace(m: re.Match[str]) -> str:
+        k = m.group(1)
+        if k in p_dict:
+            return str(p_dict[k])
+        if k.startswith("config.") and isinstance(config, dict):
+            sub_k = k[7:]
+            if sub_k in config:
+                return str(config[sub_k])
+        if k == "config" and config is not None and not isinstance(config, (dict, list)):
+            return str(config)
+        return m.group(0)
+
     return re.sub(
-        r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}",
-        lambda m: params[m.group(1)] if m.group(1) in params else m.group(0),
+        r"\{([a-zA-Z_][a-zA-Z0-9_\.]*)\}",
+        _replace,
         template,
     )
 
@@ -402,72 +474,101 @@ async def execute_command(
     hub: Hub | None = None,
     default_timeout: int = 120,
 ) -> str:
-    """Route a command to the container or to an agent when `target` is set."""
+    """Route a command to the container or to an agent, supporting OS-agnostic command definitions."""
     validate_params(params)
-    kind = spec["kind"]
-    raw_cmdline = spec.get("run")
+    config = spec.get("config")
     cwd = spec.get("cwd")
     if cwd:
-        cwd = format_params(cwd, params)
+        cwd = format_params(cwd, params, config=config)
     timeout = int(spec.get("timeout", default_timeout))
 
-    target = spec.get("target")
-    if target:
-        agent_name = format_params(target, params)
-        is_local_target = agent_name.lower() in (
-            "local",
-            "localhost",
-            "container",
-            "self",
-        )
-        is_home_unregistered = agent_name.lower() == "home" and (
-            hub is None
-            or not isinstance(getattr(hub, "agents", None), dict)
-            or "home" not in hub.agents
-        )
-        if is_local_target or is_home_unregistered:
-            if os.name == "nt":
-                if spec.get("windows_run"):
-                    raw_cmdline = spec["windows_run"]
-                    kind = spec.get("windows_kind", "ps1")
-                elif raw_cmdline in WINDOWS_COMMAND_FALLBACKS:
-                    kind, raw_cmdline = WINDOWS_COMMAND_FALLBACKS[raw_cmdline]
-            cmdline = format_params(raw_cmdline, params) if raw_cmdline else ""
-            if kind == "ps1":
+    # Extract command definitions
+    cmd_def = spec.get("command")
+    if isinstance(cmd_def, dict):
+        py_cmd = cmd_def.get("python")
+        sh_cmd = cmd_def.get("shell")
+        ps1_cmd = cmd_def.get("ps1")
+    elif isinstance(cmd_def, str):
+        py_cmd, sh_cmd, ps1_cmd = None, cmd_def, None
+    else:
+        # Legacy fallback
+        kind = spec.get("kind")
+        py_cmd = spec.get("handler") if kind == "python" else None
+        sh_cmd = spec.get("run") if kind == "shell" else None
+        ps1_cmd = spec.get("run") if kind == "ps1" else None
+        if spec.get("windows_run"):
+            ps1_cmd = spec["windows_run"]
+
+    # Target host determination:
+    # If spec has explicit target, format it; otherwise use params["host"].
+    agent_name = ""
+    if spec.get("target"):
+        agent_name = format_params(str(spec["target"]), params, config=config).strip()
+    elif "host" in params:
+        agent_name = str(params["host"]).strip()
+
+    is_local_target = agent_name.lower() in ("local", "localhost", "container", "self")
+    is_home_unregistered = agent_name.lower() == "home" and (
+        hub is None
+        or not isinstance(getattr(hub, "agents", None), dict)
+        or "home" not in hub.agents
+    )
+    is_local = (not agent_name) or is_local_target or is_home_unregistered
+
+    if is_local:
+        if py_cmd:
+            spec_copy = dict(spec)
+            spec_copy["handler"] = py_cmd
+            return await _run_python_handler(spec_copy, params, hub)
+
+        if not agent_name and ps1_cmd:
+            return "kind 'ps1' requires a 'target' pointing at a Windows agent"
+
+        if ps1_cmd and os.name == "nt":
+            cmdline = format_params(ps1_cmd, params, config=config)
+            return await asyncio.to_thread(_run_ps1_local, cmdline, cwd, timeout)
+
+        if sh_cmd:
+            if os.name == "nt" and sh_cmd in WINDOWS_COMMAND_FALLBACKS:
+                _, fallback_run = WINDOWS_COMMAND_FALLBACKS[sh_cmd]
+                cmdline = format_params(fallback_run, params, config=config)
                 return await asyncio.to_thread(_run_ps1_local, cmdline, cwd, timeout)
-            if kind == "shell":
-                return await asyncio.to_thread(_run_shell_local, cmdline, cwd, timeout)
-            if kind == "python":
-                return await _run_python_handler(spec, params, hub)
+            cmdline = format_params(sh_cmd, params, config=config)
+            return await asyncio.to_thread(_run_shell_local, cmdline, cwd, timeout)
 
-        if kind == "python":
-            return await _run_python_handler(spec, params, hub)
+        if ps1_cmd:
+            return "kind 'ps1' requires a 'target' pointing at a Windows agent"
 
-        if hub is None:
-            raise RuntimeError("hub is disabled (HUB_ENABLED=false)")
+        return f":warning: Command '{spec.get('name')}' has no executable command."
 
-        # Target is a remote agent connected to the hub
-        agents_registry = getattr(hub, "agents", None)
-        if isinstance(agents_registry, dict) and agent_name in agents_registry:
-            agent_info = agents_registry[agent_name]
-            platform_str = str(agent_info.get("platform", "")).lower()
-            if "win" in platform_str:
-                if spec.get("windows_run"):
-                    raw_cmdline = spec["windows_run"]
-                    kind = spec.get("windows_kind", "ps1")
-                elif raw_cmdline in WINDOWS_COMMAND_FALLBACKS:
-                    kind, raw_cmdline = WINDOWS_COMMAND_FALLBACKS[raw_cmdline]
+    # Remote agent execution
+    if py_cmd:
+        spec_copy = dict(spec)
+        spec_copy["handler"] = py_cmd
+        return await _run_python_handler(spec_copy, params, hub)
 
-        cmdline = format_params(raw_cmdline, params) if raw_cmdline else ""
-        return await hub.exec(agent_name, kind, cmdline, cwd=cwd, timeout=timeout)
+    if hub is None:
+        raise RuntimeError("hub is disabled (HUB_ENABLED=false)")
 
-    # Local command without target
-    cmdline = format_params(raw_cmdline, params) if raw_cmdline else ""
-    if kind == "ps1":
-        return "kind 'ps1' requires a 'target' pointing at a Windows agent"
-    if kind == "shell":
-        return await asyncio.to_thread(_run_shell_local, cmdline, cwd, timeout)
-    return await _run_python_handler(spec, params, hub)
+    agents_registry = getattr(hub, "agents", None)
+    agent_info = agents_registry.get(agent_name) if isinstance(agents_registry, dict) else None
+    platform_str = str(agent_info.get("platform", "")).lower() if agent_info else ""
+    is_windows_agent = "win" in platform_str
+
+    if is_windows_agent:
+        if ps1_cmd:
+            cmdline = format_params(ps1_cmd, params, config=config)
+            return await hub.exec(agent_name, "ps1", cmdline, cwd=cwd, timeout=timeout)
+        if sh_cmd and sh_cmd in WINDOWS_COMMAND_FALLBACKS:
+            _, fallback_run = WINDOWS_COMMAND_FALLBACKS[sh_cmd]
+            cmdline = format_params(fallback_run, params, config=config)
+            return await hub.exec(agent_name, "ps1", cmdline, cwd=cwd, timeout=timeout)
+        return "ℹ️ Sorry, this command is not available for the target OS"
+    else:
+        if sh_cmd:
+            cmdline = format_params(sh_cmd, params, config=config)
+            return await hub.exec(agent_name, "shell", cmdline, cwd=cwd, timeout=timeout)
+        return "ℹ️ Sorry, this command is not available for the target OS"
 
 
 # ---------------------------------------------------------------------------
@@ -509,6 +610,25 @@ BUILTIN_COMMANDS: list[dict[str, Any]] = [
 ]
 
 
+def get_spec_category(spec: dict[str, Any]) -> str:
+    """Infer category for command specification when category field is absent."""
+    if spec.get("category"):
+        return str(spec["category"]).lower()
+    trig = spec.get("trigger", "").lower()
+    if trig.startswith("/lan"):
+        return "lan"
+    if "docker" in trig:
+        return "docker"
+    if "service" in trig:
+        return "services"
+    cmd = spec.get("command") or {}
+    if isinstance(cmd, dict) and "ps1" in cmd and "shell" not in cmd and "python" not in cmd:
+        return "windows"
+    if "win " in trig:
+        return "windows"
+    return "system"
+
+
 def help_text(
     commands: list[dict[str, Any]],
     prefix: str | None = None,
@@ -545,14 +665,18 @@ def help_text(
         lines.append("\n*Quick Command Reference:*")
         categories: dict[str, list[dict[str, Any]]] = {}
         for s in all_specs:
-            cat = s.get("category", "other").lower()
+            cat = get_spec_category(s)
             categories.setdefault(cat, []).append(s)
 
         for cat, specs in categories.items():
             cat_header = CATEGORY_LABELS.get(cat, f"*{cat.upper()}*")
             lines.append(f"\n{cat_header}")
             for s in specs:
-                tgt = f" [on `{s['target']}`]" if s.get("target") else ""
+                tgt = (
+                    f" [on `{s['target']}`]"
+                    if s.get("target")
+                    else (" [on `{host}`]" if "{host}" in s.get("trigger", "") else "")
+                )
                 lines.append(f"• `{s['trigger']}`{tgt} — {s['description']}")
 
         lines.append(
@@ -564,7 +688,7 @@ def help_text(
     # 2. Filtered Topic / Category
     matching_specs: list[dict[str, Any]] = []
     for s in all_specs:
-        cat = s.get("category", "").lower()
+        cat = get_spec_category(s)
         trig = s["trigger"].lower()
         name = s.get("name", "").lower()
         desc = s.get("description", "").lower()
@@ -572,7 +696,7 @@ def help_text(
         # Match category, command prefix (e.g. /lan, /host), or keyword
         if (
             req_topic == cat
-            or (req_topic == "host" and s.get("target"))
+            or (req_topic == "host" and (s.get("target") or "{host}" in trig))
             or trig.startswith(f"/{req_topic} ")
             or trig == f"/{req_topic}"
             or req_topic in trig
@@ -596,7 +720,7 @@ def help_text(
 
     if req_topic == "home":
         for s in all_specs:
-            if s.get("target") and s not in matching_specs:
+            if (s.get("target") or "{host}" in s.get("trigger", "")) and s not in matching_specs:
                 matching_specs.append(s)
 
     if not matching_specs and not matching_aliases:
@@ -621,7 +745,11 @@ def help_text(
     if matching_specs:
         lines.append("\n*Commands:*")
         for s in matching_specs:
-            tgt = f" [on `{s['target']}`]" if s.get("target") else ""
+            tgt = (
+                f" [on `{s['target']}`]"
+                if s.get("target")
+                else (" [on `{host}`]" if "{host}" in s.get("trigger", "") else "")
+            )
             lines.append(f"• `{s['trigger']}`{tgt} — *{s['description']}*")
             if s.get("details"):
                 lines.append(f"  _{s['details']}_")
@@ -754,11 +882,11 @@ async def handle_command(
         m = c["regex"].match(text)
         if m:
             spec = c["spec"]
-            tgt = (
-                f" on `{format_params(spec['target'], m.groupdict())}`"
-                if spec.get("target")
-                else ""
+            target_name = (
+                m.groupdict().get("host")
+                or (format_params(spec["target"], m.groupdict()) if spec.get("target") else "")
             )
+            tgt = f" on `{target_name}`" if target_name else ""
             await post(f":hourglass_flowing_sand: Running `{spec['trigger']}`{tgt} ...")
             try:
                 output = await execute_command(
@@ -1052,6 +1180,9 @@ async def main() -> None:
 
 def run_main() -> None:
     """Entry point for cmdiqo-bot with preflight error handling and clean exit."""
+    if len(sys.argv) > 1 and sys.argv[1].lower() in ("-v", "--version", "version"):
+        print(f"cmdiqo-bot {get_version()}")
+        sys.exit(0)
     try:
         asyncio.run(main())
     except BotConfigurationError as exc:

@@ -7,18 +7,21 @@
 #
 # Each command entry:
 #   name        unique identifier (shown in logs/replies)
-#   trigger     what you type in Slack; {placeholders} capture a single word
+#   trigger     what you type in Slack; {placeholders} capture arguments
+#               (Commands containing {host} automatically target that host agent)
 #   description shown in the built-in help (type "/lan" or "/host" with no arguments)
-#   kind        "python" | "shell" | "ps1"
-#               - python: calls a function inside the container
-#               - shell : bash locally, or on a Linux/macOS agent if target is set
-#               - ps1   : PowerShell on a Windows agent (requires target)
-#   target      OPTIONAL agent name to run the command on (e.g. "{host}").
-#               Without target (or target: local), runs inside the bot container.
-#   run         command line; may use {placeholder} values
-#   cwd         OPTIONAL working directory (container path, or agent path if target set)
+#   details     operational notes displayed in "/help <topic>"
+#   examples    list of copy-pasteable command examples
+#   command     MANDATORY map of execution commands, supporting up to three kinds:
+#               - python: calls a function inside the bot package (runs on any OS)
+#               - shell : bash command (runs on Linux agent or local container)
+#               - ps1   : PowerShell command (runs on Windows agent)
+#               When both shell and ps1 are provided, the bot routes automatically
+#               based on the target agent's operating system platform.
+#   config      OPTIONAL arbitrary configuration object (dict, list, or primitive)
+#               accessible to handlers or parameterized in commands (e.g. config.domains)
+#   cwd         OPTIONAL working directory (container path, or agent path)
 #   timeout     OPTIONAL seconds, default: env SHELL_TIMEOUT (120)
-#   handler     (kind: python) "module.submodule:function" inside the bot package
 #
 # Built-in commands (not defined here): /lan agents list, /lan version
 # ============================================================================
@@ -46,345 +49,310 @@ aliases:
 commands:
   # ---- LAN operations (/lan) -----------------------------------------------
   - name: lan-devices-list
-    category: lan
     trigger: "/lan devices list"
     description: "List all devices seen on the local network (ARP scan)"
     details: "Performs an ARP broadcast scan on the local subnet via arp-scan. Returns IP addresses, MAC addresses, and resolved host names. Falls back to kernel neighbour table (ip neigh) if arp-scan is unavailable."
     examples:
       - "/lan devices list"
-    kind: python
-    handler: "commands.devices:list_devices"
+    command:
+      python: "commands.devices:list_devices"
 
   - name: lan-wake
-    category: lan
     trigger: "/lan wake {target}"
     description: "Send Wake-on-LAN magic packet to boot a machine"
     details: "Constructs and broadcasts a UDP magic packet (6x 0xFF followed by 16 repetitions of target MAC) on port 9. Target can be a MAC address (00:11:22:33:44:55) or an IP address (automatically resolved via local ARP cache). Target machine must have Wake-on-LAN enabled in BIOS/UEFI."
     examples:
       - "/lan wake 00:11:22:33:44:55"
       - "/lan wake 192.168.1.50"
-    kind: python
-    handler: "commands.devices:send_wake_on_lan"
+    command:
+      python: "commands.devices:send_wake_on_lan"
 
   - name: lan-ping
-    category: lan
     trigger: "/lan ping {host}"
     description: "Ping a host or IP from the Hub container"
     details: "Sends 3 ICMP echo request packets to verify network connectivity and latency to a local or remote host from the Cmdiqo container."
     examples:
       - "/lan ping 192.168.1.1"
       - "/lan ping nas.lan"
-    kind: python
-    handler: "commands.devices:ping_host"
+    command:
+      python: "commands.devices:ping_host"
 
-  # ---- Host-agnostic operations (/host <host> <action>) --------------------
-  # User Management
+  # ---- User Management (OS Agnostic) ---------------------------------------
   - name: host-users
-    category: system
     trigger: "/host {host} users"
     description: "List all OS users on {host} (active ✔️ or locked 🚫)"
     details: "Lists all local OS users on the target host indicating whether each user account is active (✔️) or locked (🚫)."
     examples:
       - "/host home users"
       - "/host AMD users"
-    kind: python
-    target: "{host}"
-    handler: "commands.users:manage_users"
+    command:
+      python: "commands.users:manage_users"
 
-  - name: host-user-status
-    category: system
-    trigger: "/host {host} user {user} status"
-    description: "Show user info, status (✔️/🚫), and session duration"
-    details: "Displays user profile details including full name, home directory, status (✔️ active or 🚫 locked), and active session duration (h, m, s)."
+  - name: host-user
+    trigger: "/host {host} user {user} {action}"
+    description: "Manage a user account on {host} (status | disable | enable)"
+    details: "Displays user details and session duration ('status'), locks account ('disable'), or unlocks account ('enable') on Windows or Linux target host."
     examples:
       - "/host home user john status"
       - "/host AMD user Administrator status"
-    kind: python
-    target: "{host}"
-    handler: "commands.users:manage_users"
-
-  - name: host-user-disable
-    category: system
-    trigger: "/host {host} user {user} disable"
-    description: "Lock / disable user account on {host}"
-    details: "Locks the specified user account (disables login) on target host."
-    examples:
       - "/host home user john disable"
-      - "/host AMD user tempuser disable"
-    kind: python
-    target: "{host}"
-    handler: "commands.users:manage_users"
-
-  - name: host-user-enable
-    category: system
-    trigger: "/host {host} user {user} enable"
-    description: "Unlock / enable user account on {host}"
-    details: "Unlocks and reactivates the specified user account on target host."
-    examples:
-      - "/host home user john enable"
       - "/host AMD user tempuser enable"
-    kind: python
-    target: "{host}"
-    handler: "commands.users:manage_users"
+    command:
+      python: "commands.users:manage_users"
 
-  # System Health & Performance
+  - name: host-user-status
+    trigger: "/host {host} user {user}"
+    description: "Show user info, status (✔️/🚫), and session duration"
+    details: "Displays user profile details including full name, home directory, status (✔️ active or 🚫 locked), and active session duration (h, m, s)."
+    examples:
+      - "/host home user john"
+      - "/host AMD user Administrator"
+    command:
+      python: "commands.users:manage_users"
+
+  # ---- System Health & Performance (OS Agnostic) ---------------------------
   - name: host-uptime
-    category: system
     trigger: "/host {host} uptime"
     description: "Show system uptime and load average"
     details: "Displays system uptime. Runs 'uptime' on Linux or queries Win32_OperatingSystem via PowerShell on Windows."
     examples:
       - "/host home uptime"
       - "/host AMD uptime"
-    kind: shell
-    target: "{host}"
-    run: "uptime"
-    windows_kind: ps1
-    windows_run: "$b = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime; $u = (Get-Date) - $b; 'Uptime: {0}d {1}h {2}m {3}s (Booted: {4:yyyy-MM-dd HH:mm:ss})' -f [int]$u.TotalDays, $u.Hours, $u.Minutes, $u.Seconds, $b"
+    command:
+      shell: "uptime"
+      ps1: "$b = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime; $u = (Get-Date) - $b; 'Uptime: {0}d {1}h {2}m {3}s (Booted: {4:yyyy-MM-dd HH:mm:ss})' -f [int]$u.TotalDays, $u.Hours, $u.Minutes, $u.Seconds, $b"
 
   - name: host-memory
-    category: system
     trigger: "/host {host} memory"
     description: "Show free and used RAM memory"
     details: "Displays total, free, and used physical RAM. Uses 'free -h' on Linux and PowerShell Win32_OperatingSystem on Windows."
     examples:
       - "/host home memory"
       - "/host AMD memory"
-    kind: shell
-    target: "{host}"
-    run: "free -h"
-    windows_kind: ps1
-    windows_run: "Get-CimInstance Win32_OperatingSystem | Select-Object @{Name='Total_GB';Expression={[math]::Round($_.TotalVisibleMemorySize/1MB,2)}}, @{Name='Free_GB';Expression={[math]::Round($_.FreePhysicalMemory/1MB,2)}}, @{Name='Used_GB';Expression={[math]::Round(($_.TotalVisibleMemorySize - $_.FreePhysicalMemory)/1MB,2)}}, @{Name='UsedPercent';Expression={[math]::Round((($_.TotalVisibleMemorySize - $_.FreePhysicalMemory)/$_.TotalVisibleMemorySize)*100,1)}} | Format-Table -AutoSize"
+    command:
+      shell: "free -h"
+      ps1: "Get-CimInstance Win32_OperatingSystem | Select-Object @{Name='Total_GB';Expression={[math]::Round($_.TotalVisibleMemorySize/1MB,2)}}, @{Name='Free_GB';Expression={[math]::Round($_.FreePhysicalMemory/1MB,2)}}, @{Name='Used_GB';Expression={[math]::Round(($_.TotalVisibleMemorySize - $_.FreePhysicalMemory)/1MB,2)}}, @{Name='UsedPercent';Expression={[math]::Round((($_.TotalVisibleMemorySize - $_.FreePhysicalMemory)/$_.TotalVisibleMemorySize)*100,1)}} | Format-Table -AutoSize"
 
   - name: host-disk
-    category: system
     trigger: "/host {host} disk"
     description: "Disk usage on {host}"
     details: "Reports filesystem and drive usage. Runs 'df -h' on Linux or queries Win32_LogicalDisk via PowerShell on Windows."
     examples:
       - "/host home disk"
       - "/host AMD disk"
-    kind: shell
-    target: "{host}"
-    run: "df -h"
-    windows_kind: ps1
-    windows_run: 'Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID, VolumeName, @{Name=''Total_GB'';Expression={[math]::Round($_.Size/1GB,2)}}, @{Name=''Free_GB'';Expression={[math]::Round($_.FreeSpace/1GB,2)}}, @{Name=''Used_GB'';Expression={[math]::Round(($_.Size - $_.FreeSpace)/1GB,2)}}, @{Name=''PercentFree'';Expression={[math]::Round(($_.FreeSpace/$_.Size)*100,1)}} | Format-Table -AutoSize'
+    command:
+      shell: "df -h"
+      ps1: 'Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID, VolumeName, @{Name=''Total_GB'';Expression={[math]::Round($_.Size/1GB,2)}}, @{Name=''Free_GB'';Expression={[math]::Round($_.FreeSpace/1GB,2)}}, @{Name=''Used_GB'';Expression={[math]::Round(($_.Size - $_.FreeSpace)/1GB,2)}}, @{Name=''PercentFree'';Expression={[math]::Round(($_.FreeSpace/$_.Size)*100,1)}} | Format-Table -AutoSize'
 
   - name: host-top
-    category: system
     trigger: "/host {host} top"
     description: "Top CPU-consuming processes on {host}"
     details: "Inspects running processes sorted by CPU usage. Uses 'ps aux' on Linux and Get-Process on Windows."
     examples:
       - "/host home top"
       - "/host AMD top"
-    kind: shell
-    target: "{host}"
-    run: "ps aux --sort=-%cpu | head -n 11"
-    windows_kind: ps1
-    windows_run: "Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 Id, ProcessName, @{Name='CPU_s';Expression={[math]::Round($_.CPU,2)}}, @{Name='RAM_MB';Expression={[math]::Round($_.WorkingSet/1MB,2)}} | Format-Table -AutoSize"
+    command:
+      shell: "ps aux --sort=-%cpu | head -n 11"
+      ps1: "Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 Id, ProcessName, @{Name='CPU_s';Expression={[math]::Round($_.CPU,2)}}, @{Name='RAM_MB';Expression={[math]::Round($_.WorkingSet/1MB,2)}} | Format-Table -AutoSize"
 
   - name: host-reboot
-    category: system
     trigger: "/host {host} reboot"
     description: "Reboot remote host after warning"
     details: "Safely reboots the remote host. Schedules shutdown on Linux or initiates shutdown warning on Windows."
     examples:
       - "/host home reboot"
       - "/host AMD reboot"
-    kind: shell
-    target: "{host}"
-    run: "shutdown -r +1 'Reboot requested from Slack'"
-    windows_kind: ps1
-    windows_run: "shutdown /r /t 10 /c 'Reboot requested from Slack'"
+    command:
+      shell: "shutdown -r +1 'Reboot requested from Slack'"
+      ps1: "shutdown /r /t 10 /c 'Reboot requested from Slack'"
     timeout: 60
 
   - name: host-shutdown
-    category: system
     trigger: "/host {host} shutdown"
     description: "Shutdown remote host after warning"
     details: "Safely shuts down the remote host. Schedules power off on Linux or initiates shutdown warning on Windows."
     examples:
       - "/host home shutdown"
       - "/host AMD shutdown"
-    kind: shell
-    target: "{host}"
-    run: "shutdown -h +1 'Shutdown requested from Slack'"
-    windows_kind: ps1
-    windows_run: "shutdown /s /t 10 /c 'Shutdown requested from Slack'"
+    command:
+      shell: "shutdown -h +1 'Shutdown requested from Slack'"
+      ps1: "shutdown /s /t 10 /c 'Shutdown requested from Slack'"
     timeout: 60
 
-  # Service Management
+  # ---- Service Management (OS Agnostic) -------------------------------------
   - name: host-services
-    category: services
     trigger: "/host {host} services"
     description: "List active system services"
     details: "Lists active running services on the target host. Uses systemctl on Linux and Get-Service on Windows."
     examples:
       - "/host home services"
       - "/host AMD services"
-    kind: shell
-    target: "{host}"
-    run: "systemctl list-units --type=service --state=running --no-pager | head -n 30"
-    windows_kind: ps1
-    windows_run: "Get-Service | Where-Object {$_.Status -eq 'Running'} | Select-Object -First 25 Name, DisplayName | Format-Table -AutoSize"
+    command:
+      shell: "systemctl list-units --type=service --state=running --no-pager | head -n 30"
+      ps1: "Get-Service | Where-Object {$_.Status -eq 'Running'} | Select-Object -First 25 Name, DisplayName | Format-Table -AutoSize"
     timeout: 60
 
   - name: host-service-status
-    category: services
     trigger: "/host {host} service status {service}"
     description: "Check status of a system service"
     details: "Queries system service state. Uses systemctl on Linux or Get-Service on Windows."
     examples:
       - "/host nas service status smbd"
       - "/host AMD service status Spooler"
-    kind: shell
-    target: "{host}"
-    run: "systemctl status {service} --no-pager"
-    windows_kind: ps1
-    windows_run: "Get-Service -Name '{service}' | Select-Object Name, DisplayName, Status, StartType | Format-List"
+    command:
+      shell: "systemctl status {service} --no-pager"
+      ps1: "Get-Service -Name '{service}' | Select-Object Name, DisplayName, Status, StartType | Format-List"
     timeout: 30
 
   - name: host-service-restart
-    category: services
     trigger: "/host {host} service restart {service}"
     description: "Restart a system service"
     details: "Restarts the specified system service unit. Uses systemctl on Linux or Restart-Service on Windows."
     examples:
       - "/host nas service restart smbd"
       - "/host AMD service restart Spooler"
-    kind: shell
-    target: "{host}"
-    run: "systemctl restart {service}"
-    windows_kind: ps1
-    windows_run: "Restart-Service -Name '{service}' -Force; Get-Service -Name '{service}' | Select-Object Name, DisplayName, Status"
+    command:
+      shell: "systemctl restart {service}"
+      ps1: "Restart-Service -Name '{service}' -Force; Get-Service -Name '{service}' | Select-Object Name, DisplayName, Status"
     timeout: 60
 
-  # Docker Management
+  # ---- Docker Management (Linux only) --------------------------------------
   - name: host-docker-ps
-    category: docker
     trigger: "/host {host} docker ps"
     description: "List running docker containers on {host}"
     details: "Lists currently active Docker containers on the specified host, formatting columns cleanly with container name, image, and status/uptime."
     examples:
       - "/host home docker ps"
       - "/host nas docker ps"
-    kind: shell
-    target: "{host}"
-    run: "docker ps --format '{{.Names}} | {{.Image}} | {{.Status}}'"
+    command:
+      shell: "docker ps --format '{{.Names}} | {{.Image}} | {{.Status}}'"
 
   - name: host-docker-restart
-    category: docker
     trigger: "/host {host} docker restart {service}"
     description: "Restart a docker compose project on {host}"
     details: "Navigates to the service working directory (/docker/{service}) on the target host and runs 'docker compose restart {service}'."
     examples:
       - "/host home docker restart plex"
       - "/host home docker restart vaultwarden"
-    kind: shell
-    target: "{host}"
-    run: "docker compose restart {service}"
+    command:
+      shell: "docker compose restart {service}"
     cwd: "/docker/{service}"
     timeout: 300
 
   - name: host-docker-logs
-    category: docker
     trigger: "/host {host} docker logs {service}"
     description: "Tail last 50 log lines of a docker container"
     details: "Fetches the most recent 50 lines of container standard output and standard error logs via 'docker logs --tail 50 {service}'."
     examples:
       - "/host home docker logs pihole"
       - "/host home docker logs plex"
-    kind: shell
-    target: "{host}"
-    run: "docker logs --tail 50 {service}"
+    command:
+      shell: "docker logs --tail 50 {service}"
     timeout: 60
 
   - name: host-docker-stats
-    category: docker
     trigger: "/host {host} docker stats"
     description: "Snapshot of container CPU, RAM, and network usage"
     details: "Performs a single, non-streaming query of Docker container performance metrics ('docker stats --no-stream'), reporting live CPU percentage, memory usage/limit, and network I/O."
     examples:
       - "/host home docker stats"
-    kind: shell
-    target: "{host}"
-    run: "docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}'"
+    command:
+      shell: "docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}'"
     timeout: 60
 
-  # Windows Agent Management (ps1)
+  # ---- Windows Agent Management (Windows only) -----------------------------
   - name: host-win-updates
-    category: windows
     trigger: "/host {host} win updates"
     description: "Installed Windows hotfixes on {host}"
     details: "Queries Win32_QuickFixEngineering via PowerShell Get-CimInstance to list the 10 most recently installed Windows quality updates, security hotfixes, and KB numbers."
     examples:
       - "/host WIN-PC win updates"
       - "/host DESKTOP-01 win updates"
-    kind: ps1
-    target: "{host}"
-    run: "Get-CimInstance Win32_QuickFixEngineering | Sort-Object InstalledOn -Descending | Select-Object -First 10 HotFixID, InstalledOn | Format-Table -AutoSize"
+    command:
+      ps1: "Get-CimInstance Win32_QuickFixEngineering | Sort-Object InstalledOn -Descending | Select-Object -First 10 HotFixID, InstalledOn | Format-Table -AutoSize"
     timeout: 180
 
-  - name: host-win-memory
-    category: windows
-    trigger: "/host {host} win memory"
-    description: "Memory usage on Windows machine"
-    details: "Queries Win32_OperatingSystem via PowerShell Get-CimInstance to report total installed physical RAM (GB) and currently free/available RAM (GB)."
-    examples:
-      - "/host WIN-PC win memory"
-    kind: ps1
-    target: "{host}"
-    run: "Get-CimInstance Win32_OperatingSystem | Select-Object @{Name='TotalRAM_GB';Expression={[math]::Round($_.TotalVisibleMemorySize/1MB,2)}}, @{Name='FreeRAM_GB';Expression={[math]::Round($_.FreePhysicalMemory/1MB,2)}} | Format-Table -AutoSize"
-    timeout: 60
-
-  - name: host-win-services
-    category: windows
-    trigger: "/host {host} win services"
-    description: "Running Windows services"
-    details: "Queries Windows Service Control Manager via PowerShell Get-Service to list active running services with their system name and friendly display name."
-    examples:
-      - "/host WIN-PC win services"
-    kind: ps1
-    target: "{host}"
-    run: "Get-Service | Where-Object {$_.Status -eq 'Running'} | Select-Object -First 25 Name, DisplayName | Format-Table -AutoSize"
-    timeout: 60
-
-  - name: host-win-reboot
-    category: windows
-    trigger: "/host {host} win reboot"
-    description: "Reboot Windows machine after 10 seconds warning"
-    details: "Issues Windows shutdown utility ('shutdown /r /t 10') with a comment banner to safely reboot the remote machine after giving users a 10-second warning."
-    examples:
-      - "/host WIN-PC win reboot"
-    kind: ps1
-    target: "{host}"
-    run: "shutdown /r /t 10 /c 'Reboot requested from Slack'"
-    timeout: 60
-
-  - name: host-win-shutdown
-    category: windows
-    trigger: "/host {host} win shutdown"
-    description: "Shutdown Windows machine after 10 seconds warning"
-    details: "Issues Windows shutdown utility ('shutdown /s /t 10') with a comment banner to safely shut down the remote machine after giving users a 10-second warning."
-    examples:
-      - "/host WIN-PC win shutdown"
-    kind: ps1
-    target: "{host}"
-    run: "shutdown /s /t 10 /c 'Shutdown requested from Slack'"
-    timeout: 60
-
-  # Parental Controls (YouTube, Roblox, Minecraft & Discord blocking - Windows & Linux)
+  # ---- Parental Controls (OS Agnostic with Configurable Domains) -----------
   - name: host-parental
-    category: services
     trigger: "/host {host} parental {action}"
-    description: "Manage YouTube, Roblox, Minecraft & Discord parental blocking on Windows or Linux (on | off | status)"
-    details: "Configures system-level hosts file blocking on target Windows or Linux agent. When 'on', redirects YouTube, Roblox, Minecraft, and Discord domains to 0.0.0.0 and flushes DNS cache. When 'off', comments out entries and flushes DNS. 'status' reports the current blocking status."
+    description: "Manage parental domain blocking on Windows or Linux (on | off | status)"
+    details: "Configures system-level hosts file blocking on target Windows or Linux agent. Redirects configured domains to 0.0.0.0 and flushes DNS cache."
     examples:
       - "/host AMD parental on"
       - "/host nas parental on"
       - "/host AMD parental off"
       - "/host nas parental status"
-    kind: python
-    target: "{host}"
-    handler: "commands.parental:manage_parental"
+    command:
+      python: "commands.parental:manage_parental"
+    config:
+      domains:
+        - youtube.com
+        - www.youtube.com
+        - m.youtube.com
+        - youtu.be
+        - youtubekids.com
+        - www.youtubekids.com
+        - youtube-nocookie.com
+        - www.youtube-nocookie.com
+        - ytimg.com
+        - s.ytimg.com
+        - i.ytimg.com
+        - yt3.ggpht.com
+        - youtube.googleapis.com
+        - youtubei.googleapis.com
+        - roblox.com
+        - www.roblox.com
+        - api.roblox.com
+        - web.roblox.com
+        - assetgame.roblox.com
+        - setup.roblox.com
+        - rbxcdn.com
+        - www.rbxcdn.com
+        - robloxlabs.com
+        - minecraft.net
+        - www.minecraft.net
+        - mojang.com
+        - www.mojang.com
+        - mojangapi.com
+        - minecraftservices.com
+        - api.minecraftservices.com
+        - sessionserver.mojang.com
+        - authserver.mojang.com
+        - textures.minecraft.net
+        - launchermeta.mojang.com
+        - launchercontent.mojang.com
+        - libraries.minecraft.net
+        - resources.download.minecraft.net
+        - dl.mojang.com
+        - piston-meta.mojang.com
+        - piston-data.mojang.com
+        - login.live.com
+        - login.microsoftonline.com
+        - xboxlive.com
+        - www.xboxlive.com
+        - user.auth.xboxlive.com
+        - xsts.auth.xboxlive.com
+        - profile.xboxlive.com
+        - realms.minecraft.net
+        - gamedata.minecraft.net
+        - events.data.microsoft.com
+        - vortex.data.microsoft.com
+        - playfabapi.com
+        - multiplayer.minecraft.net
+        - clientconfig.minecraft.net
+        - geo-prod.do.dsp.mp.microsoft.com
+        - packages.microsoft.com
+        - discord.com
+        - www.discord.com
+        - discord.gg
+        - discordapp.com
+        - www.discordapp.com
+        - discord.app
+        - discord.media
+        - discord.net
+        - discordcdn.com
+        - cdn.discordapp.com
+        - media.discordapp.net
+        - router.discord.gg
+        - gateway.discord.gg
+        - status.discord.com

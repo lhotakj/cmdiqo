@@ -767,3 +767,116 @@ async def test_execute_command_windows_service_parameter_routing():
         timeout=120,
     )
 
+
+@pytest.mark.asyncio
+async def test_execute_command_os_agnostic_command_mapping():
+    mock_hub = AsyncMock()
+    mock_hub.agents = {
+        "win-node": {"platform": "Windows/11"},
+        "linux-node": {"platform": "Linux/6.1.0"},
+    }
+    mock_hub.exec.return_value = "exec_ok"
+
+    spec = {
+        "name": "host-test-uptime",
+        "trigger": "/host {host} uptime",
+        "command": {
+            "shell": "uptime",
+            "ps1": "Get-Uptime",
+        },
+    }
+
+    # 1. Routing to Linux agent
+    res_linux = await execute_command(spec, {"host": "linux-node"}, hub=mock_hub)
+    assert res_linux == "exec_ok"
+    mock_hub.exec.assert_awaited_with("linux-node", "shell", "uptime", cwd=None, timeout=120)
+
+    # 2. Routing to Windows agent
+    mock_hub.exec.reset_mock()
+    res_win = await execute_command(spec, {"host": "win-node"}, hub=mock_hub)
+    assert res_win == "exec_ok"
+    mock_hub.exec.assert_awaited_with("win-node", "ps1", "Get-Uptime", cwd=None, timeout=120)
+
+
+@pytest.mark.asyncio
+async def test_execute_command_os_specific_unsupported_warning():
+    mock_hub = AsyncMock()
+    mock_hub.agents = {
+        "win-node": {"platform": "Windows/11"},
+        "linux-node": {"platform": "Linux/6.1.0"},
+    }
+
+    # Shell-only command (e.g. docker) on Windows
+    spec_docker = {
+        "name": "host-docker-ps",
+        "trigger": "/host {host} docker ps",
+        "command": {
+            "shell": "docker ps",
+        },
+    }
+    res_docker_win = await execute_command(spec_docker, {"host": "win-node"}, hub=mock_hub)
+    assert res_docker_win == "ℹ️ Sorry, this command is not available for the target OS"
+
+    # PS1-only command (e.g. win updates) on Linux
+    spec_win = {
+        "name": "host-win-updates",
+        "trigger": "/host {host} win updates",
+        "command": {
+            "ps1": "Get-HotFix",
+        },
+    }
+    res_win_linux = await execute_command(spec_win, {"host": "linux-node"}, hub=mock_hub)
+    assert res_win_linux == "ℹ️ Sorry, this command is not available for the target OS"
+
+
+@pytest.mark.asyncio
+async def test_execute_command_with_general_config():
+    spec = {
+        "name": "custom-cmd",
+        "command": {
+            "shell": "echo {config.key} and {config.number}",
+        },
+        "config": {
+            "key": "custom_val",
+            "number": 42,
+            "items": ["a", "b"],
+        },
+    }
+    formatted = format_params(spec["command"]["shell"], {}, config=spec["config"])
+    assert formatted == "echo custom_val and 42"
+
+
+@pytest.mark.asyncio
+async def test_handle_command_implicit_host_targeting():
+    post_mock = AsyncMock()
+    mock_hub = AsyncMock()
+    mock_hub.agents = {"node1": {"platform": "Linux/6.1.0"}}
+    mock_hub.exec.return_value = "uptime_123"
+
+    spec = {
+        "name": "host-uptime",
+        "trigger": "/host {host} uptime",
+        "command": {
+            "shell": "uptime",
+            "ps1": "Get-Uptime",
+        },
+    }
+    from bot.app import trigger_to_regex
+
+    commands = [{"spec": spec, "regex": trigger_to_regex(spec["trigger"])}]
+
+    await handle_command(
+        text="/host node1 uptime",
+        user_id="U1",
+        channel_id="C1",
+        post=post_mock,
+        commands=commands,
+        hub=mock_hub,
+    )
+
+    assert post_mock.await_count == 2
+    assert "Running `/host {host} uptime` on `node1`" in post_mock.await_args_list[0][0][0]
+    assert "uptime_123" in post_mock.await_args_list[1][0][0]
+    mock_hub.exec.assert_awaited_once_with("node1", "shell", "uptime", cwd=None, timeout=120)
+
+

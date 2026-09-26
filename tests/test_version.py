@@ -29,6 +29,16 @@ def test_update_versions_github_actions():
         assert version == "1.0.123"
 
 
+def test_update_versions_github_release_tag():
+    with patch.dict(
+        os.environ,
+        {"GITHUB_REF_TYPE": "tag", "GITHUB_REF_NAME": "v1.1.0"},
+        clear=True,
+    ):
+        version = update_versions()
+        assert version == "1.1.0"
+
+
 def test_update_versions_override():
     version = update_versions(override_version="2.5.9")
     assert version == "2.5.9"
@@ -40,3 +50,19 @@ def test_generate_version_info_txt():
     assert "StringStruct('FileVersion', '1.0.dev6A9C0B2D')" in content
     assert "StringStruct('ProductVersion', '1.0.dev6A9C0B2D')" in content
     assert "StringStruct('ProductName', 'Cmdiqo Agent')" in content
+
+
+def test_bundled_version_modules_without_version_txt():
+    """Verify bot, agent, and slacksim resolve version from bundled python modules without version.txt."""
+    import agent.agent
+    import bot.app
+    import slacksim
+
+    assert bot.app.get_version() != ""
+    assert agent.agent.get_version() != ""
+    assert slacksim.__version__ != ""
+
+    assert bot.app.get_version() == bot.app.__version__
+    assert agent.agent.get_version() == agent.agent.__version__
+    assert slacksim.__version__ == slacksim._version.__version__
+

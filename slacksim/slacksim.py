@@ -43,6 +43,13 @@ from bot.hub import Hub, RemoteHubClient
 
 try:
     from slacksim._version import __version__
+except ImportError:
+    try:
+        from _version import __version__
+    except ImportError:
+        __version__ = "1.0.0"
+
+try:
     from slacksim.line_reader import ConsoleLineReader, restore_terminal
     from slacksim.slack_formatter import (
         ANSI_BOLD,
@@ -55,10 +62,6 @@ try:
         format_slack_to_ansi,
     )
 except (ImportError, ValueError, AttributeError):
-    try:
-        from _version import __version__
-    except ImportError:
-        __version__ = "1.0.0"
     from line_reader import ConsoleLineReader, restore_terminal
     from slack_formatter import (
         ANSI_BOLD,
@@ -369,6 +372,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Build command-line parser for slacksim."""
     parser = argparse.ArgumentParser(
         description="slacksim: Interactive Slack command console emulator for Cmdiqo."
+    )
+    parser.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=f"cmdiqo-slacksim {__version__}",
     )
     parser.add_argument(
         "-c", "--command",

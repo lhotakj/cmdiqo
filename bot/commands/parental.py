@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from bot.hub import Hub
@@ -223,10 +223,14 @@ async def _run_local_bash(script: str) -> str:
         return f"ERROR: {exc}"
 
 
-async def manage_parental(params: dict[str, str], hub: Hub | None = None) -> str:
+async def manage_parental(
+    params: dict[str, Any],
+    hub: Hub | None = None,
+    config: dict[str, Any] | None = None,
+) -> str:
     """Handle /host {host} parental {action} requests for Windows and Linux hosts."""
-    host = params.get("host", "").strip()
-    action = params.get("action", "").lower().strip()
+    host = str(params.get("host", "")).strip()
+    action = str(params.get("action", "")).lower().strip()
 
     if not host:
         return ":no_entry_sign: Target host is required."
@@ -237,6 +241,15 @@ async def manage_parental(params: dict[str, str], hub: Hub | None = None) -> str
             f"Usage: `/host {host} parental on` | `/host {host} parental off` | `/host {host} parental status`"
         )
 
+    # Resolve domains from config (or params._config), falling back to PARENTAL_DOMAINS
+    domain_list: list[str] = []
+    if config and isinstance(config, dict) and config.get("domains"):
+        domain_list = [str(d).strip() for d in config["domains"] if str(d).strip()]
+    elif isinstance(params.get("_config"), dict) and params["_config"].get("domains"):
+        domain_list = [str(d).strip() for d in params["_config"]["domains"] if str(d).strip()]
+    if not domain_list:
+        domain_list = list(PARENTAL_DOMAINS)
+
     # 1. Determine execution target and platform
     is_local_target = host.lower() in ("local", "localhost", "container", "self")
     is_home_unregistered = host.lower() == "home" and (
@@ -246,7 +259,7 @@ async def manage_parental(params: dict[str, str], hub: Hub | None = None) -> str
     if is_local_target or is_home_unregistered:
         # Local Linux execution
         os_label = "Linux (local /etc/hosts)"
-        cmd = build_parental_script_linux(action)
+        cmd = build_parental_script_linux(action, domains=domain_list)
         raw_output = await _run_local_bash(cmd)
     else:
         # Remote agent execution
@@ -263,11 +276,11 @@ async def manage_parental(params: dict[str, str], hub: Hub | None = None) -> str
 
         if is_windows:
             kind = "ps1"
-            cmd = build_parental_script_windows(action)
+            cmd = build_parental_script_windows(action, domains=domain_list)
             os_label = f"Windows (`{host}` hosts)"
         else:
             kind = "shell"
-            cmd = build_parental_script_linux(action)
+            cmd = build_parental_script_linux(action, domains=domain_list)
             os_label = f"Linux (`{host}` /etc/hosts)"
 
         try:
@@ -281,18 +294,18 @@ async def manage_parental(params: dict[str, str], hub: Hub | None = None) -> str
     # 2. Format response based on output
     if action == "status":
         if "STATUS:ON" in output:
-            count = output.split(":")[-1] if ":" in output else len(PARENTAL_DOMAINS)
+            count = output.split(":")[-1] if ":" in output else str(len(domain_list))
             return (
                 f":shield: *Parental Controls on `{host}`: ACTIVE*\n"
                 f"• **Target:** {os_label}\n"
-                f"• YouTube, Roblox, Minecraft, & Discord are currently **BLOCKED** ({count} domains redirected to 0.0.0.0)."
+                f"• Configured domains are currently **BLOCKED** ({count} domains redirected to 0.0.0.0)."
             )
         if "STATUS:OFF" in output:
-            count = output.split(":")[-1] if ":" in output else len(PARENTAL_DOMAINS)
+            count = output.split(":")[-1] if ":" in output else str(len(domain_list))
             return (
                 f":unlock: *Parental Controls on `{host}`: INACTIVE*\n"
                 f"• **Target:** {os_label}\n"
-                f"• YouTube, Roblox, Minecraft, & Discord are currently **UNBLOCKED** ({count} domains commented out in hosts)."
+                f"• Configured domains are currently **UNBLOCKED** ({count} domains commented out in hosts)."
             )
         if "STATUS:NOT_CONFIGURED" in output:
             return (
@@ -306,7 +319,7 @@ async def manage_parental(params: dict[str, str], hub: Hub | None = None) -> str
         return (
             f":white_check_mark: :shield: *Parental controls ENABLED on `{host}`!*\n"
             f"• **Target:** {os_label}\n"
-            f"• **Blocked:** {len(PARENTAL_DOMAINS)} domains (YouTube, Roblox, Minecraft, Discord) redirected to `0.0.0.0`.\n"
+            f"• **Blocked:** {len(domain_list)} domains redirected to `0.0.0.0`.\n"
             f"• **DNS:** Resolver cache flushed successfully."
         )
 
@@ -314,7 +327,7 @@ async def manage_parental(params: dict[str, str], hub: Hub | None = None) -> str
         return (
             f":white_check_mark: :unlock: *Parental controls DISABLED on `{host}`!*\n"
             f"• **Target:** {os_label}\n"
-            f"• **Unblocked:** {len(PARENTAL_DOMAINS)} domains commented out in hosts.\n"
+            f"• **Unblocked:** {len(domain_list)} domains commented out in hosts.\n"
             f"• **DNS:** Resolver cache flushed successfully."
         )
 

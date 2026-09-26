@@ -3,24 +3,42 @@ name: Build Agent Binaries (Windows & Linux x64)
 on:
   push:
     branches: [main]
-    paths:
-      - "agent/**"
-      - "development/**"
-      - ".github/workflows/build-agent.yml"
-  pull_request:
-    branches: [main]
-    paths:
-      - "agent/**"
-      - "development/**"
-      - ".github/workflows/build-agent.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  check-release:
+    name: Check Commit Message for Release Triggers
+    runs-on: ubuntu-24.04
+    outputs:
+      release_agent: ${{ steps.check.outputs.release_agent }}
+      release_bot: ${{ steps.check.outputs.release_bot }}
+      is_release: ${{ steps.check.outputs.is_release }}
+      version: ${{ steps.check.outputs.version }}
+      short_version: ${{ steps.check.outputs.short_version }}
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Parse commit message
+        id: check
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          python development/check_release.py
+
   build-binaries:
     name: Build ${{ matrix.os }} Standalone Binary
+    needs: [check-release]
+    if: needs.check-release.outputs.release_agent == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -30,12 +48,12 @@ jobs:
             artifact_name: cmdiqo-agent-linux-x64
             binary_src: dist/cmdiqo-agent
             binary_dest: cmdiqo-agent-linux-x64
-            zip_src: dist/cmdiqo-agent-linux-x64.zip
+            zip_name: cmdiqo-agent-linux-x64.zip
           - os: windows-latest
             artifact_name: cmdiqo-agent-windows-x64
             binary_src: dist/cmdiqo-agent.exe
             binary_dest: cmdiqo-agent-windows-x64.exe
-            zip_src: dist/cmdiqo-agent-windows-x64.zip
+            zip_name: cmdiqo-agent-windows-x64.zip
 
     steps:
       - name: Checkout repository
@@ -64,7 +82,7 @@ jobs:
           SIGNING_CERT_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}
           SIGNING_CERT_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERT_PASSWORD }}
         run: |
-          python development/build_agent.py
+          python development/build_agent.py --version ${{ needs.check-release.outputs.version }}
 
       - name: Verify Windows Signature & Certificate
         if: matrix.os == 'windows-latest'
@@ -96,10 +114,66 @@ jobs:
             chmod +x dist/package/*.sh || true
           fi
 
-      - name: Upload Agent Package Artifact (contains binary, install/uninstall scripts & configs)
+      - name: Upload Agent Package Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: dist/package/*
+          path: |
+            dist/${{ matrix.zip_name }}
+            dist/package/*
           retention-days: 90
           if-no-files-found: error
+
+  publish-release:
+    name: Create GitHub Release & Upload Binaries
+    needs: [check-release, build-binaries]
+    if: needs.check-release.outputs.release_agent == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all built packages
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/downloaded
+
+      - name: Collect Release Assets
+        shell: bash
+        run: |
+          mkdir -p dist/release-assets
+          find dist/downloaded -name "*.zip" -exec cp {} dist/release-assets/ \;
+          find dist/downloaded -name "cmdiqo-agent.cer" -exec cp {} dist/release-assets/ \; 2>/dev/null || true
+          for d in dist/downloaded/*; do
+            if [ -d "$d" ]; then
+              name=$(basename "$d")
+              if [ ! -f "dist/release-assets/${name}.zip" ]; then
+                echo "[*] Creating zip fallback for $name..."
+                (cd "$d" && zip -r "../../release-assets/${name}.zip" .)
+              fi
+            fi
+          done
+          echo "[+] Prepared assets for release:"
+          ls -la dist/release-assets/
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.check-release.outputs.tag }}
+          VERSION: ${{ needs.check-release.outputs.version }}
+        run: |
+          echo "[*] Target Release: $TAG (version $VERSION)"
+          shopt -s nullglob
+          ASSETS=(dist/release-assets/*)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "[+] Release $TAG already exists on GitHub. Uploading/updating assets..."
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+          else
+            echo "[+] Creating new release $TAG on GitHub..."
+            gh release create "$TAG" "${ASSETS[@]}" \
+              --title "Release $TAG" \
+              --generate-notes
+          fi

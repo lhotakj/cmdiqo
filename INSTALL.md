@@ -184,61 +184,114 @@ The `AGENT_TOKEN` is a shared secret between your bot and your agents. Generate 
 
 ---
 
-### Step 3.1: Clone Repository & Create `.env`
-On your server:
+### Option A: Standalone Docker Compose Deployment (Recommended)
+
+You do not need to clone the entire development repository to run the bot. You can deploy it using the prebuilt official image `lhotakj/cmdiqo-bot:latest`:
+
+1. Create a deployment directory on your server:
+   ```bash
+   mkdir -p ~/cmdiqo/config
+   cd ~/cmdiqo
+   ```
+
+2. Create your `docker-compose.yml` file:
+   ```yaml
+   services:
+     cmdiqo-bot:
+       image: lhotakj/cmdiqo-bot:latest
+       container_name: cmdiqo-bot
+       restart: unless-stopped
+
+       # Host networking required for arp-scan LAN device discovery:
+       network_mode: host
+
+       # Only used if switching to bridge networking:
+       ports:
+         - "${HUB_PORT:-8765}:8765"
+
+       environment:
+         SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:?set SLACK_BOT_TOKEN in .env}
+         SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:?set SLACK_APP_TOKEN in .env}
+         # Restrict to specific Slack user IDs (comma-separated):
+         ALLOWED_USERS: ${ALLOWED_USERS:-}
+         # Restrict to specific Slack channels:
+         # ALLOWED_CHANNELS: "C0123CHANNEL"
+         # Shared secret for remote LAN agents:
+         AGENT_TOKEN: ${AGENT_TOKEN:-}
+         HUB_PORT: "8765"
+         HUB_ENABLED: "true"
+         SHELL_TIMEOUT: "120"
+         LOG_LEVEL: "INFO"
+
+       volumes:
+         # Manage host Docker daemon:
+         - /var/run/docker.sock:/var/run/docker.sock
+         # Host compose projects directory (optional):
+         - /docker:/docker
+         # Map custom commands config:
+         - ./config:/config:ro
+   ```
+
+3. Create `.env` alongside your `docker-compose.yml`:
+   ```bash
+   nano .env
+   ```
+   ```bash
+   # Slack Tokens (from Section 1)
+   SLACK_BOT_TOKEN=xoxb-your-bot-token-here
+   SLACK_APP_TOKEN=xapp-your-app-token-here
+
+   # Security: Comma-separated Slack member IDs allowed to run commands
+   ALLOWED_USERS=U0123ABCDEF
+
+   # Shared Secret for Agents (Must match on all agent machines)
+   AGENT_TOKEN=your-random-agent-token-here
+   ```
+   ```bash
+   chmod 600 .env
+   ```
+
+4. *(Optional)* Provide your own `config/commands.yaml` inside `./config/commands.yaml`. If omitted, the container automatically uses its built-in defaults.
+
+5. Start the bot:
+   ```bash
+   docker compose up -d
+   ```
+
+---
+
+### Option B: From Repository Source
+
+If you cloned the source repository:
 ```bash
-git clone https://github.com/your-username/Cmdiqo.git
-cd Cmdiqo
-```
-
-Create a `.env` file next to `docker-compose.yml`:
-```bash
-nano .env
-```
-
-Paste your tokens and configuration into `.env`:
-```bash
-# Slack Tokens (from Section 1)
-SLACK_BOT_TOKEN=xoxb-your-bot-token-here
-SLACK_APP_TOKEN=xapp-your-app-token-here
-
-# Security: Comma-separated Slack member IDs allowed to run commands
-ALLOWED_USERS=U0123ABCDEF
-
-# Shared Secret for Agents (Must match on all agent machines)
-AGENT_TOKEN=your-random-agent-token-here
-
-# Hub Networking
-HUB_PORT=8765
-HUB_ENABLED=true
-
-# Timeouts & Logging
-SHELL_TIMEOUT=120
-LOG_LEVEL=INFO
-```
-
-Lock down the file permissions so other system users cannot read it:
-```bash
+git clone https://github.com/lhotakj/cmdiqo.git
+cd cmdiqo
+cp .env.example .env
+nano .env   # configure tokens
 chmod 600 .env
+```
+
+Start using the compose file in `docker/`:
+```bash
+docker compose -f docker/docker-compose.yml up -d
+```
+*(Or build locally from source)*:
+```bash
+docker compose -f docker/docker-compose.yml up -d --build
 ```
 
 ---
 
-### Step 3.2: Start the Bot Container
-Start the container in the background:
-```bash
-docker compose up -d --build
-```
-
-Check the live logs to verify that Socket Mode connected:
+### Step 3.2: Verify Container Logs
+Check the live container logs to verify that Socket Mode connected:
 ```bash
 docker compose logs -f cmdiqo-bot
 ```
 
 You should see:
 ```text
-INFO [cmdiqo-bot] Loaded 19 command(s) from /app/config/commands.yaml
-INFO [cmdiqo-bot] Loaded 2 alias(es) from /app/config/commands.yaml
+INFO [cmdiqo-bot] Loaded 22 command(s) from /config/commands.yaml
+INFO [cmdiqo-bot] Loaded 2 alias(es) from /config/commands.yaml
 INFO [cmdiqo-bot.hub] Hub listening on ws://0.0.0.0:8765 (agents connect outbound to this)
 INFO [cmdiqo-bot] Starting Socket Mode handler (outbound WebSocket only - NAT friendly)
 ```

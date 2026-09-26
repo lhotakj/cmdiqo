@@ -150,32 +150,34 @@ Every execution request carries a unique UUID, correlated across both server and
 
 ## 5. Command Routing Matrix
 
-Commands defined in `config/commands.yaml` (under `aliases:` and `commands:`) are routed dynamically based on their `kind`, `target`, and configured alias rules:
+Commands defined in `config/commands.yaml` (under `aliases:` and `commands:`) are routed dynamically based on their `command` mapping (`python | shell | ps1`), implicit host targeting via `{host}`, and configured alias rules:
 
-| Command Trigger | `kind` | `target` | Execution Location | Runtime Interpreter |
+| Command Trigger | `command` kinds | Target Resolution | Execution Location | Runtime / Handler |
 |---|---|---|---|---|
-| `/help [topic]` | `internal` | *(none)* | Bot App | Dynamic manual engine (filters by category/alias from `commands.yaml`) |
-| `/lan devices list` | `python` | *(none)* | Bot Container | Internal Python handler (`commands.devices:list_devices`) |
-| `/lan wake {target}` | `python` | *(none)* | Bot Container | UDP Broadcast Magic Packet (`commands.devices:send_wake_on_lan`) |
-| `/lan ping {host}` | `python` | *(none)* | Bot Container | Local ping utility (`commands.devices:ping_host`) |
-| `/lan agents list` | `internal` | *(none)* | Hub Registry | Lists connected agents, OS platform, and remote addresses |
-| `/host {host} uptime` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `uptime` / Windows `Win32_OperatingSystem` |
-| `/host {host} memory` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `free -h` / Windows `Win32_OperatingSystem` |
-| `/host {host} disk` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `df -h` / Windows `Win32_LogicalDisk` |
-| `/host {host} top` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `ps aux` / Windows `Get-Process` |
-| `/host {host} reboot` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `shutdown -r +1` / Windows `shutdown /r /t 10` |
-| `/host {host} shutdown` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `shutdown -h +1` / Windows `shutdown /s /t 10` |
-| `/host {host} services` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl list-units` / Windows `Get-Service` |
-| `/host {host} service status {service}` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl status` / Windows `Get-Service` |
-| `/host {host} service restart {service}` | `shell` / `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl restart` / Windows `Restart-Service` |
-| `/host {host} parental {action}` | `python` | `{host}` | Remote Agent | Cross-platform YouTube/Roblox/Minecraft/Discord blocker with DNS flush (Win & Linux) |
+| `/help [topic]` | `internal` | *(none)* | Bot App | Dynamic manual engine (inferred topic categories) |
+| `/lan devices list` | `python` | Local | Bot Container | Internal Python handler (`commands.devices:list_devices`) |
+| `/lan wake {target}` | `python` | Local | Bot Container | UDP Broadcast Magic Packet (`commands.devices:send_wake_on_lan`) |
+| `/lan ping {host}` | `python` | Local | Bot Container | Local ping utility (`commands.devices:ping_host`) |
+| `/lan agents list` | `internal` | Local | Hub Registry | Lists connected agents, OS platform, and remote addresses |
+| `/host {host} users` | `python` | `{host}` | Host / Agent | Local user accounts & status inspection (Win & Linux) |
+| `/host {host} user {user} {action}` | `python` | `{host}` | Host / Agent | User account status / enable / disable (Win & Linux) |
+| `/host {host} uptime` | `shell` + `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `uptime` / Windows `Win32_OperatingSystem` |
+| `/host {host} memory` | `shell` + `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `free -h` / Windows `Win32_OperatingSystem` |
+| `/host {host} disk` | `shell` + `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `df -h` / Windows `Win32_LogicalDisk` |
+| `/host {host} top` | `shell` + `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `ps aux` / Windows `Get-Process` |
+| `/host {host} reboot` | `shell` + `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `shutdown -r +1` / Windows `shutdown /r /t 10` |
+| `/host {host} shutdown` | `shell` + `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `shutdown -h +1` / Windows `shutdown /s /t 10` |
+| `/host {host} services` | `shell` + `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl list-units` / Windows `Get-Service` |
+| `/host {host} service status {service}` | `shell` + `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl status` / Windows `Get-Service` |
+| `/host {host} service restart {service}` | `shell` + `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl restart` / Windows `Restart-Service` |
+| `/host {host} parental {action}` | `python` (with `config.domains`) | `{host}` | Host / Agent | Configurable parental domain blocker with DNS flush (Win & Linux) |
 | `/host {host} docker ps` | `shell` | `{host}` | Host / Agent | Linux `docker ps --format ...` |
 | `/host {host} docker stats` | `shell` | `{host}` | Host / Agent | Linux `docker stats --no-stream ...` |
 | `/host {host} win updates` | `ps1` | `{host}` | Windows Agent | Remote `powershell.exe` Get-CimInstance Win32_QuickFixEngineering |
-| `/home <action>` *(alias)* | *n/a* | *n/a* | Alias Resolution | Auto-translates to `/host home <action>` |
-| `/wol <target>` *(alias)* | *n/a* | *n/a* | Alias Resolution | Auto-translates to `/lan wake <target>` |
+| `/home <action>` *(alias)* | *n/a* | Host `home` | Alias Resolution | Auto-translates to `/host home <action>` |
+| `/wol <target>` *(alias)* | *n/a* | Local | Alias Resolution | Auto-translates to `/lan wake <target>` |
 
-> **Dynamic Help & Discovery Engine**: Typing `/help` generates an organized category manual directly from the `category`, `description`, `details`, and `examples` fields defined in `commands.yaml`. Specifying a topic (e.g. `/help lan`, `/help host`, `/help docker`, `/help home`) renders focused command breakdowns with copy-pasteable examples. Submitting bare prefixes (e.g. `/lan`, `/host`, `/home`, `/wol`) automatically routes into the corresponding nested help topic.
+> **Dynamic Help & Discovery Engine**: Typing `/help` generates an organized category manual directly from the `description`, `details`, and `examples` fields defined in `commands.yaml`. Specifying a topic (e.g. `/help lan`, `/help host`, `/help docker`, `/help home`) renders focused command breakdowns with copy-pasteable examples. Submitting bare prefixes (e.g. `/lan`, `/host`, `/home`, `/wol`) automatically routes into the corresponding nested help topic.
 
 ---
 

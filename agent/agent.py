@@ -36,26 +36,30 @@ IS_WINDOWS = platform.system().lower() == "windows"
 
 
 def get_version() -> str:
-    """Return current agent version."""
+    """Return current agent version from bundled _version.py module."""
     try:
-        import _version  # Sibling import in PyInstaller bundle or when cwd/sys.path is agent/
+        from agent._version import __version__
 
-        return getattr(_version, "__version__", "1.0.0")
+        return str(__version__)
     except ImportError:
         pass
     try:
-        from . import _version  # Relative import when used as agent.agent package
+        from ._version import __version__
 
-        return getattr(_version, "__version__", "1.0.0")
+        return str(__version__)
     except (ImportError, ValueError):
         pass
     try:
-        from agent import _version  # Absolute import when repo root is in sys.path
+        import _version
 
-        return getattr(_version, "__version__", "1.0.0")
+        if hasattr(_version, "__version__"):
+            return str(_version.__version__)
     except ImportError:
         pass
     return "1.0.0"
+
+
+__version__ = get_version()
 
 
 class ConfigurationError(ValueError):
