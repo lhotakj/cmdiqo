@@ -100,7 +100,7 @@ jobs:
             "dist/cmdiqo-agent-windows-x64-setup.exe"
           )
           foreach ($signedFile in $signedFiles) {
-            Write-Host "[+] Verifying Authenticode signature of $signedFile:"
+            Write-Host "[+] Verifying Authenticode signature of ${signedFile}:"
             $signature = Get-AuthenticodeSignature $signedFile
             $signature | Format-List Status, StatusMessage, SignatureType, SignerCertificate, TimeStamperCertificate
             if ($signature.SignatureType -ne "Authenticode") {
