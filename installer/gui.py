@@ -566,6 +566,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     function setFinished(success, message) {
       document.getElementById('progress_title').textContent = message;
+      if (success) {
+        setTimeout(syncWithBackend, 250);
+        return;
+      }
       document.getElementById('footer_bar').classList.remove('hidden');
       document.getElementById('btn_cancel').classList.add('hidden');
       const btn = document.getElementById('btn_install');

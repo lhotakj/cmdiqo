@@ -658,18 +658,54 @@ def register_service(
 
     if IS_WINDOWS:
         bin_cmd = f'"{paths.binary_path}" --service --config "{paths.config_file}"'
-        # Check if service already exists
-        chk = run_cmd_silent(["sc.exe", "query", paths.service_name], capture_output=True, text=True, check=False)
-        if "FAILED 1060" not in chk.stdout and chk.returncode == 0:
-            report(f"[*] Updating existing Windows Service '{paths.service_name}'...")
-            run_cmd_silent(
-                ["sc.exe", "config", paths.service_name, f"binPath= {bin_cmd}", "start= auto", "DisplayName= Cmdiqo LAN Remote Agent"],
+
+        def run_sc(action: str, command: list[str], required: bool = False) -> bool:
+            result = run_cmd_silent(
+                command,
                 capture_output=True,
+                text=True,
                 check=False,
             )
+            if result.returncode == 0:
+                return True
+
+            output = "\n".join(
+                part.strip()
+                for part in (result.stdout or "", result.stderr or "")
+                if part.strip()
+            )
+            report(
+                f"[-] sc.exe {action} failed with exit code {result.returncode}: "
+                f"{output or 'no output'}"
+            )
+            return not required
+
+        # Check if service already exists
+        chk = run_cmd_silent(
+            ["sc.exe", "query", paths.service_name],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if "FAILED 1060" not in chk.stdout and chk.returncode == 0:
+            report(f"[*] Updating existing Windows Service '{paths.service_name}'...")
+            if not run_sc(
+                "config",
+                [
+                    "sc.exe",
+                    "config",
+                    paths.service_name,
+                    f"binPath= {bin_cmd}",
+                    "start= auto",
+                    "DisplayName= Cmdiqo LAN Remote Agent",
+                ],
+                required=True,
+            ):
+                return False
         else:
             report(f"[*] Registering Windows Service '{paths.service_name}' with SCM...")
-            run_cmd_silent(
+            if not run_sc(
+                "create",
                 [
                     "sc.exe",
                     "create",
@@ -678,22 +714,31 @@ def register_service(
                     "start= auto",
                     "DisplayName= Cmdiqo LAN Remote Agent",
                 ],
-                capture_output=True,
-                check=False,
-            )
+                required=True,
+            ):
+                return False
 
         # Set descriptive summary in Windows Services (services.msc)
-        run_cmd_silent(
-            ["sc.exe", "description", paths.service_name, "Cmdiqo Slack LAN Remote Agent reverse WebSocket connection service"],
-            capture_output=True,
-            check=False,
+        run_sc(
+            "description",
+            [
+                "sc.exe",
+                "description",
+                paths.service_name,
+                "Cmdiqo Slack LAN Remote Agent reverse WebSocket connection service",
+            ],
         )
 
         # Configure automatic restart on failure
-        run_cmd_silent(
-            ["sc.exe", "failure", paths.service_name, "reset= 86400", "actions= restart/5000/restart/10000/restart/30000"],
-            capture_output=True,
-            check=False,
+        run_sc(
+            "failure",
+            [
+                "sc.exe",
+                "failure",
+                paths.service_name,
+                "reset= 86400",
+                "actions= restart/5000/restart/10000/restart/30000",
+            ],
         )
         return True
 
@@ -1019,8 +1064,8 @@ def install_or_upgrade(
         report("[+] Service successfully started and running!")
         return True
     else:
-        report("[!] Warning: Service registered, but failed to start immediately. Please check logs.")
-        return True
+        report("[-] Service registered, but failed to start. Please check logs.")
+        return False
 
 
 def perform_uninstall(

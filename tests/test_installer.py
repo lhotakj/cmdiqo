@@ -18,8 +18,10 @@ from installer.backend import (
     get_installed_version,
     get_platform_paths,
     get_service_status,
+    install_or_upgrade,
     parse_version_tuple,
     perform_uninstall,
+    register_service,
     register_linux_desktop_entry,
     register_windows_app_entry,
     remove_linux_desktop_entry,
@@ -239,6 +241,84 @@ def test_register_and_remove_windows_app_entry(tmp_path):
             assert not fake_paths.start_menu_file.exists()
 
 
+def test_register_service_windows_reports_create_failure(tmp_path):
+    fake_paths = PlatformPaths(
+        install_dir=tmp_path / "install",
+        binary_path=tmp_path / "install" / "cmdiqo-agent.exe",
+        config_dir=tmp_path / "config",
+        config_file=tmp_path / "config" / "config.json",
+        log_dir=tmp_path / "logs",
+        service_name="CmdiqoAgent",
+    )
+    reports: list[str] = []
+
+    with patch("installer.backend.IS_WINDOWS", True):
+        with patch(
+            "installer.backend.run_cmd_silent",
+            side_effect=[
+                MagicMock(returncode=1060, stdout="FAILED 1060", stderr=""),
+                MagicMock(returncode=5, stdout="", stderr="Access is denied."),
+            ],
+        ):
+            assert register_service(fake_paths, reports.append) is False
+
+    assert any("sc.exe create failed with exit code 5" in report for report in reports)
+    assert any("Access is denied." in report for report in reports)
+
+
+def test_register_service_windows_creates_service(tmp_path):
+    fake_paths = PlatformPaths(
+        install_dir=tmp_path / "install",
+        binary_path=tmp_path / "install" / "cmdiqo-agent.exe",
+        config_dir=tmp_path / "config",
+        config_file=tmp_path / "config" / "config.json",
+        log_dir=tmp_path / "logs",
+        service_name="CmdiqoAgent",
+    )
+
+    with patch("installer.backend.IS_WINDOWS", True):
+        with patch(
+            "installer.backend.run_cmd_silent",
+            side_effect=[
+                MagicMock(returncode=1060, stdout="FAILED 1060", stderr=""),
+                MagicMock(returncode=0, stdout="SUCCESS", stderr=""),
+                MagicMock(returncode=0, stdout="SUCCESS", stderr=""),
+                MagicMock(returncode=0, stdout="SUCCESS", stderr=""),
+            ],
+        ):
+            assert register_service(fake_paths) is True
+
+
+def test_install_or_upgrade_fails_when_service_does_not_start(tmp_path):
+    fake_paths = PlatformPaths(
+        install_dir=tmp_path / "install",
+        binary_path=tmp_path / "install" / "cmdiqo-agent.exe",
+        config_dir=tmp_path / "config",
+        config_file=tmp_path / "config" / "config.json",
+        log_dir=tmp_path / "logs",
+        service_name="CmdiqoAgent",
+    )
+    reports: list[str] = []
+
+    with patch("installer.backend.get_platform_paths", return_value=fake_paths):
+        with patch("installer.backend.stop_service"):
+            with patch("installer.backend.save_config"):
+                with patch("installer.backend.extract_and_install_binary", return_value=True):
+                    with patch("installer.backend.register_service", return_value=True):
+                        with patch("installer.backend.copy_setup_executable"):
+                            with patch("installer.backend.register_windows_app_entry"):
+                                with patch("installer.backend.start_service", return_value=False):
+                                    assert (
+                                        install_or_upgrade(
+                                            {"hub_url": "ws://hub", "token": "secret"},
+                                            reports.append,
+                                        )
+                                        is False
+                                    )
+
+    assert any("failed to start" in report for report in reports)
+
+
 def test_register_and_remove_linux_desktop_entry(tmp_path):
     fake_paths = PlatformPaths(
         install_dir=tmp_path / "bin",
@@ -276,6 +356,7 @@ def test_gui_html_template_and_state_injection():
     assert 'id="notify"' in HTML_TEMPLATE
     assert 'id="install_dir"' in HTML_TEMPLATE
     assert 'id="btn_toggle_token"' in HTML_TEMPLATE
+    assert "setTimeout(syncWithBackend, 250)" in HTML_TEMPLATE
 
     # 3. Verify placeholder exists for state injection
     assert "__INITIAL_STATE_JSON__" in HTML_TEMPLATE
