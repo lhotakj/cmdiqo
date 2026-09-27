@@ -1,20 +1,52 @@
-# Universal Linux builder for Cmdiqo Agent and Installer
-# Based on Debian 11 Bullseye (glibc 2.31) to guarantee compatibility across
-# openSUSE Leap 15.x, SUSE Linux Enterprise Server 15, Ubuntu 20.04+, Debian 11+, and RHEL/Rocky 8+.
-FROM python:3.11-slim-bullseye
+# Universal Linux builder for Cmdiqo Agent and Installer.
+# Based on the latest Debian stable ("trixie" / Debian 13). If a target machine is too old to
+# satisfy the bundled GTK/WebKit or Tkinter runtimes, the installer automatically falls back to
+# its CLI wizard, so no specific glibc floor is required here.
+FROM python:3.13-slim-trixie
 
-RUN sed -i '/debian-security/d; /bullseye-updates/d' /etc/apt/sources.list && \
-    apt-get update && \
+# System packages:
+#   binutils/zip/tcl/tk      - agent build tooling + Tkinter (graphical fallback).
+#   gir1.2-gtk-3.0           - GTK 3 typelib (pulls the GTK 3 runtime; name-agnostic re: the
+#                              t64 library renames).
+#   gir1.2-webkit2-4.1       - WebKit2GTK 4.1 typelib for the pywebview GTK backend (the Linux
+#                              equivalent of Edge WebView2 on Windows).
+#   gir1.2-girepository-3.0  - the GIRepository typelib itself. PyInstaller's `gi` hook (and the
+#                              frozen app) introspect through it to discover and bundle every
+#                              other typelib; without it PyInstaller logs "Namespace GIRepository
+#                              not available" and silently ships no GTK/WebKit typelibs.
+#   gobject-introspection    - introspection runtime/tools.
+#   gcc/pkg-config/libcairo2-dev/libgirepository-2.0-dev
+#                            - build dependencies for the PyGObject and pycairo wheels.
+RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         binutils \
         zip \
         tcl \
-        tk && \
+        tk \
+        gir1.2-gtk-3.0 \
+        gir1.2-webkit2-4.1 \
+        gir1.2-girepository-3.0 \
+        gobject-introspection \
+        gcc \
+        pkg-config \
+        libcairo2-dev \
+        libgirepository-2.0-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Tkinter is the installer GUI baseline on Linux and Windows. The Tcl/Tk runtime
-# lets PyInstaller collect its data files into the Linux one-file executable.
-RUN pip install --no-cache-dir pyinstaller "websockets>=13"
+# pywebview (GTK/WebKit2) is the primary GUI, matching the Windows Edge WebView2 experience;
+# Tkinter is the graphical fallback and the CLI wizard is the final fallback. All are collected
+# into the one-file executable. Latest stable releases are used deliberately.
+RUN pip install --no-cache-dir \
+        pyinstaller \
+        "websockets>=13" \
+        pywebview \
+        PyGObject \
+        pycairo
 RUN python3 -c "import tkinter; tkinter.Tcl()"
+# Verify the full GTK/WebKit introspection chain, including the GIRepository typelib that
+# PyInstaller's `gi` hook depends on to collect every other typelib. Importing the repository
+# modules forces their typelibs to load, so a missing typelib fails the image build here
+# rather than silently producing an installer with a non-functional WebView backend.
+RUN python3 -c "import gi; gi.require_version('GIRepository', '3.0'); gi.require_version('Gtk', '3.0'); gi.require_version('WebKit2', '4.1'); from gi.repository import GIRepository, Gtk, WebKit2; import webview"
 
 WORKDIR /workspace

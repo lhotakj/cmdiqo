@@ -116,17 +116,26 @@ def update_versions(
 
     if override_version:
         version = override_version.strip()
-        digits = [int(m) for m in re.findall(r"\d+", version)]
-        while len(digits) < 4:
-            digits.append(0)
-        pe_tuple = (digits[0], digits[1], digits[2], digits[3])
+        dev_match = re.match(r"^(\d+)\.(\d+)\.dev([0-9A-Fa-f]+)$", version)
+        if dev_match:
+            pe_tuple = (
+                int(dev_match.group(1)),
+                int(dev_match.group(2)),
+                int(dev_match.group(3), 16) & 0xFFFF,
+                0,
+            )
+        else:
+            digits = [int(m) for m in re.findall(r"\d+", version)]
+            while len(digits) < 4:
+                digits.append(0)
+            pe_tuple = (digits[0], digits[1], digits[2], digits[3])
     elif github_run:
         # CI build on GitHub Actions: third number (patch) is taken from GitHub build ID
         version = f"{major}.{minor}.{github_run}"
         run_num = int(re.sub(r"\D", "", str(github_run)) or "0")
         pe_tuple = (int(major), int(minor), run_num & 0xFFFF, 0)
     else:
-        # Local build: third component keeps dev+timestamp (hex / base16)
+        # Local builds use the two-part baseline plus a hex timestamp.
         ts = int(time.time()) if timestamp is None else timestamp
         hex_ts = f"{ts:X}"
         version = f"{major}.{minor}.dev{hex_ts}"

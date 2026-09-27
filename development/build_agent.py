@@ -178,6 +178,8 @@ def package_agent_zip(system: str, dist_path: Path) -> Path:
             (AGENT_DIR / "agent.json.example", "agent.json.example"),
         ]
 
+    files_to_pack.append((dist_dir / "build-version.txt", "version.txt"))
+
     # Populate dist/package/ for GitHub Actions artifact staging (best-effort)
     try:
         pkg_dir.mkdir(parents=True, exist_ok=True)
@@ -328,6 +330,9 @@ def main() -> None:
         if system == "windows" and not args.skip_sign:
             sign_windows_binary(dist_path)
 
+        (dist_path.parent / "build-version.txt").write_text(
+            current_version, encoding="utf-8"
+        )
         zip_path = package_agent_zip(system, dist_path)
 
         if args.copy_to:

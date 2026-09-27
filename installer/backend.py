@@ -7,6 +7,7 @@ configuration persistence, and zip payload extraction.
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import json
 import logging
 import os
@@ -141,20 +142,36 @@ def request_elevation() -> bool:
             ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, cmd_args, None, 1)
         return ret > 32
     else:
-        # Linux: If running in an interactive terminal, re-exec via sudo so user can enter password
+        # Linux services write to system paths, so installation must always run as root.
         args = sys.argv if getattr(sys, "frozen", False) else [sys.executable] + sys.argv
-        if sys.stdin.isatty() and shutil.which("sudo"):
+        # Prefer polkit whenever a desktop is available so GUI launches always use
+        # the system password dialog, including when started from a terminal.
+        if bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+            pkexec_path = shutil.which("pkexec")
+            if not pkexec_path:
+                log.error("Root privileges are required, but pkexec is not installed.")
+                return False
+            log.info("Root privileges are required; requesting them with the desktop authentication dialog.")
             try:
-                os.execvp("sudo", ["sudo"] + args)
-            except Exception:
-                pass
-        # If in a desktop GUI environment without terminal, try GUI polkit dialog
-        elif bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")) and shutil.which("pkexec"):
-            try:
-                subprocess.Popen(["pkexec"] + args)
+                subprocess.Popen([pkexec_path, *args])
                 return True
-            except Exception:
-                pass
+            except OSError as exc:
+                log.error("Could not start pkexec to request root privileges: %s", exc)
+                return False
+
+        if sys.stdin.isatty():
+            sudo_path = shutil.which("sudo")
+            if not sudo_path:
+                log.error("Root privileges are required, but sudo is not installed.")
+                return False
+            log.info("Root privileges are required; requesting them with sudo.")
+            try:
+                os.execvp(sudo_path, ["sudo", "--"] + args)
+            except OSError as exc:
+                log.error("Could not start sudo to request root privileges: %s", exc)
+                return False
+
+        log.error("Root privileges are required, but no terminal or desktop authentication prompt is available.")
         return False
 
 
@@ -273,7 +290,7 @@ def get_installed_version(paths: Optional[PlatformPaths] = None, force_refresh: 
 
 def get_bundled_version() -> str:
     """Retrieve version bundled in this installer package."""
-    # Check embedded version.txt in executable dir, _internal, _MEIPASS, or source dirs
+    # Check generated build version before the source baseline version.txt.
     search_dirs = []
     if getattr(sys, "frozen", False):
         exe_dir = Path(sys.executable).resolve().parent
@@ -287,15 +304,16 @@ def get_bundled_version() -> str:
     ])
 
     for d in search_dirs:
-        v_file = d / "version.txt"
-        if v_file.exists():
-            try:
-                raw = v_file.read_text(encoding="utf-8").strip()
-                m = re.match(r"^(\d+\.\d+(?:\.\d+)?(?:[.-]?\S*)?)", raw)
-                if m:
-                    return m.group(1)
-            except Exception:
-                pass
+        for filename in ("build-version.txt", "version.txt"):
+            v_file = d / filename
+            if v_file.exists():
+                try:
+                    raw = v_file.read_text(encoding="utf-8").strip()
+                    m = re.match(r"^(\d+\.\d+(?:\.\d+)?(?:[.-]?\S*)?)", raw)
+                    if m:
+                        return m.group(1)
+                except Exception:
+                    pass
 
         # Also check agent/_version.py
         mod_version = d / "agent" / "_version.py"
@@ -323,8 +341,9 @@ def get_service_status(paths: Optional[PlatformPaths] = None) -> ServiceStatus:
                 capture_output=True,
                 text=True,
                 check=False,
+                timeout=10,
             )
-        except OSError as exc:
+        except (OSError, subprocess.TimeoutExpired) as exc:
             log.warning("Could not query Windows service %s: %s", paths.service_name, exc)
             return "not_installed"
         output = f"{result.stdout}\n{result.stderr}".upper()
@@ -345,8 +364,9 @@ def get_service_status(paths: Optional[PlatformPaths] = None) -> ServiceStatus:
                 capture_output=True,
                 text=True,
                 check=False,
+                timeout=10,
             )
-        except OSError as exc:
+        except (OSError, subprocess.TimeoutExpired) as exc:
             log.warning("Could not query Linux service %s: %s", paths.service_name, exc)
             return "stopped"
         return "running" if result.stdout.strip() == "active" else "stopped"
@@ -356,35 +376,34 @@ def get_service_status(paths: Optional[PlatformPaths] = None) -> ServiceStatus:
 
 def find_bundled_zip() -> Optional[Path]:
     """Find the bundled agent zip payload."""
-    candidates = []
+    platform_zip_name = (
+        "cmdiqo-agent-windows-x64.zip"
+        if IS_WINDOWS
+        else "cmdiqo-agent-linux-x64.zip"
+    )
+    candidates: list[Path] = []
     if getattr(sys, "frozen", False):
         exe_dir = Path(sys.executable).resolve().parent
         candidates.extend([
+            exe_dir / platform_zip_name,
             exe_dir / "agent-payload.zip",
-            exe_dir / "cmdiqo-agent-windows-x64.zip",
-            exe_dir / "cmdiqo-agent-linux-x64.zip",
+            exe_dir / "_internal" / platform_zip_name,
             exe_dir / "_internal" / "agent-payload.zip",
-            exe_dir / "_internal" / "cmdiqo-agent-windows-x64.zip",
-            exe_dir / "_internal" / "cmdiqo-agent-linux-x64.zip",
         ])
         if hasattr(sys, "_MEIPASS"):
             meipass = Path(sys._MEIPASS)
             candidates.extend([
+                meipass / platform_zip_name,
                 meipass / "agent-payload.zip",
-                meipass / "cmdiqo-agent-windows-x64.zip",
-                meipass / "cmdiqo-agent-linux-x64.zip",
             ])
 
     root = Path(__file__).resolve().parent.parent
     dist_dir = root / "dist"
     candidates.extend([
-        dist_dir / "cmdiqo-agent-windows-x64.zip",
-        dist_dir / "cmdiqo-agent-linux-x64.zip",
+        dist_dir / platform_zip_name,
         dist_dir / "agent-payload.zip",
-        dist_dir / "cmdiqo-agent-windows-x64-setup" / "cmdiqo-agent-windows-x64.zip",
-        dist_dir / "cmdiqo-agent-linux-x64-setup" / "cmdiqo-agent-linux-x64.zip",
-        dist_dir / "cmdiqo-agent-windows-x64-setup" / "_internal" / "cmdiqo-agent-windows-x64.zip",
-        dist_dir / "cmdiqo-agent-linux-x64-setup" / "_internal" / "cmdiqo-agent-linux-x64.zip",
+        dist_dir / ("cmdiqo-agent-windows-x64-setup" if IS_WINDOWS else "cmdiqo-agent-linux-x64-setup") / platform_zip_name,
+        dist_dir / ("cmdiqo-agent-windows-x64-setup" if IS_WINDOWS else "cmdiqo-agent-linux-x64-setup") / "_internal" / platform_zip_name,
         root / "agent-payload.zip",
     ])
 
@@ -565,8 +584,9 @@ def stop_service(paths: Optional[PlatformPaths] = None) -> bool:
             log.error("Could not stop Linux service %s: %s", paths.service_name, exc)
             return False
         try:
+            agent_command_pattern = rf"^{re.escape(str(paths.binary_path))}(?:\s|$)"
             run_cmd_silent(
-                ["pkill", "-9", "-f", "cmdiqo-agent"],
+                ["pkill", "-9", "-f", "--", agent_command_pattern],
                 capture_output=True,
                 check=False,
             )
@@ -640,6 +660,7 @@ def extract_and_install_binary(
         return False
 
     report(f"[*] Extracting package from {zip_path.name}...")
+    certificate_thumbprints: set[str] = set()
     with zipfile.ZipFile(zip_path, "r") as zf:
         for item in zf.namelist():
             # Match binary
@@ -650,18 +671,14 @@ def extract_and_install_binary(
                 if not IS_WINDOWS:
                     os.chmod(paths.binary_path, 0o755)
 
-            # Match certificate on Windows
-            elif IS_WINDOWS and item.endswith(".cer"):
-                cer_dest = paths.install_dir / item
-                with zf.open(item) as src, open(cer_dest, "wb") as dst:
+            elif item == "version.txt":
+                with zf.open(item) as src, open(paths.install_dir / item, "wb") as dst:
                     shutil.copyfileobj(src, dst)
-                # Register certificate into Trusted Root and Trusted Publisher stores
-                try:
-                    run_cmd_silent(["certutil.exe", "-addstore", "-user", "Root", str(cer_dest)], capture_output=True, check=False)
-                    run_cmd_silent(["certutil.exe", "-addstore", "-user", "TrustedPublisher", str(cer_dest)], capture_output=True, check=False)
-                    report(f"[+] Trusted Authenticode certificate {item}")
-                except Exception:
-                    pass
+
+            # Retain the signature certificate in the package for manual
+            # distribution, but never install it into Windows trust stores.
+            elif IS_WINDOWS and item.endswith(".cer"):
+                certificate_thumbprints.add(hashlib.sha1(zf.read(item)).hexdigest().upper())
 
             # Match application icon on Windows
             elif IS_WINDOWS and item == "cmdiqo.ico":
@@ -675,6 +692,27 @@ def extract_and_install_binary(
                 with zf.open(item) as src, open(paths.service_file, "wb") as dst:
                     shutil.copyfileobj(src, dst)
                 report(f"[+] Installed systemd unit to {paths.service_file}")
+
+    for thumbprint in certificate_thumbprints:
+        for store_name in ("Root", "TrustedPublisher"):
+            try:
+                result = run_cmd_silent(
+                    ["certutil.exe", "-delstore", "-user", store_name, thumbprint],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if result.returncode == 0:
+                    report(
+                        f"[*] Removed legacy Cmdiqo self-signed certificate from {store_name}."
+                    )
+            except OSError as exc:
+                log.warning(
+                    "Could not remove legacy certificate %s from %s: %s",
+                    thumbprint,
+                    store_name,
+                    exc,
+                )
 
     # Write version.txt for instantaneous future detection
     bundled_ver = get_bundled_version()

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from types import ModuleType, SimpleNamespace
+from unittest.mock import ANY, MagicMock, call, patch
+import zipfile
 
 import pytest
 
@@ -13,6 +16,7 @@ from installer.backend import (
     check_hub_connection,
     compare_versions,
     create_windows_shortcut,
+    extract_and_install_binary,
     get_bundled_version,
     get_existing_config,
     get_installed_version,
@@ -81,6 +85,52 @@ def test_get_service_status_not_installed(tmp_path):
         service_name="TestAgent",
     )
     assert get_service_status(fake_paths) == "not_installed"
+
+
+def test_stop_service_linux_does_not_match_setup_executable(tmp_path):
+    from installer import backend
+
+    paths = PlatformPaths(
+        install_dir=tmp_path / "bin",
+        binary_path=tmp_path / "bin" / "cmdiqo-agent",
+        config_dir=tmp_path / "config",
+        config_file=tmp_path / "config" / "agent.env",
+        log_dir=tmp_path / "logs",
+        service_name="cmdiqo-agent.service",
+    )
+    completed = MagicMock(returncode=0, stdout="", stderr="")
+
+    with patch.object(backend, "IS_WINDOWS", False):
+        with patch.object(backend, "IS_LINUX", True):
+            with patch.object(backend, "run_cmd_silent", return_value=completed) as run_command:
+                with patch.object(backend, "get_service_status", return_value="stopped"):
+                    assert backend.stop_service(paths) is True
+
+    assert run_command.call_args_list[0].args[0] == ["systemctl", "stop", "cmdiqo-agent.service"]
+    assert run_command.call_args_list[1].args[0] == [
+        "pkill",
+        "-9",
+        "-f",
+        "--",
+        rf"^{backend.re.escape(str(paths.binary_path))}(?:\s|$)",
+    ]
+    assert "cmdiqo-agent-linux-x64-setup" not in run_command.call_args_list[1].args[0][-1]
+
+
+def test_find_bundled_zip_selects_linux_payload_when_both_platform_zips_exist(tmp_path):
+    from installer import backend
+
+    meipass = tmp_path / "payload"
+    meipass.mkdir()
+    windows_zip = meipass / "cmdiqo-agent-windows-x64.zip"
+    linux_zip = meipass / "cmdiqo-agent-linux-x64.zip"
+    windows_zip.touch()
+    linux_zip.touch()
+
+    with patch.object(backend, "IS_WINDOWS", False):
+        with patch.object(backend.sys, "frozen", True, create=True):
+            with patch.object(backend.sys, "_MEIPASS", str(meipass), create=True):
+                assert backend.find_bundled_zip() == linux_zip
 
 
 def test_get_service_status_windows_states(tmp_path):
@@ -208,6 +258,37 @@ def test_perform_uninstall_mock(tmp_path):
             res = perform_uninstall(purge_config=False)
             assert res is True
             assert mock_run.called
+
+
+def test_windows_install_removes_legacy_self_signed_certificate_trust(tmp_path):
+    payload = tmp_path / "cmdiqo-agent-windows-x64.zip"
+    with zipfile.ZipFile(payload, "w") as archive:
+        archive.writestr("cmdiqo-agent.exe", b"agent")
+        archive.writestr("cmdiqo-agent.cer", b"certificate")
+
+    fake_paths = PlatformPaths(
+        install_dir=tmp_path / "install",
+        binary_path=tmp_path / "install" / "cmdiqo-agent.exe",
+        config_dir=tmp_path / "config",
+        config_file=tmp_path / "config" / "config.json",
+        log_dir=tmp_path / "logs",
+        service_name="CmdiqoAgent",
+    )
+    commands: list[list[str]] = []
+
+    def record_command(command, **_kwargs):
+        commands.append(command)
+        return MagicMock(returncode=0, stdout="", stderr="")
+
+    with patch("installer.backend.IS_WINDOWS", True):
+        with patch("installer.backend.find_bundled_zip", return_value=payload):
+            with patch("installer.backend.run_cmd_silent", side_effect=record_command):
+                assert extract_and_install_binary(fake_paths) is True
+
+    thumbprint = hashlib.sha1(b"certificate").hexdigest().upper()
+    assert ["certutil.exe", "-delstore", "-user", "Root", thumbprint] in commands
+    assert ["certutil.exe", "-delstore", "-user", "TrustedPublisher", thumbprint] in commands
+    assert all("-addstore" not in command for command in commands)
 
 
 def test_register_and_remove_windows_app_entry(tmp_path):
@@ -430,7 +511,7 @@ def test_register_and_remove_linux_desktop_entry(tmp_path):
 
 
 def test_gui_html_template_and_state_injection():
-    from installer.gui import HTML_TEMPLATE, WebViewApi
+    from installer.gui import HTML_TEMPLATE, WebViewApi, get_brand_icon_data_uri
 
     # 1. Verify Detecting... is completely absent from HTML template
     assert "Detecting..." not in HTML_TEMPLATE
@@ -443,15 +524,42 @@ def test_gui_html_template_and_state_injection():
     assert 'id="notify"' in HTML_TEMPLATE
     assert 'id="install_dir"' in HTML_TEMPLATE
     assert 'id="btn_toggle_token"' in HTML_TEMPLATE
-    assert "setTimeout(syncWithBackend, 250)" in HTML_TEMPLATE
+    assert "setTimeout(() => syncWithBackend(true), 250)" in HTML_TEMPLATE
     assert "btn_start_service" in HTML_TEMPLATE
     assert "btn_restart_service" in HTML_TEMPLATE
     assert "btn_stop_service" in HTML_TEMPLATE
     assert ".service-status" in HTML_TEMPLATE
     assert "background: var(--card-bg);" in HTML_TEMPLATE
+    assert 'id="view_loading"' in HTML_TEMPLATE
+    assert 'id="loading_message"' in HTML_TEMPLATE
+    assert 'id="loading_detail"' in HTML_TEMPLATE
+    assert "@keyframes spin" in HTML_TEMPLATE
+    assert "justify-content: center;" in HTML_TEMPLATE
+    assert "setTimeout(syncWithBackend, 100)" in HTML_TEMPLATE
+    assert "Starting the Windows browser bridge..." in HTML_TEMPLATE
+    assert "startupStatusMessages" in HTML_TEMPLATE
+    assert "function pollServiceStatus()" in HTML_TEMPLATE
+    assert "setTimeout(pollServiceStatus, 1000)" in HTML_TEMPLATE
+    assert "renderServiceStatus(status)" in HTML_TEMPLATE
+    assert "mark_ui_ready" in HTML_TEMPLATE
+    assert 'class="banner-heading"' in HTML_TEMPLATE
+    assert ".primary-actions, .service-controls-actions" in HTML_TEMPLATE
     assert "function manageService(action)" in HTML_TEMPLATE
+    assert "__BRAND_ICON_DATA_URI__" in HTML_TEMPLATE
+    assert 'class="service-controls-title">Service controls' in HTML_TEMPLATE
+    assert 'id="view_service_controls"' in HTML_TEMPLATE
+    assert "viewId === 'view_same'" in HTML_TEMPLATE
+    assert "const hasConfiguration" in HTML_TEMPLATE
+    assert 'id="btn_cancel" onclick="returnToMainScreen()">Back</button>' in HTML_TEMPLATE
+    assert get_brand_icon_data_uri().startswith("data:image/x-icon;base64,")
 
-    # 3. Verify placeholder exists for state injection
+    # Non-destructive loader give-up: the page must stop polling and show an error instead
+    # of destroying the WebView window (which previously crashed the frozen installer).
+    assert "startupStartedAt > 25000" in HTML_TEMPLATE
+    assert 'id="loading_spinner"' in HTML_TEMPLATE
+    assert "The installer could not start its embedded browser." in HTML_TEMPLATE
+
+    # 3. Verify placeholder exists for optional state injection.
     assert "__INITIAL_STATE_JSON__" in HTML_TEMPLATE
 
     # 4. Verify WebViewApi generates valid JSON-serializable state
@@ -467,3 +575,330 @@ def test_gui_html_template_and_state_injection():
     rendered = HTML_TEMPLATE.replace("__INITIAL_STATE_JSON__", state_json)
     assert "__INITIAL_STATE_JSON__" not in rendered
     assert state_json in rendered
+
+
+def test_webview_api_defers_state_checks_until_requested(tmp_path):
+    from installer.gui import WebViewApi
+
+    fake_paths = PlatformPaths(
+        install_dir=tmp_path / "install",
+        binary_path=tmp_path / "install" / "cmdiqo-agent.exe",
+        config_dir=tmp_path / "config",
+        config_file=tmp_path / "config" / "config.json",
+        log_dir=tmp_path / "logs",
+        service_name="CmdiqoAgent",
+    )
+    with patch("installer.gui.get_platform_paths", return_value=fake_paths):
+        with patch("installer.gui.get_bundled_version", return_value="0.9.0"):
+            with patch("installer.gui.get_installed_version", return_value="0.9.0") as installed:
+                with patch("installer.gui.get_existing_config", return_value={}) as config:
+                    with patch("installer.gui.get_service_status", return_value="running") as status:
+                        api = WebViewApi(None)
+
+                        installed.assert_not_called()
+                        config.assert_not_called()
+                        status.assert_not_called()
+
+                        state = api.get_state()
+
+    assert state["installed_version"] == "0.9.0"
+    assert state["service_status"] == "running"
+
+
+def test_webview_api_returns_live_service_status(tmp_path):
+    from installer.gui import WebViewApi
+
+    fake_paths = PlatformPaths(
+        install_dir=tmp_path / "install",
+        binary_path=tmp_path / "install" / "cmdiqo-agent.exe",
+        config_dir=tmp_path / "config",
+        config_file=tmp_path / "config" / "config.json",
+        log_dir=tmp_path / "logs",
+        service_name="CmdiqoAgent",
+    )
+    with patch("installer.gui.get_platform_paths", return_value=fake_paths):
+        with patch("installer.gui.get_bundled_version", return_value="0.9.0"):
+            with patch("installer.gui.get_service_status", return_value="stopped") as status:
+                api = WebViewApi(None)
+                assert api.get_current_service_status() == "stopped"
+
+    status.assert_called_once_with(fake_paths)
+
+
+def test_webview_api_keeps_native_window_reference_private(tmp_path):
+    """pywebview introspects public js_api attributes; a public window reference would make
+    it recursively walk window.native.browser.webview... on the WebView2 backend, flooding
+    the log with recursion/COM errors. The reference must stay underscore-prefixed."""
+    from installer.gui import WebViewApi
+
+    fake_paths = PlatformPaths(
+        install_dir=tmp_path / "install",
+        binary_path=tmp_path / "install" / "cmdiqo-agent.exe",
+        config_dir=tmp_path / "config",
+        config_file=tmp_path / "config" / "config.json",
+        log_dir=tmp_path / "logs",
+        service_name="CmdiqoAgent",
+    )
+    sentinel = object()
+    with patch("installer.gui.get_platform_paths", return_value=fake_paths):
+        with patch("installer.gui.get_bundled_version", return_value="0.9.0"):
+            api = WebViewApi(sentinel)
+
+    assert api._window is sentinel
+    public_attrs = [name for name in vars(api) if not name.startswith("_")]
+    assert "window" not in public_attrs
+
+
+def test_webview_api_tracks_initial_render_readiness(tmp_path):
+    from installer.gui import WebViewApi
+
+    fake_paths = PlatformPaths(
+        install_dir=tmp_path / "install",
+        binary_path=tmp_path / "install" / "cmdiqo-agent.exe",
+        config_dir=tmp_path / "config",
+        config_file=tmp_path / "config" / "config.json",
+        log_dir=tmp_path / "logs",
+        service_name="CmdiqoAgent",
+    )
+    with patch("installer.gui.get_platform_paths", return_value=fake_paths):
+        with patch("installer.gui.get_bundled_version", return_value="0.9.0"):
+            api = WebViewApi(None)
+            assert api.ui_ready.is_set() is False
+            api.mark_ui_ready()
+            assert api.ui_ready.is_set() is True
+
+
+def test_run_webview_gui_returns_false_quietly_when_module_missing():
+    """A missing pywebview module must use the normal GUI fallback without an error."""
+    import sys as _sys
+    from installer import gui
+
+    with patch.dict(_sys.modules, {"webview": None}):
+        with patch.object(gui.log, "error") as log_error:
+            with patch.object(gui.log, "info") as log_info:
+                result = gui.run_webview_gui()
+
+    assert result is False
+    log_error.assert_not_called()
+    assert any("pywebview is not available" in str(call.args) for call in log_info.call_args_list)
+
+
+def test_linux_webview_runtime_is_skipped_when_webkit2gtk_is_unavailable():
+    import sys as _sys
+    from installer import gui
+
+    with patch.dict(_sys.modules, {"gi": None}):
+        with patch.object(gui, "linux_webview_install_hint", return_value="install-webkit") as hint:
+            with patch.object(gui.log, "warning") as log_warning:
+                assert gui.linux_webview_runtime_available() is False
+
+    hint.assert_called_once()
+    log_warning.assert_called_once_with(
+        "WebKit2GTK is not available; skipping the WebView UI. Error: %s. "
+        "GI typelib search paths: %s. Install it with: %s",
+        ANY,
+        [],
+        "install-webkit",
+    )
+
+
+def test_configure_linux_typelib_search_paths_prepends_system_directories():
+    from installer import gui
+
+    repository = MagicMock()
+    repository.get_search_path.return_value = ["/bundled/typelibs"]
+
+    with patch.object(gui.Path, "is_dir", return_value=True):
+        search_paths = gui.configure_linux_typelib_search_paths(repository)
+
+    assert search_paths == ["/bundled/typelibs"]
+    assert repository.prepend_search_path.call_args_list == [
+        call(str(gui.Path("/usr/lib64/girepository-1.0"))),
+        call(str(gui.Path("/usr/lib/girepository-1.0"))),
+    ]
+
+
+def test_linux_webview_runtime_uses_girepository_api():
+    import sys as _sys
+    from installer import gui
+
+    repository = MagicMock()
+    gi_repository = ModuleType("gi.repository")
+    gi_repository.GIRepository = SimpleNamespace(
+        Repository=SimpleNamespace(get_default=MagicMock(return_value=repository))
+    )
+    gi_repository.WebKit2 = object()
+    gi = MagicMock()
+
+    with patch.dict(_sys.modules, {"gi": gi, "gi.repository": gi_repository}):
+        with patch.object(gui, "configure_linux_typelib_search_paths", return_value=["/usr/lib64/girepository-1.0"]):
+            assert gui.linux_webview_runtime_available() is True
+
+    gi_repository.GIRepository.Repository.get_default.assert_called_once()
+    assert gi.require_version.call_args_list == [
+        call("GIRepository", "3.0"),
+        call("WebKit2", "4.1"),
+    ]
+
+
+def test_linux_webview_runtime_falls_back_to_girepository_2_when_needed():
+    import sys as _sys
+    from installer import gui
+
+    repository = MagicMock()
+    gi_repository = ModuleType("gi.repository")
+    gi_repository.GIRepository = SimpleNamespace(
+        Repository=SimpleNamespace(get_default=MagicMock(return_value=repository))
+    )
+    gi_repository.WebKit2 = object()
+    gi = MagicMock()
+    gi.require_version.side_effect = [ValueError("GIRepository 3.0 unavailable"), None, None]
+
+    with patch.dict(_sys.modules, {"gi": gi, "gi.repository": gi_repository}):
+        with patch.object(gui, "configure_linux_typelib_search_paths", return_value=[]):
+            assert gui.linux_webview_runtime_available() is True
+
+    assert gi.require_version.call_args_list == [
+        call("GIRepository", "3.0"),
+        call("GIRepository", "2.0"),
+        call("WebKit2", "4.1"),
+    ]
+
+
+def test_run_webview_gui_skips_webview_when_linux_runtime_is_unavailable():
+    import sys as _sys
+    from installer import gui
+
+    webview = MagicMock()
+    with patch.object(gui, "IS_WINDOWS", False):
+        with patch.object(gui, "linux_webview_runtime_available", return_value=False):
+            with patch.dict(_sys.modules, {"webview": webview}):
+                assert gui.run_webview_gui() is False
+
+    webview.create_window.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("os_release", "expected"),
+    [
+        ('ID="opensuse-tumbleweed"\nID_LIKE="suse opensuse"\n', "sudo zypper install typelib-1_0-WebKit2-4_1"),
+        ('ID=ubuntu\nVERSION_ID="22.04"\n', "sudo apt install gir1.2-webkit2-4.0"),
+        ('ID=fedora\nVERSION_ID="40"\n', "sudo dnf install webkit2gtk4.1"),
+        ('ID=rocky\nID_LIKE="rhel fedora"\n', "sudo dnf install webkit2gtk3"),
+    ],
+)
+def test_linux_webview_install_hint_uses_distribution_package(os_release, expected):
+    from installer import gui
+
+    with patch.object(gui.Path, "read_text", return_value=os_release):
+        assert gui.linux_webview_install_hint() == expected
+
+
+def test_linux_gui_environment_guidance_preserves_desktop_variables():
+    from installer import gui
+
+    guidance = gui.linux_gui_environment_guidance()
+
+    assert "without sudo" in guidance
+    assert 'DISPLAY="$DISPLAY"' in guidance
+    assert 'XAUTHORITY="$XAUTHORITY"' in guidance
+    assert 'WAYLAND_DISPLAY="$WAYLAND_DISPLAY"' in guidance
+    assert 'XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR"' in guidance
+    assert 'DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS"' in guidance
+
+
+def test_main_uses_native_error_instead_of_cli_when_windows_webview_fails():
+    from installer import gui
+
+    with patch.object(gui, "is_admin", return_value=True):
+        with patch.object(gui, "IS_WINDOWS", True):
+            with patch.object(gui, "HAS_TKINTER", False):
+                with patch.object(gui, "has_interactive_stdin", return_value=False):
+                    with patch.object(gui, "run_webview_gui", return_value=False):
+                        with patch.object(gui, "show_gui_startup_failure") as show_failure:
+                            with patch.object(gui, "run_cli_installer") as run_cli:
+                                with patch.object(gui.sys, "argv", ["gui.py"]):
+                                    gui.main()
+
+    show_failure.assert_called_once()
+    run_cli.assert_not_called()
+
+
+def test_main_does_not_run_requested_cli_without_interactive_stdin():
+    from installer import gui
+
+    with patch.object(gui, "is_admin", return_value=True):
+        with patch.object(gui, "has_interactive_stdin", return_value=False):
+            with patch.object(gui, "show_gui_startup_failure") as show_failure:
+                with patch.object(gui.sys, "argv", ["gui.py", "--cli"]):
+                    with pytest.raises(SystemExit, match="1"):
+                        gui.main()
+
+    show_failure.assert_called_once()
+
+
+def test_request_elevation_requests_sudo_from_interactive_linux_terminal():
+    from installer import backend
+
+    with patch.object(backend, "IS_WINDOWS", False):
+        with patch.object(backend, "is_admin", return_value=False):
+            with patch.object(backend.sys.stdin, "isatty", return_value=True):
+                with patch.dict(backend.os.environ, {}, clear=True):
+                    with patch.object(backend.shutil, "which", return_value="/usr/bin/sudo"):
+                        with patch.object(backend.sys, "argv", ["cmdiqo-agent-linux-x64-setup"]):
+                            with patch.object(backend.os, "execvp", side_effect=OSError("failed")) as execvp:
+                                assert backend.request_elevation() is False
+
+    execvp.assert_called_once_with(
+        "/usr/bin/sudo",
+        [
+            "sudo",
+            "--",
+            backend.sys.executable,
+            "cmdiqo-agent-linux-x64-setup",
+        ],
+    )
+
+
+def test_request_elevation_uses_pkexec_from_linux_desktop():
+    from installer import backend
+
+    with patch.object(backend, "IS_WINDOWS", False):
+        with patch.object(backend, "is_admin", return_value=False):
+            with patch.object(backend.sys.stdin, "isatty", return_value=False):
+                with patch.dict(backend.os.environ, {"DISPLAY": ":0"}, clear=True):
+                    with patch.object(backend.shutil, "which", return_value="/usr/bin/pkexec"):
+                        with patch.object(backend.sys, "argv", ["cmdiqo-agent-linux-x64-setup"]):
+                            with patch.object(backend.subprocess, "Popen") as popen:
+                                assert backend.request_elevation() is True
+
+    popen.assert_called_once_with(
+        [
+            "/usr/bin/pkexec",
+            backend.sys.executable,
+            "cmdiqo-agent-linux-x64-setup",
+        ]
+    )
+
+
+def test_request_elevation_prefers_pkexec_over_sudo_in_gui_session():
+    from installer import backend
+
+    with patch.object(backend, "IS_WINDOWS", False):
+        with patch.object(backend, "is_admin", return_value=False):
+            with patch.object(backend.sys.stdin, "isatty", return_value=True):
+                with patch.dict(backend.os.environ, {"WAYLAND_DISPLAY": "wayland-0"}, clear=True):
+                    with patch.object(backend.shutil, "which", return_value="/usr/bin/pkexec"):
+                        with patch.object(backend.sys, "argv", ["cmdiqo-agent-linux-x64-setup"]):
+                            with patch.object(backend.subprocess, "Popen") as popen:
+                                with patch.object(backend.os, "execvp") as execvp:
+                                    assert backend.request_elevation() is True
+
+    popen.assert_called_once_with(
+        [
+            "/usr/bin/pkexec",
+            backend.sys.executable,
+            "cmdiqo-agent-linux-x64-setup",
+        ]
+    )
+    execvp.assert_not_called()

@@ -232,7 +232,7 @@ BUILD_LINUX64=true
 
 info "Platform selection: ${PLATFORM} (win64: ${BUILD_WIN64}, linux64: ${BUILD_LINUX64})"
 
-# Check Docker availability for containerized glibc 2.31 Linux builds
+# Check Docker availability for containerized Linux builds
 DOCKER_RUNNING=false
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
     DOCKER_RUNNING=true
@@ -245,8 +245,8 @@ if [[ "$BUILD_AGENT" = true ]]; then
 
     if [[ "$IS_HOST_WINDOWS" = false && "$BUILD_LINUX64" = true ]]; then
         if [[ "$DOCKER_RUNNING" = true ]]; then
-            info "=== Building standalone cmdiqo-agent binary in glibc 2.31 container (openSUSE/SLES/Ubuntu compatible) ==="
-            BUILDER_IMAGE="cmdiqo-builder-linux:bullseye"
+            info "=== Building standalone cmdiqo-agent binary in Debian trixie container ==="
+            BUILDER_IMAGE="cmdiqo-builder-linux:trixie"
             info "Refreshing Linux builder image ($BUILDER_IMAGE)..."
             docker build -t "$BUILDER_IMAGE" -f "$ROOT_DIR/docker/Dockerfile.builder-linux" "$ROOT_DIR"
             docker run --rm \
@@ -258,11 +258,8 @@ if [[ "$BUILD_AGENT" = true ]]; then
                 python3 development/build_agent.py --version "$VERSION"
         else
             warn "Docker is not running; building with host Python."
-            warn "Note: To guarantee compatibility with openSUSE Leap 15 / SLES 15 (glibc 2.31), start Docker before building."
-            AGENT_BUILD_ARGS=("$PYTHON_CMD" "development/build_agent.py")
-            if [[ -n "$VERSION_OVERRIDE" ]]; then
-                AGENT_BUILD_ARGS+=(--version "$VERSION_OVERRIDE")
-            fi
+            warn "Note: building in Docker produces a more broadly compatible binary; start Docker before building."
+            AGENT_BUILD_ARGS=("$PYTHON_CMD" "development/build_agent.py" "--version" "$VERSION")
             if [[ -n "$COPY_TO" ]]; then
                 AGENT_BUILD_ARGS+=(--copy-to "$COPY_TO")
             fi
@@ -270,10 +267,7 @@ if [[ "$BUILD_AGENT" = true ]]; then
         fi
     elif [[ "$IS_HOST_WINDOWS" = true && "$BUILD_WIN64" = true ]]; then
         info "=== Building standalone cmdiqo-agent Windows executable ==="
-        AGENT_BUILD_ARGS=("$PYTHON_CMD" "development/build_agent.py")
-        if [[ -n "$VERSION_OVERRIDE" ]]; then
-            AGENT_BUILD_ARGS+=(--version "$VERSION_OVERRIDE")
-        fi
+        AGENT_BUILD_ARGS=("$PYTHON_CMD" "development/build_agent.py" "--version" "$VERSION")
         if [[ "$SKIP_SIGN" = true ]]; then
             AGENT_BUILD_ARGS+=(--skip-sign)
         fi
@@ -325,7 +319,10 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
         PAYLOAD_ZIP="$DIST_DIR/cmdiqo-agent-linux-x64.zip"
         if [[ ! -f "$PAYLOAD_ZIP" ]]; then
             info "Payload zip not found. Running build_agent.py first..."
-            "$PYTHON_CMD" "$ROOT_DIR/development/build_agent.py"
+            "$PYTHON_CMD" "$ROOT_DIR/development/build_agent.py" --version "$VERSION"
+        fi
+        if [[ ! -f "$DIST_DIR/build-version.txt" ]]; then
+            printf '%s' "$VERSION" > "$DIST_DIR/build-version.txt"
         fi
 
         # Remove any lingering output directory so PyInstaller produces a single binary file.
@@ -335,8 +332,8 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
         rm -rf "$DIST_DIR/_delete_me_on_linux" 2>/dev/null || true
 
         if [[ "$DOCKER_RUNNING" = true ]]; then
-            info "=== Building standalone $LINUX_INSTALLER_NAME Linux executable in glibc 2.31 container ==="
-            BUILDER_IMAGE="cmdiqo-builder-linux:bullseye"
+            info "=== Building standalone $LINUX_INSTALLER_NAME Linux executable in Debian trixie container ==="
+            BUILDER_IMAGE="cmdiqo-builder-linux:trixie"
             docker run --rm \
                 --user "$(id -u):$(id -g)" \
                 -v "$ROOT_DIR:/workspace" \
@@ -348,9 +345,15 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
                              --exclude-module unittest --exclude-module pydoc --exclude-module test --exclude-module sqlite3 \
                              --name $LINUX_INSTALLER_NAME \
                              --paths /workspace --paths /workspace/installer \
+                             --additional-hooks-dir /workspace/development/pyinstaller-hooks \
                              --add-data '/workspace/dist/cmdiqo-agent-linux-x64.zip:.' \
                              --add-data '/workspace/version.txt:.' \
+                             --add-data '/workspace/dist/build-version.txt:.' \
+                             --add-data '/workspace/development/cmdiqo.ico:.' \
+                             --collect-all webview \
+                             --collect-all gi \
                              --hidden-import installer.backend --hidden-import installer.gui \
+                             --hidden-import webview.platforms.gtk \
                              --strip /workspace/installer/gui.py && \
                          chmod +x /workspace/dist/cmdiqo-agent /workspace/dist/$LINUX_INSTALLER_NAME"
         else
@@ -379,13 +382,32 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
                 "--name" "$LINUX_INSTALLER_NAME"
                 "--paths" "$ROOT_DIR"
                 "--paths" "$ROOT_DIR/installer"
+                "--additional-hooks-dir" "$ROOT_DIR/development/pyinstaller-hooks"
                 "--add-data" "${PAYLOAD_ZIP}:."
                 "--add-data" "${ROOT_DIR}/version.txt:."
+                "--add-data" "${DIST_DIR}/build-version.txt:."
                 "--hidden-import" "installer.backend"
                 "--hidden-import" "installer.gui"
                 "--strip"
                 "$ROOT_DIR/installer/gui.py"
             )
+            # Bundle the pywebview GTK/WebKit2 backend when it is importable on the host so
+            # the Linux installer shows the same modern WebView UI as Windows. Requires the
+            # system GTK 3 + WebKit2GTK libraries and PyGObject (see docker/Dockerfile.builder-linux).
+            if "$PYTHON_CMD" -c "import webview, gi" >/dev/null 2>&1; then
+                info "PyWebView detected on host; bundling the GTK/WebKit2 WebView backend."
+                INSTALLER_PYARGS+=(
+                    "--collect-all" "webview"
+                    "--collect-all" "gi"
+                    "--hidden-import" "webview.platforms.gtk"
+                )
+            else
+                warn "PyWebView (GTK) not available on host; the Linux installer will use the Tkinter GUI only."
+                warn "Install 'pywebview PyGObject' plus system GTK3/WebKit2GTK, or build with Docker, for the WebView UI."
+            fi
+            if [[ -f "$ROOT_DIR/development/cmdiqo.ico" ]]; then
+                INSTALLER_PYARGS+=("--add-data" "${ROOT_DIR}/development/cmdiqo.ico:.")
+            fi
             "${INSTALLER_PYARGS[@]}"
             chmod +x "$DIST_DIR/$LINUX_INSTALLER_NAME" 2>/dev/null || true
         fi
@@ -396,14 +418,21 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
 
     elif [[ "$IS_HOST_WINDOWS" = true && "$BUILD_WIN64" = true ]]; then
         info "=== Building standalone $WINDOWS_INSTALLER_NAME ==="
-        if ! "$PYTHON_CMD" -c "import tkinter; tkinter.Tcl()" >/dev/null 2>&1; then
-            error "Tkinter is required to build the GUI installer. Install a standard Python distribution with Tcl/Tk."
-            exit 1
+        if ! "$PYTHON_CMD" -c "import webview" >/dev/null 2>&1; then
+            info "PyWebView is required to build the GUI installer. Installing installer dependencies..."
+            "$PYTHON_CMD" -m pip install -r "$ROOT_DIR/requirements.txt"
+            if ! "$PYTHON_CMD" -c "import webview" >/dev/null 2>&1; then
+                error "PyWebView could not be imported after installation."
+                exit 1
+            fi
         fi
         PAYLOAD_ZIP="$DIST_DIR/cmdiqo-agent-windows-x64.zip"
         if [[ ! -f "$PAYLOAD_ZIP" ]]; then
             info "Payload zip not found. Running build_agent.py first..."
-            "$PYTHON_CMD" "$ROOT_DIR/development/build_agent.py"
+            "$PYTHON_CMD" "$ROOT_DIR/development/build_agent.py" --version "$VERSION"
+        fi
+        if [[ ! -f "$DIST_DIR/build-version.txt" ]]; then
+            printf '%s' "$VERSION" > "$DIST_DIR/build-version.txt"
         fi
 
         # Use local temp dirs for PyInstaller work to avoid network-share localpycs failures
@@ -413,6 +442,7 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
         INSTALLER_PYARGS=(
             "$PYTHON_CMD" "-m" "PyInstaller"
             "--onefile"
+            "--noconfirm"
             "--clean"
             "--optimize" "2"
             "--workpath" "$LOCAL_WORK_DIR"
@@ -422,18 +452,23 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
             "--exclude-module" "pydoc"
             "--exclude-module" "test"
             "--exclude-module" "sqlite3"
+            "--exclude-module" "tkinter"
             "--name" "${WINDOWS_INSTALLER_NAME%.exe}"
             "--paths" "$ROOT_DIR"
             "--paths" "$ROOT_DIR/installer"
             "--add-data" "${PAYLOAD_ZIP};."
             "--add-data" "${ROOT_DIR}/version.txt;."
+            "--add-data" "${DIST_DIR}/build-version.txt;."
             "--hidden-import" "installer.backend"
             "--hidden-import" "installer.gui"
             "--uac-admin"
             "--windowed"
         )
         if [[ -f "$ROOT_DIR/development/cmdiqo.ico" ]]; then
-            INSTALLER_PYARGS+=("--icon" "$ROOT_DIR/development/cmdiqo.ico")
+            INSTALLER_PYARGS+=(
+                "--icon" "$ROOT_DIR/development/cmdiqo.ico"
+                "--add-data" "${ROOT_DIR}/development/cmdiqo.ico;."
+            )
         fi
         if [[ -f "$ROOT_DIR/agent/version_info.txt" ]]; then
             INSTALLER_PYARGS+=("--version-file" "$ROOT_DIR/agent/version_info.txt")

@@ -2,3 +2,12 @@ slack-bolt>=1.20,<2
 aiohttp>=3.9.0
 PyYAML>=6.0
 websockets>=13
+# Windows installer GUI stack. Pinned as a validated set: pywebview 6.2.1 drives the
+# Edge WebView2 (edgechromium) backend through pythonnet 3.1.0 / clr_loader 0.3.1. The
+# Python.NET bridge is sensitive to version drift (reflection/COM interop), so the native
+# pieces are pinned exactly and constrained to Windows. Linux uses the bundled Tkinter GUI
+# and does not load pythonnet. Bump these three together, deliberately, after validating a
+# frozen Windows installer build.
+pywebview==6.2.1
+pythonnet==3.1.0; sys_platform == 'win32'
+clr_loader==0.3.1; sys_platform == 'win32'

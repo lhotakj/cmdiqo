@@ -610,7 +610,7 @@ If an agent fails to connect, verify that the agent PC can reach the bot contain
 
 ---
 
-## 7. Troubleshooting Guide (Common Pitfalls)
+## 7. Common Issues and Troubleshooting
 
 | Symptom / Error in Slack | Cause | Fix |
 |---|---|---|
@@ -620,3 +620,49 @@ If an agent fails to connect, verify that the agent PC can reach the bot contain
 | Agent connects but disconnects every 30 seconds. | Stateful NAT / firewall dropping idle connection. | Cmdiqo includes automated 20-second ping/pong keepalives. Ensure your firewall allows outbound WebSockets on port 8765. |
 | `/lan devices list` returns `No devices discovered` | Container running in bridge mode instead of host mode. | In `docker-compose.yml`, verify `network_mode: host` is set. Raw ARP packets require host network access. |
 | Windows agent command fails with execution policy error. | PowerShell script execution disabled. | `cmdiqo-agent` automatically calls PowerShell with `-NoProfile -NonInteractive -Command`, bypassing execution policy restrictions. |
+
+### Linux GUI Installer: WebKit2GTK Is Missing
+
+The graphical installer (`cmdiqo-agent-linux-x64-setup`) uses the system WebKit2GTK runtime for its modern WebView interface. Install the package for your distribution before launching it:
+
+| Distribution | Install command |
+|---|---|
+| openSUSE | `sudo zypper install typelib-1_0-WebKit2-4_1` |
+| Ubuntu 24.04+ / Debian with WebKit 4.1 | `sudo apt install gir1.2-webkit2-4.1` |
+| Ubuntu 22.04 / Debian with WebKit 4.0 | `sudo apt install gir1.2-webkit2-4.0` |
+| Fedora | `sudo dnf install webkit2gtk4.1` |
+| RHEL / CentOS Stream / Rocky Linux / AlmaLinux | `sudo dnf install webkit2gtk3` |
+
+Then start the GUI installer **without** `sudo` so it can open the system authentication dialog when root privileges are required:
+
+```bash
+chmod +x cmdiqo-agent-linux-x64-setup
+./cmdiqo-agent-linux-x64-setup
+```
+
+If WebKit2GTK is unavailable, the installer falls back to Tkinter. Use the command-line service installation on headless systems.
+
+On an older openSUSE release that does not provide the 4.1 typelib, search for the compatible 4.0 package with `zypper search --details WebKit2`, then install `typelib-1_0-WebKit2-4_0`.
+
+### Linux GUI Installer: `no display name` or GUI Does Not Open After `sudo`
+
+The installer needs your desktop-session environment to open a graphical window. **Do not launch it with `sudo` normally**; start it as the logged-in desktop user and let the installer request elevation through the system `pkexec` password dialog:
+
+```bash
+chmod +x cmdiqo-agent-linux-x64-setup
+./cmdiqo-agent-linux-x64-setup
+```
+
+If you need to diagnose a direct `sudo` launch from a graphical terminal, pass the display and session variables explicitly:
+
+```bash
+sudo env \
+  DISPLAY="$DISPLAY" \
+  XAUTHORITY="$XAUTHORITY" \
+  WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
+  XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+  DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" \
+  ./cmdiqo-agent-linux-x64-setup
+```
+
+This direct-root command is for diagnostics only. Wayland compositors can reject root GUI clients even when these variables are present; use the normal non-`sudo` launch with `pkexec` whenever possible.

@@ -456,7 +456,7 @@ You can compile the agent into a single, standalone binary that has **zero Pytho
 On any Windows machine:
 ```powershell
 # Compiles the PE agent, Windows service ZIP, and Tkinter GUI installer:
-.\build.ps1 -Clean -Platform win64 -Target Agent
+.\build.ps1 --clean --platform win64 --target agent
 ```
 Outputs: `dist/cmdiqo-agent.exe`, `dist/cmdiqo-agent-windows-x64.zip`, and `dist/cmdiqo-agent-windows-x64-setup.exe`.
 
@@ -466,7 +466,7 @@ On Linux:
 ```bash
 ./build.sh --clean --target installer
 ```
-Outputs: `dist/cmdiqo-agent`, `dist/cmdiqo-agent-linux-x64.zip`, and `dist/cmdiqo-agent-linux-x64-setup`. When Docker is available, the build uses a Debian Bullseye (glibc 2.31) image for broad Linux compatibility.
+Outputs: `dist/cmdiqo-agent`, `dist/cmdiqo-agent-linux-x64.zip`, and `dist/cmdiqo-agent-linux-x64-setup`. When Docker is available, the build uses the latest Debian stable (trixie) image and packages the GTK/WebKit2 WebView backend. Linux targets still need a compatible native WebKit2GTK runtime (on openSUSE: `sudo zypper install typelib-1_0-WebKit2-4_1`); without it, the installer automatically falls back to Tkinter, then the CLI wizard on headless hosts.
 
 `build.sh` produces Linux executables only. PyInstaller emits Windows PE files only when run by Windows Python, so use `build.ps1` on Windows or the native Windows GitHub Actions runner for `.exe` files.
 
@@ -609,7 +609,7 @@ docker push youruser/cmdiqo-bot:latest
 
 # Or using repository build scripts:
 ./build.sh --bot          # Linux / macOS
-.\build.ps1 -Target Bot   # Windows
+.\build.ps1 --target bot  # Windows
 ```
 
 ## Environment variable reference

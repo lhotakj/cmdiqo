@@ -5,6 +5,7 @@ import re
 from unittest.mock import patch
 
 from development.update_version import (
+    AGENT_VERSION_INFO,
     generate_version_info_txt,
     get_base_version,
     update_versions,
@@ -49,6 +50,12 @@ def test_update_versions_override():
     assert version == "2.5.9"
 
 
+def test_update_versions_local_override_preserves_hex_timestamp():
+    version = update_versions(override_version="2.5.dev6A9C0B2D")
+    assert version == "2.5.dev6A9C0B2D"
+    assert "filevers=(2, 5, 2861, 0)" in AGENT_VERSION_INFO.read_text(encoding="utf-8")
+
+
 def test_generate_version_info_txt():
     content = generate_version_info_txt("1.0.dev6A9C0B2D", (1, 0, 2861, 0))
     assert "filevers=(1, 0, 2861, 0)" in content
@@ -70,4 +77,3 @@ def test_bundled_version_modules_without_version_txt():
     assert bot.app.get_version() == bot.app.__version__
     assert agent.agent.get_version() == agent.agent.__version__
     assert slacksim.__version__ == slacksim._version.__version__
-

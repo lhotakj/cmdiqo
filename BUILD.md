@@ -142,7 +142,7 @@ To change or bump the version, you only touch **ONE** file:
 #### One-Off Version Override (Without Changing `version.txt`):
 If you want to test-build an ad-hoc version without modifying `version.txt`:
 - **Python script**: `python development/update_version.py --version 1.2.0`
-- **PowerShell**: `.\build.ps1 -Version "1.2.0"`
+- **PowerShell**: `.\build.ps1 --version "1.2.0"`
 - **Bash**: `./build.sh -v 1.2.0`
 
 ---
@@ -160,28 +160,31 @@ Supporting utilities (`build_agent.py`, `update_version.py`, certificates, and e
 Run `.\build.ps1`:
 
 ```powershell
-# 1. Build the Windows agent ZIP, PE binary, and Tkinter GUI installer:
-.\build.ps1 -Clean -Platform win64 -Target Agent
+# In case you get errors with untrusted command, bypass the policy with (example to build installer for Win64)
+powershell -ExecutionPolicy Bypass -File .\build.ps1 --target installer --platform win64
+
+# 1. Build the Windows agent ZIP, PE binary, and WebView GUI installer:
+.\build.ps1 --clean --platform win64 --target agent
 
 # 2. Build and copy directly to a test location (e.g. C:\tmp\):
-.\build.ps1 -CopyTo "C:\tmp\cmdiqo-agent-windows-x64.exe"
+.\build.ps1 --copy-to "C:\tmp\cmdiqo-agent-windows-x64.exe"
 
 # 3. Clean previous build artifacts and build with explicit version:
-.\build.ps1 -Clean -Version "1.2.0"
+.\build.ps1 --clean --version "1.2.0"
 
 # 4. Build both agent executable and bot Docker container:
-.\build.ps1 -All
+.\build.ps1 --all
 
 # 5. Build bot Docker container only:
-.\build.ps1 -Bot
+.\build.ps1 --bot
 
 # 6. Build and push multi-arch Docker container:
-.\build.ps1 -Bot -Push
+.\build.ps1 --bot --push
 ```
 
 #### Parameters for `build.ps1`:
 - `-Agent`: Switch to build standalone Windows agent executable and installer (default).
-- `-Installer`: Switch to build standalone agent executable and Tkinter installer.
+- `-Installer`: Switch to build standalone agent executable and GUI installer (WebView, Tkinter fallback).
 - `-Bot`: Switch to build `cmdiqo-bot` Docker container image.
 - `-All`: Switch to build standalone agent binary, installer package, and bot container.
 - `-Target <Agent|Installer|Bot|All>`: Explicit target selection parameter.
@@ -200,7 +203,7 @@ Run `.\build.ps1`:
 Run `./build.sh`:
 
 ```bash
-# 1. Build the Linux agent ZIP, ELF binary, and Tkinter GUI installer:
+# 1. Build the Linux agent ZIP, ELF binary, and WebView (GTK/WebKit2) GUI installer:
 ./build.sh --clean --target installer
 
 # 2. Build Linux artifacts explicitly:
@@ -221,9 +224,9 @@ Run `./build.sh`:
 
 #### Parameters for `build.sh`:
 - `--agent, -a`: Build standalone agent binary and GUI installer (default).
-- `--installer, -i`: Build standalone agent binary and Tkinter installer.
+- `--installer, -i`: Build standalone agent binary and GUI installer (WebView, Tkinter fallback).
 - `--bot, -b, --docker`: Build Docker container for `cmdiqo-bot`.
-- `--all`: Build Linux agent binary, Tkinter installer, and bot container.
+- `--all`: Build Linux agent binary, GUI installer, and bot container.
 - `--target <agent|installer|bot|all>`: Explicit target selection parameter.
 - `--platform, -p <linux64>`: Linux target selection (default: `linux64`).
 - `-v, --version <string>`: Explicit version override (e.g. `1.2.0`).
@@ -235,21 +238,21 @@ Run `./build.sh`:
 - `-h, --help`: Display detailed usage instructions.
 
 > [!TIP]
-> **Cross-Distro Linux & SUSE Compatibility (glibc 2.31)**:
-> When Docker is present on the Linux build host, `build.sh` automatically compiles the Linux agent and installer inside a lightweight container (`python:3.11-slim-bullseye`, glibc 2.31). This guarantees that binaries built on newer Ubuntu systems (with glibc 2.38+) run without version errors on **openSUSE Leap 15.x**, **SUSE Linux Enterprise Server (SLES) 15**, Ubuntu 20.04+, and Debian 11+. If Docker is not available, it cleanly falls back to the host Python.
+> **Containerized Linux builds**:
+> When Docker is present on the Linux build host, `build.sh` automatically compiles the Linux agent and installer inside a lightweight container (`python:3.13-slim-trixie`, the latest Debian stable) that packages the GTK/WebKit2 Python backend. The target system must still provide a compatible native WebKit2GTK runtime; on openSUSE, install it with `sudo zypper install typelib-1_0-WebKit2-4_1`. If Docker is not available, the build cleanly falls back to the host Python. On a target without WebKit2GTK, the installer skips WebView and falls back to Tkinter, then to its interactive CLI wizard on headless hosts.
 
-> **Windows artifacts:** PyInstaller produces native binaries and does not cross-compile. `build.sh` produces Linux artifacts only. Run `build.ps1 -Platform win64` on Windows, or use the Windows GitHub Actions job, which publishes the native Windows agent and Tkinter installer alongside the Linux artifacts.
+> **Windows artifacts:** PyInstaller produces native binaries and does not cross-compile. `build.sh` produces Linux artifacts only. Run `build.ps1 --platform win64` on Windows, or use the Windows GitHub Actions job, which publishes the native Windows agent and GUI installer alongside the Linux artifacts.
 
 ### Distribution Files
 
 Each native build produces a platform ZIP containing the agent binary, command-line service installer/uninstaller scripts, and configuration examples. Release builds also upload the raw agent binary and GUI installer:
 
-| Platform | ZIP service package | Raw agent | Tkinter GUI installer |
+| Platform | ZIP service package | Raw agent | GUI installer |
 |---|---|---|---|
 | Linux x64 | `cmdiqo-agent-linux-x64.zip` | `cmdiqo-agent` | `cmdiqo-agent-linux-x64-setup` |
 | Windows x64 | `cmdiqo-agent-windows-x64.zip` | `cmdiqo-agent.exe` | `cmdiqo-agent-windows-x64-setup.exe` |
 
-Use the ZIP package for command-line installation. The raw installer is the graphical Tkinter installer for that platform. Linux binaries downloaded outside the ZIP may need `chmod +x`.
+Use the ZIP package for command-line installation. The raw installer is the graphical GUI installer for that platform — a modern WebView UI (Edge WebView2 on Windows, GTK/WebKit2 on Linux) that automatically falls back to Tkinter, and then to an interactive terminal wizard on headless hosts. Linux binaries downloaded outside the ZIP may need `chmod +x`.
 
 ### Building Container with Docker CLI & Compose
 
@@ -381,7 +384,7 @@ Cmdiqo CI/CD uses smart commit-message trigger commands to control formal releas
 
 | Commit Flag | Action Taken | Artifacts & Destination |
 | :--- | :--- | :--- |
-| **`/release-agent`** | Builds the agent and Tkinter installer on native Linux and Windows runners. | Creates/updates GitHub Release tag (`v<version>`) and uploads both ZIP service packages, both raw agent binaries, and both GUI installers. |
+| **`/release-agent`** | Builds the agent and GUI installer on native Linux and Windows runners. | Creates/updates GitHub Release tag (`v<version>`) and uploads both ZIP service packages, both raw agent binaries, and both GUI installers. |
 | **`/release-bot`** | Builds multi-arch Docker image for `cmdiqo-bot`. | Creates/updates GitHub Release tag (`v<version>`) and pushes multi-arch image (`linux/amd64,linux/arm64`) to Docker Hub (`:latest`, `:<version>`, `:<major>.<minor>`). |
 | **`/release`** | **Executes both** agent build/release and bot build/release in parallel. | Full production release: GitHub Release tag + agent `.zip` assets + Docker Hub container push. |
 
@@ -419,6 +422,6 @@ The **Build Agent Binaries (Windows & Linux x64)** workflow can also be started 
 
 #### Downloading Built Binaries:
 1. Navigate to **Releases** on GitHub (`https://github.com/<user>/Cmdiqo/releases`):
-   - Every `/release-agent` or `/release` run attaches both platform ZIP service packages, raw agent binaries, and Tkinter GUI installers listed in [Distribution Files](#distribution-files).
+   - Every `/release-agent` or `/release` run attaches both platform ZIP service packages, raw agent binaries, and GUI installers listed in [Distribution Files](#distribution-files).
 2. Or open any completed workflow run under the **Actions** tab:
    - Scroll to **Artifacts** to download build packages directly.

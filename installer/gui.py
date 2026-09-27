@@ -7,6 +7,7 @@ supports interactive WebSocket hub connection testing, and manages services.
 from __future__ import annotations
 
 import argparse
+import base64
 import ctypes
 import json
 import logging
@@ -15,6 +16,8 @@ import platform
 import socket
 import sys
 import threading
+import time
+from pathlib import Path
 from typing import Any, Optional
 
 from installer.backend import (
@@ -59,8 +62,12 @@ try:
     import tkinter as tk
     from tkinter import messagebox, ttk
     HAS_TKINTER = True
-except ImportError:
-    pass
+except ImportError as exc:
+    log.error(
+        "Tkinter is unavailable; the fallback GUI cannot start. "
+        "Install your distribution's Python Tk package and run the installer again: %s",
+        exc,
+    )
 
 
 # ==============================================================================
@@ -118,14 +125,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .brand-logo {
       width: 32px;
       height: 32px;
-      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
       border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 800;
-      font-size: 18px;
-      color: #fff;
+      object-fit: contain;
     }
     .brand-title {
       font-size: 18px;
@@ -149,24 +150,51 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
     }
 
     .card {
+      width: 100%;
+      max-width: 836px;
       background: var(--card-bg);
       border: 1px solid var(--card-border);
       border-radius: 12px;
       padding: 20px;
     }
+    .loading-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      text-align: center;
+    }
+    .spinner {
+      width: 34px;
+      height: 34px;
+      border: 4px solid rgba(59, 130, 246, 0.25);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
 
     .banner-icon {
       font-size: 36px;
-      margin-bottom: 12px;
+      line-height: 1;
+    }
+    .banner-heading {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
     }
     .banner-title {
       font-size: 16px;
       font-weight: 600;
-      margin-bottom: 8px;
       line-height: 1.4;
     }
     .banner-desc {
@@ -286,7 +314,26 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .service-dot.running { background: #22c55e; box-shadow: 0 0 9px #22c55e; }
     .service-dot.stopped { background: #3b82f6; }
     .service-dot.not-installed { background: #ef4444; }
-    .service-controls { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .service-controls-card {
+      padding: 14px;
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+    }
+    .service-controls-title {
+      margin-bottom: 10px;
+      color: var(--text-dim);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .primary-actions, .service-controls-actions {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
     button:disabled { cursor: not-allowed; opacity: 0.45; }
   </style>
 </head>
@@ -294,7 +341,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   <div class="header">
     <div class="header-brand">
-      <div class="brand-logo">C</div>
+      <img class="brand-logo" src="__BRAND_ICON_DATA_URI__" alt="Cmdiqo">
       <div>
         <div class="brand-title">Cmdiqo Agent Setup</div>
         <span class="badge" id="badge_version">v0.9.0</span>
@@ -304,19 +351,30 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <div class="content">
+    <div id="view_loading" class="card loading-card">
+      <div class="spinner" id="loading_spinner" role="status" aria-label="Loading"></div>
+      <div class="banner-title" id="loading_message">Loading Cmdiqo Agent Setup...</div>
+      <div class="banner-desc" id="loading_detail">Initializing the installer window.</div>
+    </div>
 
     <!-- VIEW 1: SAME VERSION ALREADY INSTALLED -->
     <div id="view_same" class="card hidden">
-      <div class="banner-icon">✓</div>
-      <div class="banner-title" id="same_message">You have already installed version 0.9.0</div>
+      <div class="banner-heading">
+        <div class="banner-icon">✓</div>
+        <div class="banner-title" id="same_message">You have already installed version 0.9.0</div>
+      </div>
       <div class="service-status" id="service_status"><span class="service-dot not-installed"></span><span>not installed</span></div>
       <div class="banner-desc">The Cmdiqo agent is installed and running as a native background service. What would you like to do?</div>
-      <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
+      <div class="primary-actions" style="margin-top: 20px;">
         <button type="button" class="btn-primary" onclick="reinstall()">Reinstall / Repair</button>
         <button type="button" class="btn-secondary" onclick="showView('view_form')">Reconfigure Settings</button>
         <button type="button" class="btn-danger" onclick="triggerUninstall()">Uninstall Service</button>
       </div>
-      <div class="service-controls">
+    </div>
+
+    <div id="view_service_controls" class="card service-controls-card hidden">
+      <div class="service-controls-title">Service controls</div>
+      <div class="service-controls-actions">
         <button type="button" class="btn-primary" id="btn_start_service" onclick="manageService('start')" disabled>&#9658; Start Service</button>
         <button type="button" class="btn-secondary" id="btn_restart_service" onclick="manageService('restart')" disabled>&#9632;&#9658; Restart Service</button>
         <button type="button" class="btn-danger" id="btn_stop_service" onclick="manageService('stop')" disabled>&#9632; Stop Service</button>
@@ -387,6 +445,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     <!-- VIEW 5: LOG TERMINAL & PROGRESS -->
     <div id="view_progress" class="card hidden">
+      <div class="spinner" role="status" aria-label="Working"></div>
       <div class="banner-title" id="progress_title">Executing installation...</div>
       <div class="terminal-box" id="log_terminal"></div>
     </div>
@@ -394,7 +453,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <div class="footer hidden" id="footer_bar">
-    <button type="button" class="btn-secondary" id="btn_cancel" onclick="closeWindow()">Cancel</button>
+    <button type="button" class="btn-secondary" id="btn_cancel" onclick="returnToMainScreen()">Back</button>
     <button type="button" class="btn-primary" id="btn_install" onclick="submitInstall()">Install & Start Service</button>
   </div>
 
@@ -407,12 +466,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     function showView(viewId) {
-      ['view_same', 'view_upgrade', 'view_newer', 'view_form', 'view_progress'].forEach(id => {
+      ['view_loading', 'view_same', 'view_service_controls', 'view_upgrade', 'view_newer', 'view_form', 'view_progress'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
       });
       const target = document.getElementById(viewId);
       if (target) target.classList.remove('hidden');
+      if (viewId === 'view_same') {
+        document.getElementById('view_service_controls').classList.remove('hidden');
+      }
 
       const footer = document.getElementById('footer_bar');
       if (footer) {
@@ -445,6 +507,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
+    function returnToMainScreen() {
+      syncWithBackend(true);
+    }
+
     function confirmUpgrade() {
       showView('view_progress');
       appendLog('[*] Upgrading Cmdiqo Agent...');
@@ -473,12 +539,25 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
+    let renderedServiceStatus = null;
+
     function updateServiceControls(status) {
       const isRunning = status === 'running';
       const isStopped = status === 'stopped';
       document.getElementById('btn_start_service').disabled = !isStopped;
       document.getElementById('btn_restart_service').disabled = !isRunning;
       document.getElementById('btn_stop_service').disabled = !isRunning;
+    }
+
+    function renderServiceStatus(status) {
+      if (status === renderedServiceStatus) {
+        return;
+      }
+      const statusNode = document.getElementById('service_status');
+      const label = status === 'not_installed' ? 'not installed' : status;
+      statusNode.innerHTML = '<span class="service-dot ' + status.replace('_', '-') + '"></span><span>' + label + '</span>';
+      updateServiceControls(status);
+      renderedServiceStatus = status;
     }
 
     function manageService(action) {
@@ -493,10 +572,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         if (!result.ok) {
           alert(result.message);
         }
-        syncWithBackend();
+        syncWithBackend(true);
       }).catch(error => {
         alert('Service operation failed: ' + error);
-        syncWithBackend();
+        syncWithBackend(true);
       });
     }
 
@@ -519,14 +598,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const bundled = data.bundled_version;
       const badge = document.getElementById('installed_badge');
       const status = data.service_status || 'not_installed';
-      const statusNode = document.getElementById('service_status');
-      if (statusNode) {
-        const label = status === 'not_installed' ? 'not installed' : status;
-        statusNode.innerHTML = '<span class="service-dot ' + status.replace('_', '-') + '"></span><span>' + label + '</span>';
-      }
-      updateServiceControls(status);
+      renderServiceStatus(status);
 
-      if (!installed) {
+      const hasConfiguration = Boolean(data.config && data.config.token && data.config.token.trim());
+      if (!hasConfiguration) {
+        badge.textContent = '';
+        badge.classList.add('hidden');
+        badge.style.display = 'none';
+        showView('view_form');
+      } else if (!installed) {
         // If no version is found, do NOT show (Detecting) or anything - just hide the element completely
         badge.textContent = '';
         badge.classList.add('hidden');
@@ -547,6 +627,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           document.getElementById('newer_message').textContent = 'You have already installed newer ' + installed;
           showView('view_newer');
         }
+      }
+      if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.mark_ui_ready === 'function') {
+        window.pywebview.api.mark_ui_ready();
       }
     }
 
@@ -606,7 +689,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function setFinished(success, message) {
       document.getElementById('progress_title').textContent = message;
       if (success) {
-        setTimeout(syncWithBackend, 250);
+        setTimeout(() => syncWithBackend(true), 250);
         return;
       }
       document.getElementById('footer_bar').classList.remove('hidden');
@@ -628,30 +711,121 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
     });
 
-    // 3. Proactively sync with pywebview backend API as soon as available
-    function syncWithBackend() {
+    // Poll because Edge/WebView2 may initialize the API before this page receives
+    // pywebviewready. Relying only on that one-shot event can leave the loader visible.
+    let initialStateLoaded = false;
+    let stateRequestInFlight = false;
+    let serviceStatusPollInFlight = false;
+    const startupStartedAt = Date.now();
+    let startupStatusTimer = null;
+    let startupStatusIndex = 0;
+    const startupStatusMessages = [
+      'Reading the installed Cmdiqo agent version.',
+      'Loading saved connection settings.',
+      'Checking the background service status.',
+      'Preparing installer controls.'
+    ];
+
+    function setLoadingDetail(message) {
+      document.getElementById('loading_detail').textContent = message;
+    }
+
+    function startStartupStatusUpdates() {
+      if (startupStatusTimer !== null) {
+        return;
+      }
+      setLoadingDetail(startupStatusMessages[startupStatusIndex]);
+      startupStatusTimer = setInterval(() => {
+        startupStatusIndex = Math.min(startupStatusIndex + 1, startupStatusMessages.length - 1);
+        setLoadingDetail(startupStatusMessages[startupStatusIndex]);
+      }, 750);
+    }
+
+    function stopStartupStatusUpdates() {
+      if (startupStatusTimer !== null) {
+        clearInterval(startupStatusTimer);
+        startupStatusTimer = null;
+      }
+    }
+
+    function syncWithBackend(force) {
+      if (stateRequestInFlight || (!force && initialStateLoaded)) {
+        return;
+      }
       if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.get_state === 'function') {
-        window.pywebview.api.get_state().then(initUI).catch(console.error);
+        stateRequestInFlight = true;
+        startStartupStatusUpdates();
+        window.pywebview.api.get_state().then(data => {
+          stateRequestInFlight = false;
+          initialStateLoaded = true;
+          stopStartupStatusUpdates();
+          initUI(data);
+        }).catch(error => {
+          document.getElementById('loading_message').textContent =
+            'Unable to load installer status. Retrying...';
+          setLoadingDetail('The installer will retry automatically.');
+          console.error(error);
+          stateRequestInFlight = false;
+          stopStartupStatusUpdates();
+          setTimeout(syncWithBackend, 1000);
+        });
+        return;
       }
+
+      if (Date.now() - startupStartedAt > 2000) {
+        document.getElementById('loading_message').textContent =
+          'Starting the Windows browser bridge...';
+        setLoadingDetail('Waiting for the embedded browser to make the installer API available.');
+      }
+
+      // Non-destructive give-up: after ~25s without the bridge, stop polling and show a
+      // clear in-page error instead of spinning forever. We never destroy the window or
+      // restart the WebView backend here, which previously left disposed native controls
+      // behind and crashed the installer.
+      if (Date.now() - startupStartedAt > 25000) {
+        stopStartupStatusUpdates();
+        document.getElementById('loading_message').textContent =
+          'The installer could not start its embedded browser.';
+        setLoadingDetail(
+          'Please ensure the Microsoft Edge WebView2 Runtime is installed, then close ' +
+          'this window and run the installer again.'
+        );
+        const spinner = document.getElementById('loading_spinner');
+        if (spinner) {
+          spinner.classList.add('hidden');
+        }
+        return;
+      }
+      setTimeout(syncWithBackend, 100);
     }
 
-    if (window.pywebview && window.pywebview.api) {
-      syncWithBackend();
-    } else {
-      window.addEventListener('pywebviewready', syncWithBackend);
+    window.addEventListener('pywebviewready', () => syncWithBackend(false));
+    syncWithBackend(false);
+
+    function pollServiceStatus() {
+      const installedView = document.getElementById('view_same');
+      if (
+        initialStateLoaded &&
+        !serviceStatusPollInFlight &&
+        !installedView.classList.contains('hidden') &&
+        window.pywebview &&
+        window.pywebview.api &&
+        typeof window.pywebview.api.get_current_service_status === 'function'
+      ) {
+        serviceStatusPollInFlight = true;
+        window.pywebview.api.get_current_service_status().then(status => {
+          renderServiceStatus(status || 'not_installed');
+        }).catch(error => {
+          console.error('Could not refresh service status:', error);
+        }).finally(() => {
+          serviceStatusPollInFlight = false;
+        });
+      }
+      setTimeout(pollServiceStatus, 1000);
     }
 
-    // 4. Safety timeout: if after 150ms still no view is visible, ensure fresh install form is shown
-    setTimeout(function () {
-      const views = ['view_same', 'view_upgrade', 'view_newer', 'view_form', 'view_progress'];
-      const anyVisible = views.some(id => {
-        const el = document.getElementById(id);
-        return el && !el.classList.contains('hidden');
-      });
-      if (!anyVisible) {
-        showView('view_form');
-      }
-    }, 150);
+    setTimeout(pollServiceStatus, 1000);
+
   </script>
 </body>
 </html>
@@ -662,19 +836,39 @@ class WebViewApi:
     """Python API bridge exposed to the webview JavaScript."""
 
     def __init__(self, window: Any):
-        self.window = window
+        # Keep the native window reference private (underscore-prefixed) so pywebview's
+        # JS bridge does not try to introspect/serialize it. A public reference would make
+        # pywebview recursively walk window.native.browser.webview... on the WebView2
+        # backend, producing "maximum recursion depth exceeded" and cross-thread COM
+        # errors that flood the log and destabilize startup.
+        self._window = window
         self.paths = get_platform_paths()
         self.bundled_ver = get_bundled_version()
+        self.installed_ver: Optional[str] = None
+        self.cmp: Optional[int] = None
+        self.config: dict = {}
+        self.service_status = "not_installed"
+        self.ui_ready = threading.Event()
+
+    def get_state(self) -> dict:
+        started_at = time.monotonic()
+        log.info("[startup] Reading installed Cmdiqo agent version from %s", self.paths.install_dir)
         self.installed_ver = get_installed_version(self.paths)
         self.cmp = (
             compare_versions(self.installed_ver, self.bundled_ver)
             if self.installed_ver is not None
             else None
         )
+        log.info("[startup] Loading saved agent configuration from %s", self.paths.config_file)
         self.config = get_existing_config(self.paths)
+        log.info("[startup] Checking background service %s", self.paths.service_name)
         self.service_status = get_service_status(self.paths)
-
-    def get_state(self) -> dict:
+        log.info(
+            "[startup] Installer state loaded in %.2fs: version=%s, service=%s",
+            time.monotonic() - started_at,
+            self.installed_ver or "not installed",
+            self.service_status,
+        )
         return {
             "bundled_version": self.bundled_ver,
             "installed_version": self.installed_ver,
@@ -692,20 +886,28 @@ class WebViewApi:
         ok, msg = check_hub_connection(url)
         return {"ok": ok, "message": msg}
 
+    def get_current_service_status(self) -> str:
+        """Return only the live service state for the installed-agent UI poll."""
+        return get_service_status(self.paths)
+
+    def mark_ui_ready(self) -> None:
+        """Acknowledge that the WebView rendered the initial installer screen."""
+        self.ui_ready.set()
+
     def close_window(self) -> None:
-        if self.window:
-            self.window.destroy()
+        if self._window:
+            self._window.destroy()
 
     def confirm_upgrade(self) -> None:
         """User clicked YES on upgrade."""
-        self.window.evaluate_js("showView('view_progress')")
-        self.window.evaluate_js("appendLog('[*] Upgrading Cmdiqo Agent to version " + self.bundled_ver + "...')")
+        self._window.evaluate_js("showView('view_progress')")
+        self._window.evaluate_js("appendLog('[*] Upgrading Cmdiqo Agent to version " + self.bundled_ver + "...')")
         threading.Thread(target=self._run_upgrade, daemon=True).start()
 
     def reinstall(self) -> None:
         """User clicked Reinstall on already-same-version."""
-        self.window.evaluate_js("showView('view_progress')")
-        self.window.evaluate_js("appendLog('[*] Reinstalling Cmdiqo Agent version " + self.bundled_ver + "...')")
+        self._window.evaluate_js("showView('view_progress')")
+        self._window.evaluate_js("appendLog('[*] Reinstalling Cmdiqo Agent version " + self.bundled_ver + "...')")
         threading.Thread(target=self._run_reinstall, daemon=True).start()
 
     def manage_service(self, action: str) -> dict[str, str | bool]:
@@ -735,8 +937,8 @@ class WebViewApi:
 
     def uninstall(self, purge: bool = False) -> None:
         """User clicked Uninstall."""
-        self.window.evaluate_js("showView('view_progress')")
-        self.window.evaluate_js("appendLog('[*] Uninstalling Cmdiqo Agent Service...')")
+        self._window.evaluate_js("showView('view_progress')")
+        self._window.evaluate_js("appendLog('[*] Uninstalling Cmdiqo Agent Service...')")
         threading.Thread(target=self._run_uninstall, args=(purge,), daemon=True).start()
 
     def install(self, config: dict) -> None:
@@ -745,40 +947,159 @@ class WebViewApi:
 
     def _log_to_ui(self, msg: str) -> None:
         safe_msg = json.dumps(msg)
-        self.window.evaluate_js(f"appendLog({safe_msg})")
+        self._window.evaluate_js(f"appendLog({safe_msg})")
 
     def _run_install(self, config: dict) -> None:
         ok = install_or_upgrade(config, progress_callback=self._log_to_ui)
         title = "Installation completed successfully!" if ok else "Installation failed!"
-        self.window.evaluate_js(f"setFinished({str(ok).lower()}, {json.dumps(title)})")
+        self._window.evaluate_js(f"setFinished({str(ok).lower()}, {json.dumps(title)})")
 
     def _run_upgrade(self) -> None:
         ok = install_or_upgrade(self.config, progress_callback=self._log_to_ui)
         title = "Upgrade completed successfully!" if ok else "Upgrade failed!"
-        self.window.evaluate_js(f"setFinished({str(ok).lower()}, {json.dumps(title)})")
+        self._window.evaluate_js(f"setFinished({str(ok).lower()}, {json.dumps(title)})")
 
     def _run_reinstall(self) -> None:
         ok = install_or_upgrade(self.config, progress_callback=self._log_to_ui)
         title = "Reinstallation completed successfully!" if ok else "Reinstallation failed!"
-        self.window.evaluate_js(f"setFinished({str(ok).lower()}, {json.dumps(title)})")
+        self._window.evaluate_js(f"setFinished({str(ok).lower()}, {json.dumps(title)})")
 
     def _run_uninstall(self, purge: bool) -> None:
         ok = perform_uninstall(purge_config=purge, progress_callback=self._log_to_ui)
         title = "Service uninstalled successfully!" if ok else "Uninstall encountered errors."
-        self.window.evaluate_js(f"setFinished({str(ok).lower()}, {json.dumps(title)})")
+        self._window.evaluate_js(f"setFinished({str(ok).lower()}, {json.dumps(title)})")
+
+
+def get_brand_icon_data_uri() -> str:
+    """Return the bundled Cmdiqo icon as a browser-safe data URI."""
+    candidates = []
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        candidates.append(Path(sys._MEIPASS) / "cmdiqo.ico")
+    candidates.append(Path(__file__).resolve().parent.parent / "development" / "cmdiqo.ico")
+
+    for icon_path in candidates:
+        try:
+            return f"data:image/x-icon;base64,{base64.b64encode(icon_path.read_bytes()).decode('ascii')}"
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            log.warning("Could not load Cmdiqo brand icon %s: %s", icon_path, exc)
+            break
+    return ""
+
+
+def linux_webview_install_hint() -> str:
+    """Return the WebKit2GTK installation command for the current Linux distribution."""
+    try:
+        os_release = Path("/etc/os-release").read_text(encoding="utf-8")
+    except OSError:
+        return "Install your distribution's WebKit2GTK 4.0 or 4.1 runtime package."
+
+    fields = {
+        key: value.strip().strip('"')
+        for line in os_release.splitlines()
+        if "=" in line
+        for key, value in [line.split("=", 1)]
+    }
+    distro_ids = {fields.get("ID", "").lower(), *fields.get("ID_LIKE", "").lower().split()}
+    version = fields.get("VERSION_ID", "")
+
+    if distro_ids & {"opensuse", "suse", "sles"}:
+        return "sudo zypper install typelib-1_0-WebKit2-4_1"
+    if distro_ids & {"ubuntu", "debian"}:
+        package = "gir1.2-webkit2-4.0" if version.startswith(("20.04", "22.04")) else "gir1.2-webkit2-4.1"
+        return f"sudo apt install {package}"
+    if distro_ids & {"rhel", "centos", "rocky", "almalinux"}:
+        return "sudo dnf install webkit2gtk3"
+    if "fedora" in distro_ids:
+        version_major = version.split(".", 1)[0]
+        package = "webkit2gtk3" if version_major.isdigit() and int(version_major) < 40 else "webkit2gtk4.1"
+        return f"sudo dnf install {package}"
+    return "Install your distribution's WebKit2GTK 4.0 or 4.1 runtime package."
+
+
+def linux_gui_environment_guidance() -> str:
+    """Return guidance for launching a Linux GUI installer with desktop variables."""
+    return (
+        "Run the installer as your desktop user, without sudo: "
+        "./cmdiqo-agent-linux-x64-setup. It will request root access through pkexec. "
+        "If you must diagnose a direct sudo launch, preserve the desktop variables with: "
+        "sudo env DISPLAY=\"$DISPLAY\" XAUTHORITY=\"$XAUTHORITY\" "
+        "WAYLAND_DISPLAY=\"$WAYLAND_DISPLAY\" XDG_RUNTIME_DIR=\"$XDG_RUNTIME_DIR\" "
+        "DBUS_SESSION_BUS_ADDRESS=\"$DBUS_SESSION_BUS_ADDRESS\" "
+        "./cmdiqo-agent-linux-x64-setup"
+    )
+
+
+def configure_linux_typelib_search_paths(repository: Any) -> list[str]:
+    """Add standard system GObject typelib paths to a bundled PyGObject runtime."""
+    system_paths: list[str] = []
+    for typelib_dir in (
+        Path("/usr/lib64/girepository-1.0"),
+        Path("/usr/lib/girepository-1.0"),
+    ):
+        if typelib_dir.is_dir():
+            path = str(typelib_dir)
+            repository.prepend_search_path(path)
+            system_paths.append(path)
+    get_search_path = getattr(repository, "get_search_path", None)
+    if callable(get_search_path):
+        return [str(path) for path in get_search_path()]
+    return system_paths
+
+
+def linux_webview_runtime_available() -> bool:
+    """Return whether the target Linux system provides a WebKit2GTK typelib."""
+    search_paths: list[str] = []
+    try:
+        import gi
+
+        try:
+            gi.require_version("GIRepository", "3.0")
+        except ValueError:
+            gi.require_version("GIRepository", "2.0")
+        from gi.repository import GIRepository
+        repository = GIRepository.Repository.get_default()
+        search_paths = configure_linux_typelib_search_paths(repository)
+        try:
+            gi.require_version("WebKit2", "4.1")
+        except ValueError:
+            gi.require_version("WebKit2", "4.0")
+        from gi.repository import WebKit2  # noqa: F401
+    except (AttributeError, ImportError, ValueError) as exc:
+        log.warning(
+            "WebKit2GTK is not available; skipping the WebView UI. Error: %s. "
+            "GI typelib search paths: %s. Install it with: %s",
+            exc,
+            search_paths,
+            linux_webview_install_hint(),
+        )
+        return False
+    return True
 
 
 def run_webview_gui() -> bool:
     """Launch modern HTML-based desktop GUI using pywebview."""
+    if not IS_WINDOWS and not linux_webview_runtime_available():
+        return False
+
     try:
         if IS_WINDOWS:
             os.environ.setdefault("PYWEBVIEW_GUI", "edgechromium")
         import webview
+    except ImportError:
+        # pywebview is intentionally bundled only in the Windows installer. On Linux the
+        # frozen installer ships the Tkinter GUI instead, so a missing module here is an
+        # expected condition, not an error worth a stack trace.
+        log.info("pywebview is not available; skipping the WebView GUI backend.")
+        return False
 
+    try:
         api = WebViewApi(None)
-        state = api.get_state()
-        state_json = json.dumps(state)
-        html_rendered = HTML_TEMPLATE.replace("__INITIAL_STATE_JSON__", state_json)
+        html_rendered = (
+            HTML_TEMPLATE.replace("__INITIAL_STATE_JSON__", "null")
+            .replace("__BRAND_ICON_DATA_URI__", get_brand_icon_data_uri())
+        )
         win = webview.create_window(
             title="Cmdiqo Agent Setup",
             html=html_rendered,
@@ -787,7 +1108,7 @@ def run_webview_gui() -> bool:
             height=660,
             resizable=False,
         )
-        api.window = win
+        api._window = win
         # On Windows, also pass gui='edgechromium' directly to start() alongside the env var.
         # Belt-and-suspenders: some pywebview builds pick up the backend selection late.
         start_kwargs: dict = {}
@@ -803,6 +1124,57 @@ def run_webview_gui() -> bool:
         return False
 
 
+def has_interactive_stdin() -> bool:
+    """Return whether the process can safely show the terminal installer."""
+    try:
+        return sys.stdin is not None and sys.stdin.isatty()
+    except (AttributeError, OSError):
+        return False
+
+
+def show_gui_startup_failure() -> None:
+    """Report a GUI startup failure without requiring a console window."""
+    if IS_WINDOWS:
+        log_hint = os.path.join(os.environ.get("TEMP", ""), "cmdiqo", "installer.log")
+        message = (
+            "Cmdiqo Agent Setup could not start its embedded browser window.\n\n"
+            "Please ensure that the Microsoft Edge WebView2 Runtime is installed, then "
+            "run the installer again.\n\n"
+            f"Details were written to:\n{log_hint}"
+        )
+    else:
+        install_hint = linux_webview_install_hint()
+        message = (
+            "Cmdiqo Agent Setup could not open a graphical window.\n\n"
+            "Please ensure a desktop display is available and the Tkinter (python3-tk) "
+            f"package is installed. For the modern WebView UI, install:\n{install_hint}\n\n"
+            "Re-run the installer without sudo so it can request desktop authentication.\n\n"
+            "Details were written to the installer log."
+        )
+    log.error("Unable to start a graphical installer. %s", message.replace("\n", " "))
+
+    if IS_WINDOWS:
+        try:
+            ctypes.windll.user32.MessageBoxW(
+                None,
+                message,
+                "Cmdiqo Agent Setup",
+                0x10,  # MB_ICONERROR
+            )
+            return
+        except (AttributeError, OSError) as exc:
+            log.error("Could not display the Windows installer error dialog: %s", exc)
+
+    if HAS_TKINTER:
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showerror("Cmdiqo Agent Setup", message)
+            root.destroy()
+        except tk.TclError as exc:
+            log.error("Could not display the Tkinter installer error dialog: %s", exc)
+
+
 # ==============================================================================
 # TKINTER GUI IMPLEMENTATION (STANDARDIZED PYTHON DESKTOP FALLBACK)
 # ==============================================================================
@@ -813,8 +1185,10 @@ def run_tkinter_gui() -> bool:
 
     try:
         root = tk.Tk()
-    except Exception as exc:
+    except tk.TclError as exc:
         log.warning("Tkinter could not open display: %s", exc)
+        if not IS_WINDOWS:
+            log.error("%s", linux_gui_environment_guidance())
         return False
 
     paths = get_platform_paths()
@@ -883,12 +1257,14 @@ def run_tkinter_gui() -> bool:
         else:
             status_icon.create_oval(4, 4, 12, 12, fill=status_colors[service_status], outline="")
         status_icon.pack(side="left")
-        tk.Label(
+        status_label = tk.Label(
             status_row,
             text=status_labels[service_status],
             foreground=status_colors[service_status],
             font=("Segoe UI" if IS_WINDOWS else "Helvetica", 11, "bold"),
-        ).pack(side="left", padx=(5, 0))
+            background=root.cget("background"),
+        )
+        status_label.pack(side="left", padx=(5, 0))
         ttk.Label(
             content,
             text="The service is already up to date. What would you like to do?",
@@ -899,9 +1275,11 @@ def run_tkinter_gui() -> bool:
         btn_box.pack(pady=25)
 
         def do_reinstall():
-            install_or_upgrade(config)
-            messagebox.showinfo("Success", f"Cmdiqo Agent v{bundled_ver} reinstalled successfully.")
-            close()
+            if install_or_upgrade(config):
+                refresh_service_controls()
+                messagebox.showinfo("Success", f"Cmdiqo Agent v{bundled_ver} reinstalled successfully.")
+            else:
+                messagebox.showerror("Repair failed", "Cmdiqo Agent could not be reinstalled. Check installer.log.")
 
         def do_uninstall():
             if not messagebox.askyesno("Uninstall", "Are you sure you want to uninstall Cmdiqo Agent service?"):
@@ -917,6 +1295,68 @@ def run_tkinter_gui() -> bool:
         ttk.Button(btn_box, text="Reinstall / Repair", command=do_reinstall).pack(side="left", padx=5)
         ttk.Button(btn_box, text="Uninstall", command=do_uninstall).pack(side="left", padx=5)
         ttk.Button(btn_box, text="Close", command=close).pack(side="left", padx=5)
+
+        service_btn_box = ttk.Frame(content)
+        service_btn_box.pack(pady=(0, 12))
+
+        def refresh_service_controls(force: bool = False):
+            nonlocal service_status
+            current_status = get_service_status(paths)
+            if not force and current_status == service_status:
+                return
+            service_status = current_status
+            status_icon.delete("all")
+            if service_status == "running":
+                status_icon.create_oval(1, 1, 15, 15, fill="#bbf7d0", outline="")
+            status_icon.create_oval(
+                4, 4, 12, 12, fill=status_colors[service_status], outline=""
+            )
+            status_label.configure(
+                text=status_labels[service_status],
+                foreground=status_colors[service_status],
+            )
+            start_button.configure(state="normal" if service_status == "stopped" else "disabled")
+            restart_button.configure(state="normal" if service_status == "running" else "disabled")
+            stop_button.configure(state="normal" if service_status == "running" else "disabled")
+
+        def manage_tk_service(action: str) -> None:
+            operations = {
+                "start": start_service,
+                "restart": restart_service,
+                "stop": stop_service,
+            }
+            if not operations[action](paths):
+                messagebox.showerror(
+                    "Service operation failed",
+                    f"Could not {action} the Cmdiqo service. Check installer.log and service.log.",
+                )
+            refresh_service_controls(force=True)
+
+            def poll_tk_service_status():
+                refresh_service_controls()
+                root.after(1000, poll_tk_service_status)
+
+            root.after(1000, poll_tk_service_status)
+
+        start_button = ttk.Button(
+            service_btn_box,
+            text="Start Service",
+            command=lambda: manage_tk_service("start"),
+        )
+        restart_button = ttk.Button(
+            service_btn_box,
+            text="Restart Service",
+            command=lambda: manage_tk_service("restart"),
+        )
+        stop_button = ttk.Button(
+            service_btn_box,
+            text="Stop Service",
+            command=lambda: manage_tk_service("stop"),
+        )
+        start_button.pack(side="left", padx=5)
+        restart_button.pack(side="left", padx=5)
+        stop_button.pack(side="left", padx=5)
+        refresh_service_controls()
 
         root.mainloop()
         return True
@@ -1187,29 +1627,41 @@ def main() -> None:
 
     # Request Administrator / root privileges for install/upgrade
     if not is_admin():
+        log.info("Administrator/root privileges are required before starting the installer UI.")
         if not args.cli and not args.quiet:
             if request_elevation():
                 sys.exit(0)
-            print("[ERROR] Administrator/root privileges are required to install or manage Windows/Linux services.")
+            log.error("Administrator/root privileges are required to install or manage services.")
+            show_gui_startup_failure()
         else:
-            print("[ERROR] Please re-run this installer as Administrator (Windows) or root with sudo (Linux).")
+            log.error("Please re-run this installer as Administrator (Windows) or root with sudo (Linux).")
             sys.exit(1)
+        sys.exit(1)
 
-    # If --cli or --quiet specified, run CLI mode
+    # If --cli or --quiet specified, run CLI mode only when a console is available.
     if args.cli or args.quiet:
+        if not has_interactive_stdin():
+            log.error("CLI installer was requested but stdin is not interactive.")
+            if not args.quiet:
+                show_gui_startup_failure()
+            sys.exit(1)
         run_cli_installer()
         return
 
-    # Tkinter starts immediately and is bundled in both native installers.
-    if HAS_TKINTER and run_tkinter_gui():
-        return
-
-    # Keep the optional WebView UI only for systems without Tkinter.
+    # Both platforms now use the richer WebView UI as the primary interface: Edge WebView2
+    # on Windows and GTK/WebKit2 on Linux. Tkinter is the graphical fallback, and the
+    # terminal wizard is used only when an interactive console is available (e.g. headless
+    # servers over SSH). We never fall through to CLI without an interactive stdin.
     if run_webview_gui():
         return
 
-    # Fallback to interactive terminal wizard if no GUI display available
-    run_cli_installer()
+    if HAS_TKINTER and run_tkinter_gui():
+        return
+
+    if has_interactive_stdin():
+        run_cli_installer()
+    else:
+        show_gui_startup_failure()
 
 
 if __name__ == "__main__":
