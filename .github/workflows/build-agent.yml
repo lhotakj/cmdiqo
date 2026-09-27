@@ -84,7 +84,7 @@ jobs:
 
       - name: Build and sign Windows agent and Tkinter installer
         if: matrix.os == 'windows-latest'
-        shell: pwsh
+        shell: powershell
         env:
           SIGNING_CERT_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}
           SIGNING_CERT_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERT_PASSWORD }}
@@ -93,7 +93,7 @@ jobs:
 
       - name: Verify Windows Signature & Certificate
         if: matrix.os == 'windows-latest'
-        shell: pwsh
+        shell: powershell
         run: |
           $signedFiles = @(
             "${{ matrix.binary_src }}",

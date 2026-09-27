@@ -23,7 +23,7 @@ def run_cmd(cmd: list[str], check: bool = True) -> None:
     subprocess.run(cmd, cwd=str(ROOT), check=check)
 
 
-def sign_windows_binary(exe_path: Path) -> None:
+def _legacy_sign_windows_binary(exe_path: Path) -> None:
     """Digitally sign a Windows executable and export its public certificate."""
     cer_dist = exe_path.parent / "cmdiqo-agent.cer"
     cer_root = ROOT / "cmdiqo-agent.cer"
@@ -73,6 +73,66 @@ def sign_windows_binary(exe_path: Path) -> None:
     print("\n[*] Digitally signing Windows executable...")
     subprocess.run(
         ["powershell", "-NoProfile", "-Command", ps_cmd],
+        cwd=str(ROOT),
+        check=True,
+    )
+
+
+def sign_windows_binary(exe_path: Path) -> None:
+    """Sign a Windows executable using Windows PowerShell's certificate provider."""
+    if os.name != "nt":
+        return
+
+    cer_dist = exe_path.parent / "cmdiqo-agent.cer"
+    cer_root = ROOT / "cmdiqo-agent.cer"
+    ps_executable = Path(os.environ["WINDIR"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    if not ps_executable.is_file():
+        raise RuntimeError(f"Windows PowerShell was not found at {ps_executable}")
+
+    exe = str(exe_path).replace("'", "''")
+    dist_cer = str(cer_dist).replace("'", "''")
+    root_cer = str(cer_root).replace("'", "''")
+    ps_cmd = (
+        "$ErrorActionPreference = 'Stop'; "
+        "Import-Module Microsoft.PowerShell.Security; "
+        "$store = 'Cert:\\CurrentUser\\My'; "
+        "$cert = $null; "
+        "if ($env:SIGNING_CERT_BASE64) { "
+        "  $pfxPath = Join-Path ([IO.Path]::GetTempPath()) 'cmdiqo-signing.pfx'; "
+        "  try { "
+        "    [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:SIGNING_CERT_BASE64)); "
+        "    $password = ConvertTo-SecureString $env:SIGNING_CERT_PASSWORD -AsPlainText -Force; "
+        "    $cert = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation $store -Password $password | Select-Object -First 1; "
+        "  } finally { Remove-Item -Force $pfxPath -ErrorAction SilentlyContinue } "
+        "} else { "
+        "  $cert = Get-ChildItem -Path $store | Where-Object { "
+        "    $_.HasPrivateKey -and $_.EnhancedKeyUsageList.ObjectId.Value -contains '1.3.6.1.5.5.7.3.3' "
+        "  } | Select-Object -First 1; "
+        "  if (-not $cert) { "
+        "    $cert = New-SelfSignedCertificate -Type CodeSigningCert "
+        "      -Subject 'CN=CmdiqoHub, O=CmdiqoHub, OU=Verified Build' "
+        "      -CertStoreLocation $store -HashAlgorithm SHA256 -NotAfter (Get-Date).AddYears(5); "
+        "  } "
+        "}; "
+        "if (-not $cert -or -not $cert.HasPrivateKey) { throw 'No code-signing certificate with a private key is available.' }; "
+        f"Export-Certificate -Cert $cert -FilePath '{dist_cer}' -Force | Out-Null; "
+        f"Export-Certificate -Cert $cert -FilePath '{root_cer}' -Force | Out-Null; "
+        "$signed = $false; "
+        "foreach ($timestampServer in @('http://timestamp.digicert.com', 'http://timestamp.sectigo.com')) { "
+        "  try { "
+        f"    $signature = Set-AuthenticodeSignature -FilePath '{exe}' -Certificate $cert -TimestampServer $timestampServer -HashAlgorithm SHA256; "
+        "    if ($signature.SignatureType -eq 'Authenticode') { $signed = $true; break } "
+        "  } catch { Write-Warning \"Timestamp server failed: $($_.Exception.Message)\" } "
+        "}; "
+        "if (-not $signed) { "
+        f"  $signature = Set-AuthenticodeSignature -FilePath '{exe}' -Certificate $cert -HashAlgorithm SHA256; "
+        "}; "
+        "if ($signature.SignatureType -ne 'Authenticode') { throw 'Authenticode signing did not produce a signature.' }; "
+        f"Get-AuthenticodeSignature -FilePath '{exe}' | Format-List Status, StatusMessage, SignatureType, SignerCertificate, TimeStamperCertificate"
+    )
+    print("\n[*] Digitally signing Windows executable...")
+    subprocess.run(
+        [str(ps_executable), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ps_cmd],
         cwd=str(ROOT),
         check=True,
     )
