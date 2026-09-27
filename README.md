@@ -54,8 +54,9 @@ nothing to expose, TLS handled for you. Ideal for a home server.
 │   ├── docker-compose.yml          # ready-to-run compose file
 │   └── docker-compose.example.yml  # standalone deployment compose template
 ├── requirements.txt
-├── build.ps1                       # local Windows build script (agent binary + bot Docker)
-├── build.sh                        # local Linux/macOS build script (agent binary + bot Docker)
+├── build.ps1                       # Windows agent, native setup, and bot build script
+├── build.sh                        # Linux agent, native setup, and bot build script
+├── installer.c/                    # native C++ setup application; released by --installer
 ├── bot/
 │   ├── app.py                      # Slack app, dispatch, auth
 │   ├── hub.py                      # WebSocket hub for remote agents
@@ -451,22 +452,32 @@ The agent supports 3 configuration methods with the following precedence:
 
 You can compile the agent into a single, standalone binary that has **zero Python runtime dependencies** on target machines. Full build documentation is available in [BUILD.md](BUILD.md).
 
-#### 1. Build Windows 64-bit Agent and GUI Installer
+#### 1. Build Windows 64-bit Agent Package
 
 On any Windows machine:
 ```powershell
-# Compiles the PE agent, Windows service ZIP, and Tkinter GUI installer:
+# Compiles the PE agent and Windows service ZIP:
 .\build.ps1 --clean --platform win64 --target agent
-```
-Outputs: `dist/cmdiqo-agent.exe`, `dist/cmdiqo-agent-windows-x64.zip`, and `dist/cmdiqo-agent-windows-x64-setup.exe`.
 
-#### 2. Build Linux 64-bit Agent and GUI Installer
+# Compiles the agent ZIP and paired native Windows setup bundle:
+.\build.ps1 --installer
+```
+Outputs: `dist/cmdiqo-agent.exe` and `dist/cmdiqo-agent-windows-x64.zip`.
+
+#### 2. Build Linux 64-bit Agent Package
 
 On Linux:
 ```bash
-./build.sh --clean --target installer
+./build.sh --clean --target agent
+
+# Compiles the agent ZIP and paired native Linux setup bundle:
+./build.sh --installer
 ```
-Outputs: `dist/cmdiqo-agent`, `dist/cmdiqo-agent-linux-x64.zip`, and `dist/cmdiqo-agent-linux-x64-setup`. When Docker is available, the build uses the latest Debian stable (trixie) image and packages the GTK/WebKit2 WebView backend. Linux targets still need a compatible native WebKit2GTK runtime (on openSUSE: `sudo zypper install typelib-1_0-WebKit2-4_1`); without it, the installer automatically falls back to Tkinter, then the CLI wizard on headless hosts.
+Outputs: `dist/cmdiqo-agent` and `dist/cmdiqo-agent-linux-x64.zip`. Each ZIP includes the binary and platform service scripts: `install.sh`/`uninstall.sh` on Linux and `install.ps1`/`uninstall.ps1` on Windows.
+
+`--installer` additionally writes the native setup executable to `dist/` beside
+the matching ZIP. Keep both `dist` files together when distributing the
+graphical installer.
 
 `build.sh` produces Linux executables only. PyInstaller emits Windows PE files only when run by Windows Python, so use `build.ps1` on Windows or the native Windows GitHub Actions runner for `.exe` files.
 
@@ -475,9 +486,9 @@ The repository includes [`.github/workflows/build-agent.yml`](.github/workflows/
 1. Go to your GitHub repository and click the **Actions** tab.
 2. Select the latest **Build Agent Binaries** workflow run.
 3. Scroll down to the **Artifacts** section at the bottom of the summary page.
-4. Download `cmdiqo-agent-windows-x64` or `cmdiqo-agent-linux-x64`. Each contains the platform ZIP service package, raw agent binary, and Tkinter GUI installer.
+4. Download `cmdiqo-agent-windows-x64` or `cmdiqo-agent-linux-x64`. Each contains the platform ZIP service package and raw agent binary.
 
-Commit `/release-agent` or `/release` on `main` to publish the same six files to a GitHub Release: two ZIP service packages, two raw agent binaries, and two GUI installers. CI verifies every ZIP includes its platform binary and command-line service installation scripts before upload.
+Commit `/release-agent` or `/release` on `main` to publish the same four files to a GitHub Release: two ZIP service packages and two raw agent binaries. CI verifies every ZIP includes its platform binary and command-line service installation scripts before upload.
 
 ---
 

@@ -7,6 +7,7 @@ import argparse
 import os
 import platform
 import shutil
+import stat
 import subprocess
 import sys
 import zipfile
@@ -138,30 +139,26 @@ def sign_windows_binary(exe_path: Path) -> None:
     )
 
 
-import zipfile
-
-
 def package_agent_zip(system: str, dist_path: Path) -> Path:
     """Pack binary along with install and uninstall scripts into a zip archive and staging directory."""
     dist_dir = dist_path.parent
     pkg_dir = dist_dir / "package"
-    pkg_dir.mkdir(parents=True, exist_ok=True)
+    if pkg_dir.exists():
+        shutil.rmtree(pkg_dir)
+    pkg_dir.mkdir(parents=True)
 
     if system == "windows":
         zip_name = "cmdiqo-agent-windows-x64.zip"
         files_to_pack = [
             (dist_path, "cmdiqo-agent.exe"),
-            (AGENT_DIR / "install-service.ps1", "install-service.ps1"),
-            (AGENT_DIR / "uninstall-service.ps1", "uninstall-service.ps1"),
+            (AGENT_DIR / "install-service.ps1", "install.ps1"),
+            (AGENT_DIR / "uninstall-service.ps1", "uninstall.ps1"),
             (AGENT_DIR / "agent.env.example", "agent.env.example"),
             (AGENT_DIR / "agent.json.example", "agent.json.example"),
         ]
         cer_path = dist_dir / "cmdiqo-agent.cer"
         if cer_path.exists():
             files_to_pack.append((cer_path, "cmdiqo-agent.cer"))
-        ico_file = ROOT / "development" / "cmdiqo.ico"
-        if ico_file.exists():
-            files_to_pack.append((ico_file, "cmdiqo.ico"))
     else:
         zip_name = "cmdiqo-agent-linux-x64.zip"
         if dist_path.exists():
@@ -171,8 +168,8 @@ def package_agent_zip(system: str, dist_path: Path) -> Path:
                 pass
         files_to_pack = [
             (dist_path, "cmdiqo-agent"),
-            (AGENT_DIR / "install-service.sh", "install-service.sh"),
-            (AGENT_DIR / "uninstall-service.sh", "uninstall-service.sh"),
+            (AGENT_DIR / "install-service.sh", "install.sh"),
+            (AGENT_DIR / "uninstall-service.sh", "uninstall.sh"),
             (AGENT_DIR / "cmdiqo-agent.service", "cmdiqo-agent.service"),
             (AGENT_DIR / "agent.env.example", "agent.env.example"),
             (AGENT_DIR / "agent.json.example", "agent.json.example"),
@@ -180,24 +177,32 @@ def package_agent_zip(system: str, dist_path: Path) -> Path:
 
     files_to_pack.append((dist_dir / "build-version.txt", "version.txt"))
 
-    # Populate dist/package/ for GitHub Actions artifact staging (best-effort)
-    try:
-        pkg_dir.mkdir(parents=True, exist_ok=True)
-        for src_path, arc_name in files_to_pack:
-            if src_path.exists():
-                shutil.copy2(src_path, pkg_dir / arc_name)
-    except Exception:
-        pass
+    for src_path, arc_name in files_to_pack:
+        if not src_path.is_file():
+            raise FileNotFoundError(f"Required package file is missing: {src_path}")
+        staged_path = pkg_dir / arc_name
+        shutil.copy2(src_path, staged_path)
+        if system != "windows" and arc_name in {
+            "cmdiqo-agent",
+            "install.sh",
+            "uninstall.sh",
+        }:
+            os.chmod(staged_path, 0o755)
 
     zip_path = dist_dir / zip_name
     print(f"\n[*] Packaging zip archive: {zip_path}")
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for src_path, arc_name in files_to_pack:
-            if src_path.exists():
-                zf.write(src_path, arcname=arc_name)
-                print(f"  + Added: {arc_name}")
-            else:
-                print(f"  - Warning: Missing file {src_path} (skipped)")
+            zip_info = zipfile.ZipInfo.from_file(src_path, arcname=arc_name)
+            if system != "windows" and arc_name in {
+                "cmdiqo-agent",
+                "install.sh",
+                "uninstall.sh",
+            }:
+                zip_info.create_system = 3
+                zip_info.external_attr = (stat.S_IFREG | 0o755) << 16
+            zf.writestr(zip_info, src_path.read_bytes(), compress_type=zipfile.ZIP_DEFLATED)
+            print(f"  + Added: {arc_name}")
 
     zip_size_mb = zip_path.stat().st_size / (1024 * 1024)
     print(f"[+] Zip package created successfully: {zip_path} ({zip_size_mb:.1f} MB)")

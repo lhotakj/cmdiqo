@@ -334,15 +334,12 @@ slack [#general] @U_ADMIN > /host AMD uptime
 
 Install `cmdiqo-agent` on your Linux machines (e.g., Raspberry Pi, Ubuntu NAS, home server) so you can execute shell commands on them remotely from Slack.
 
-### Step 4.1: Download or Build the Binary
-You can either:
-- **Download from GitHub Actions:** Go to your GitHub repo → **Actions** → click the latest **Build Agent Binaries** run → download `cmdiqo-agent-linux-x64` under *Artifacts*.
-- **Or copy from repository:** Use `dist/cmdiqo-agent` (if built locally) or copy the `agent/` folder.
-
-Place the binary or source on the target Linux machine:
+### Step 4.1: Download or Build the Linux Agent Package
+Download `cmdiqo-agent-linux-x64.zip` from the GitHub Release or Actions
+artifact, or build it locally with `./build.sh --agent`. Copy the ZIP to
+the target Linux machine:
 ```bash
-# Example: transferring to your target Linux host
-scp dist/cmdiqo-agent user@192.168.1.50:/tmp/
+scp dist/cmdiqo-agent-linux-x64.zip user@192.168.1.50:/tmp/
 ```
 
 ---
@@ -351,9 +348,9 @@ scp dist/cmdiqo-agent user@192.168.1.50:/tmp/
 On the target Linux machine:
 ```bash
 cd /tmp
-chmod +x cmdiqo-agent
-# Move to Cmdiqo repository clone or run installer:
-sudo ./agent/install-service.sh
+unzip cmdiqo-agent-linux-x64.zip -d cmdiqo-agent-linux-x64
+cd cmdiqo-agent-linux-x64
+sudo ./install.sh
 ```
 
 The script will:
@@ -445,17 +442,21 @@ To verify and ensure the `.exe` is authentic and safe:
 
 ### Step 5.3: Install the Windows Service as Administrator
 1. Press the **Windows Key**, type **PowerShell**, right-click **Windows PowerShell**, and select **Run as Administrator**.
-2. Navigate to the `agent` folder in your repository:
+2. Extract `cmdiqo-agent-windows-x64.zip` to a local directory and navigate
+   to it:
    ```powershell
-   cd H:\WORKING\CmdiqoHub\agent
+   Expand-Archive "$HOME\Downloads\cmdiqo-agent-windows-x64.zip" "$HOME\Downloads\cmdiqo-agent"
+   Set-Location "$HOME\Downloads\cmdiqo-agent"
    ```
 3. Run the installer script, supplying your server IP, token, and a name for this PC:
    ```powershell
-   .\install-service.ps1 -HubUrl "ws://192.168.1.10:8765" -Token "your-random-agent-token-here" -Name "MY-WINDOWS-PC"
+   .\install.ps1 -HubUrl "ws://192.168.1.10:8765" -Token "your-random-agent-token-here" -Name "MY-WINDOWS-PC"
    ```
 
 > [!TIP]
-> The installer automatically detects your downloaded binary (e.g. `cmdiqo-agent-windows-x64.exe` from `Downloads` or `dist`). You can also specify `-BinaryPath "C:\path\to\binary.exe"` if needed.
+> The ZIP contains `cmdiqo-agent.exe` beside `install.ps1`, so the installer
+> detects it automatically. You can also specify
+> `-BinaryPath "C:\path\to\cmdiqo-agent.exe"` if needed.
 
 #### What the installer sets up automatically:
 - **Real Windows Service (`CmdiqoAgent`)**: Registered directly in Windows Service Control Manager (SCM). Visible in `services.msc`.
@@ -508,17 +509,17 @@ Restart-Service CmdiqoAgent
 To cleanly stop, unregister, and remove the Windows Service:
 
 ```powershell
-# Run in Administrator PowerShell from the agent folder:
-cd H:\WORKING\CmdiqoHub\agent
+# Run in Administrator PowerShell from the extracted agent package:
+Set-Location "$HOME\Downloads\cmdiqo-agent"
 
 # Standard uninstall (stops service, removes SCM registration & binaries, preserves config for upgrades):
-.\uninstall-service.ps1
+.\uninstall.ps1
 
 # Complete purge (removes service, binaries, AND deletes config/secrets in C:\ProgramData\Cmdiqo\Agent):
-.\uninstall-service.ps1 -PurgeConfig
+.\uninstall.ps1 -PurgeConfig
 ```
 
-*(You can also run `.\install-service.ps1 -Uninstall` for the same result).*
+*(You can also run `.\install.ps1 -Uninstall` for the same result).*
 
 ---
 
@@ -620,49 +621,3 @@ If an agent fails to connect, verify that the agent PC can reach the bot contain
 | Agent connects but disconnects every 30 seconds. | Stateful NAT / firewall dropping idle connection. | Cmdiqo includes automated 20-second ping/pong keepalives. Ensure your firewall allows outbound WebSockets on port 8765. |
 | `/lan devices list` returns `No devices discovered` | Container running in bridge mode instead of host mode. | In `docker-compose.yml`, verify `network_mode: host` is set. Raw ARP packets require host network access. |
 | Windows agent command fails with execution policy error. | PowerShell script execution disabled. | `cmdiqo-agent` automatically calls PowerShell with `-NoProfile -NonInteractive -Command`, bypassing execution policy restrictions. |
-
-### Linux GUI Installer: WebKit2GTK Is Missing
-
-The graphical installer (`cmdiqo-agent-linux-x64-setup`) uses the system WebKit2GTK runtime for its modern WebView interface. Install the package for your distribution before launching it:
-
-| Distribution | Install command |
-|---|---|
-| openSUSE | `sudo zypper install typelib-1_0-WebKit2-4_1` |
-| Ubuntu 24.04+ / Debian with WebKit 4.1 | `sudo apt install gir1.2-webkit2-4.1` |
-| Ubuntu 22.04 / Debian with WebKit 4.0 | `sudo apt install gir1.2-webkit2-4.0` |
-| Fedora | `sudo dnf install webkit2gtk4.1` |
-| RHEL / CentOS Stream / Rocky Linux / AlmaLinux | `sudo dnf install webkit2gtk3` |
-
-Then start the GUI installer **without** `sudo` so it can open the system authentication dialog when root privileges are required:
-
-```bash
-chmod +x cmdiqo-agent-linux-x64-setup
-./cmdiqo-agent-linux-x64-setup
-```
-
-If WebKit2GTK is unavailable, the installer falls back to Tkinter. Use the command-line service installation on headless systems.
-
-On an older openSUSE release that does not provide the 4.1 typelib, search for the compatible 4.0 package with `zypper search --details WebKit2`, then install `typelib-1_0-WebKit2-4_0`.
-
-### Linux GUI Installer: `no display name` or GUI Does Not Open After `sudo`
-
-The installer needs your desktop-session environment to open a graphical window. **Do not launch it with `sudo` normally**; start it as the logged-in desktop user and let the installer request elevation through the system `pkexec` password dialog:
-
-```bash
-chmod +x cmdiqo-agent-linux-x64-setup
-./cmdiqo-agent-linux-x64-setup
-```
-
-If you need to diagnose a direct `sudo` launch from a graphical terminal, pass the display and session variables explicitly:
-
-```bash
-sudo env \
-  DISPLAY="$DISPLAY" \
-  XAUTHORITY="$XAUTHORITY" \
-  WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
-  XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
-  DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" \
-  ./cmdiqo-agent-linux-x64-setup
-```
-
-This direct-root command is for diagnostics only. Wayland compositors can reject root GUI clients even when these variables are present; use the normal non-`sudo` launch with `pkexec` whenever possible.

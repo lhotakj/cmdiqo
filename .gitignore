@@ -9,6 +9,15 @@ __pycache__/
 build/
 dist/
 
+# Native installer build artifacts and local tool state
+installer.c/.vcpkg/
+installer.c/.cache/
+installer.c/out/
+installer.c/vcpkg_installed/
+installer.c/build/
+installer.c/.vs/
+installer.c/CMakeUserPresets.json
+
 # Environments
 .env
 .venv
@@ -34,4 +43,3 @@ Thumbs.db
 *.key
 *.cer
 certs/
-

@@ -1,0 +1,494 @@
+#include "cmdiqo/installer.hpp"
+
+#include <algorithm>
+#include <array>
+#include <charconv>
+#include <chrono>
+#include <cctype>
+#include <ctime>
+#include <cstdlib>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <nlohmann/json.hpp>
+#include <regex>
+#include <sstream>
+#include <system_error>
+#include <utility>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#else
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
+#endif
+
+namespace cmdiqo::installer {
+namespace {
+
+using json = nlohmann::json;
+
+struct ParsedVersion {
+    std::array<unsigned long long, 3> numbers{};
+    bool development{false};
+    std::string suffix;
+};
+
+std::string trim(std::string value) {
+    const auto first = std::find_if_not(value.begin(), value.end(), [](unsigned char character) {
+        return std::isspace(character) != 0;
+    });
+    const auto last = std::find_if_not(value.rbegin(), value.rend(), [](unsigned char character) {
+        return std::isspace(character) != 0;
+    }).base();
+    return first >= last ? std::string{} : std::string(first, last);
+}
+
+ParsedVersion parse_version(std::string_view value) {
+    std::string normalized = trim(std::string(value));
+    if (!normalized.empty() && (normalized.front() == 'v' || normalized.front() == 'V')) {
+        normalized.erase(normalized.begin());
+    }
+
+    ParsedVersion result;
+    std::size_t position = 0;
+    for (std::size_t index = 0; index < result.numbers.size() && position < normalized.size(); ++index) {
+        const std::size_t start = position;
+        while (position < normalized.size()
+               && std::isdigit(static_cast<unsigned char>(normalized[position])) != 0) {
+            ++position;
+        }
+        if (start == position) {
+            break;
+        }
+        std::from_chars(
+            normalized.data() + start,
+            normalized.data() + position,
+            result.numbers[index]);
+        if (position < normalized.size() && normalized[position] == '.') {
+            ++position;
+            continue;
+        }
+        break;
+    }
+
+    if (position < normalized.size()) {
+        result.suffix = normalized.substr(position);
+        std::string lower_suffix = result.suffix;
+        std::transform(lower_suffix.begin(), lower_suffix.end(), lower_suffix.begin(), [](unsigned char character) {
+            return static_cast<char>(std::tolower(character));
+        });
+        result.development = lower_suffix.find("dev") != std::string::npos
+            || lower_suffix.find("alpha") != std::string::npos
+            || lower_suffix.find("beta") != std::string::npos
+            || lower_suffix.find("rc") != std::string::npos;
+    }
+    return result;
+}
+
+std::string hostname() {
+#ifdef _WIN32
+    char buffer[256]{};
+    DWORD length = static_cast<DWORD>(sizeof(buffer));
+    return GetComputerNameA(buffer, &length) != 0 ? std::string(buffer, length) : "cmdiqo-agent";
+#else
+    std::array<char, 256> buffer{};
+    return gethostname(buffer.data(), buffer.size()) == 0 ? std::string(buffer.data()) : "cmdiqo-agent";
+#endif
+}
+
+std::string env_quote(std::string_view value) {
+    std::string quoted{"\""};
+    for (char character : value) {
+        if (character == '\\' || character == '"' || character == '$' || character == '`') {
+            quoted += '\\';
+        }
+        quoted += character;
+    }
+    quoted += '"';
+    return quoted;
+}
+
+std::string timestamp() {
+    const auto now = std::chrono::system_clock::now();
+    const auto time = std::chrono::system_clock::to_time_t(now);
+    std::tm local_time{};
+#ifdef _WIN32
+    localtime_s(&local_time, &time);
+#else
+    localtime_r(&time, &local_time);
+#endif
+    std::ostringstream output;
+    output << std::put_time(&local_time, "%Y-%m-%d %H:%M:%S");
+    return output.str();
+}
+
+}  // namespace
+
+OperationResult OperationResult::success(std::string message) {
+    return {.ok = true, .message = std::move(message)};
+}
+
+OperationResult OperationResult::failure(std::string message) {
+    return {.ok = false, .message = std::move(message)};
+}
+
+Platform current_platform() {
+#ifdef _WIN32
+    return Platform::windows;
+#elif defined(__linux__)
+    return Platform::linux;
+#else
+    return Platform::unsupported;
+#endif
+}
+
+std::string platform_name(Platform platform) {
+    switch (platform) {
+        case Platform::windows:
+            return "Windows";
+        case Platform::linux:
+            return "Linux";
+        case Platform::unsupported:
+            return "Unsupported";
+    }
+    return "Unsupported";
+}
+
+std::string payload_file_name(Platform platform) {
+    switch (platform) {
+        case Platform::windows:
+            return "cmdiqo-agent-windows-x64.zip";
+        case Platform::linux:
+            return "cmdiqo-agent-linux-x64.zip";
+        case Platform::unsupported:
+            return {};
+    }
+    return {};
+}
+
+bool is_safe_zip_entry(std::string_view name) {
+    if (name.empty() || name.find('\0') != std::string_view::npos || name.front() == '/' || name.front() == '\\') {
+        return false;
+    }
+    if (name.size() >= 2 && std::isalpha(static_cast<unsigned char>(name[0])) != 0 && name[1] == ':') {
+        return false;
+    }
+
+    std::size_t start = 0;
+    while (start <= name.size()) {
+        const std::size_t end = name.find_first_of("/\\", start);
+        const std::string_view component = name.substr(start, end == std::string_view::npos ? name.size() - start : end - start);
+        if (component == "..") {
+            return false;
+        }
+        if (end == std::string_view::npos) {
+            break;
+        }
+        start = end + 1;
+    }
+    return true;
+}
+
+VersionRelation compare_versions(std::string_view left, std::string_view right) {
+    const ParsedVersion first = parse_version(left);
+    const ParsedVersion second = parse_version(right);
+    if (first.numbers < second.numbers) {
+        return VersionRelation::older;
+    }
+    if (first.numbers > second.numbers) {
+        return VersionRelation::newer;
+    }
+    if (first.development != second.development) {
+        return first.development ? VersionRelation::older : VersionRelation::newer;
+    }
+    if (first.suffix < second.suffix) {
+        return VersionRelation::older;
+    }
+    if (first.suffix > second.suffix) {
+        return VersionRelation::newer;
+    }
+    return VersionRelation::same;
+}
+
+std::string version_relation_message(VersionRelation relation) {
+    switch (relation) {
+        case VersionRelation::older:
+            return "Installed version is older than this installer.";
+        case VersionRelation::same:
+            return "Installed version matches this installer. Repair is available.";
+        case VersionRelation::newer:
+            return "Installed version is newer than this installer. Downgrade is available.";
+    }
+    return {};
+}
+
+std::optional<Endpoint> parse_hub_endpoint(std::string_view hub_url) {
+    static const std::regex websocket_url(R"(^\s*(ws|wss)://(\[[0-9A-Fa-f:]+\]|[^/:?#\s]+)(?::([0-9]{1,5}))?(?:[/?#].*)?\s*$)");
+    std::smatch match;
+    const std::string url(hub_url);
+    if (!std::regex_match(url, match, websocket_url)) {
+        return std::nullopt;
+    }
+
+    unsigned long port = match[3].matched
+        ? std::stoul(match[3].str())
+        : (match[1].str() == "wss" ? 443UL : 80UL);
+    if (port == 0 || port > 65535) {
+        return std::nullopt;
+    }
+    std::string host = match[2].str();
+    if (host.size() > 1 && host.front() == '[' && host.back() == ']') {
+        host = host.substr(1, host.size() - 2);
+    }
+    return Endpoint{
+        .host = std::move(host),
+        .port = static_cast<unsigned short>(port),
+        .secure = match[1].str() == "wss",
+    };
+}
+
+OperationResult test_hub_tcp(std::string_view hub_url, int timeout_seconds) {
+    const auto endpoint = parse_hub_endpoint(hub_url);
+    if (!endpoint) {
+        return OperationResult::failure("Hub URL must use ws:// or wss:// and contain a valid host and port.");
+    }
+    if (timeout_seconds <= 0) {
+        return OperationResult::failure("TCP timeout must be positive.");
+    }
+
+#ifdef _WIN32
+    WSADATA data{};
+    if (WSAStartup(MAKEWORD(2, 2), &data) != 0) {
+        return OperationResult::failure("Could not initialize Windows sockets.");
+    }
+#endif
+
+    addrinfo hints{};
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_family = AF_UNSPEC;
+    addrinfo* addresses = nullptr;
+    const std::string port = std::to_string(endpoint->port);
+    const int lookup = getaddrinfo(endpoint->host.c_str(), port.c_str(), &hints, &addresses);
+    if (lookup != 0) {
+#ifdef _WIN32
+        WSACleanup();
+#endif
+        return OperationResult::failure("Could not resolve Hub host " + endpoint->host + ".");
+    }
+
+    bool connected = false;
+    for (addrinfo* candidate = addresses; candidate != nullptr && !connected; candidate = candidate->ai_next) {
+        const auto socket_handle = socket(candidate->ai_family, candidate->ai_socktype, candidate->ai_protocol);
+#ifdef _WIN32
+        if (socket_handle == INVALID_SOCKET) {
+            continue;
+        }
+        DWORD timeout = static_cast<DWORD>(timeout_seconds * 1000);
+        setsockopt(socket_handle, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+        setsockopt(socket_handle, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+        connected = connect(socket_handle, candidate->ai_addr, static_cast<int>(candidate->ai_addrlen)) == 0;
+        closesocket(socket_handle);
+#else
+        if (socket_handle < 0) {
+            continue;
+        }
+        timeval timeout{.tv_sec = timeout_seconds, .tv_usec = 0};
+        setsockopt(socket_handle, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+        setsockopt(socket_handle, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+        connected = connect(socket_handle, candidate->ai_addr, candidate->ai_addrlen) == 0;
+        close(socket_handle);
+#endif
+    }
+    freeaddrinfo(addresses);
+#ifdef _WIN32
+    WSACleanup();
+#endif
+
+    if (!connected) {
+        return OperationResult::failure(
+            "Could not establish TCP connectivity to " + endpoint->host + ":" + std::to_string(endpoint->port) + ".");
+    }
+    return OperationResult::success(
+        "TCP connectivity to " + endpoint->host + ":" + std::to_string(endpoint->port) + " succeeded.");
+}
+
+std::string config_to_json(const Config& config) {
+    const json document{
+        {"hub_url", config.hub_url},
+        {"token", config.token},
+        {"name", config.agent_name},
+        {"reconnect_delay", 5.0},
+        {"agent_connection_notify", config.agent_connection_notify},
+    };
+    return document.dump(2) + "\n";
+}
+
+std::optional<Config> config_from_json(std::string_view document, std::string& error) {
+    try {
+        const json parsed = json::parse(document);
+        if (!parsed.is_object()) {
+            error = "Configuration JSON must be an object.";
+            return std::nullopt;
+        }
+        Config config;
+        config.hub_url = parsed.value("hub_url", config.hub_url);
+        config.token = parsed.value("token", "");
+        config.agent_name = parsed.value("name", hostname());
+        config.agent_connection_notify = parsed.value("agent_connection_notify", false);
+        if (!parse_hub_endpoint(config.hub_url)) {
+            error = "Configuration contains an invalid Hub URL.";
+            return std::nullopt;
+        }
+        if (config.agent_name.empty()) {
+            error = "Configuration agent name cannot be empty.";
+            return std::nullopt;
+        }
+        return config;
+    } catch (const json::exception& exception) {
+        error = "Invalid configuration JSON: " + std::string(exception.what());
+        return std::nullopt;
+    }
+}
+
+Config load_config(const InstallerPaths& paths) {
+    Config config;
+    config.agent_name = hostname();
+
+    std::ifstream json_file(paths.config_file);
+    if (json_file) {
+        std::stringstream contents;
+        contents << json_file.rdbuf();
+        std::string error;
+        if (const auto parsed = config_from_json(contents.str(), error)) {
+            return *parsed;
+        }
+    }
+
+    std::ifstream env_file(paths.legacy_env_file);
+    std::string line;
+    while (std::getline(env_file, line)) {
+        const auto separator = line.find('=');
+        if (separator == std::string::npos || line.empty() || line.front() == '#') {
+            continue;
+        }
+        const std::string key = trim(line.substr(0, separator));
+        std::string value = trim(line.substr(separator + 1));
+        if (value.size() >= 2 && ((value.front() == '"' && value.back() == '"')
+                                  || (value.front() == '\'' && value.back() == '\''))) {
+            value = value.substr(1, value.size() - 2);
+        }
+        if (key == "HUB_URL") {
+            config.hub_url = value;
+        } else if (key == "AGENT_TOKEN" || key == "TOKEN") {
+            config.token = value;
+        } else if (key == "AGENT_NAME" || key == "NAME") {
+            config.agent_name = value;
+        } else if (key == "AGENT_CONNECTION_NOTIFY") {
+            config.agent_connection_notify = value == "true" || value == "1" || value == "yes";
+        }
+    }
+    return config;
+}
+
+OperationResult save_config(const InstallerPaths& paths, const Config& config) {
+    if (!parse_hub_endpoint(config.hub_url)) {
+        return OperationResult::failure("Hub URL must use ws:// or wss:// and contain a valid host and port.");
+    }
+    if (config.agent_name.empty()) {
+        return OperationResult::failure("Agent name cannot be empty.");
+    }
+
+    std::error_code error;
+    std::filesystem::create_directories(paths.config_dir, error);
+    if (error) {
+        return OperationResult::failure("Could not create configuration directory: " + error.message());
+    }
+    std::filesystem::create_directories(paths.log_dir, error);
+    if (error) {
+        return OperationResult::failure("Could not create log directory: " + error.message());
+    }
+
+    {
+        std::ofstream output(paths.config_file, std::ios::binary | std::ios::trunc);
+        if (!output) {
+            return OperationResult::failure("Could not write " + paths.config_file.string() + ".");
+        }
+        output << config_to_json(config);
+        if (!output) {
+            return OperationResult::failure("Could not finish writing " + paths.config_file.string() + ".");
+        }
+    }
+
+    if (current_platform() == Platform::linux) {
+        std::filesystem::permissions(
+            paths.config_file,
+            std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
+            std::filesystem::perm_options::replace,
+            error);
+        if (error) {
+            return OperationResult::failure("Could not secure " + paths.config_file.string() + ": " + error.message());
+        }
+        std::ofstream output(paths.legacy_env_file, std::ios::binary | std::ios::trunc);
+        if (!output) {
+            return OperationResult::failure("Could not write " + paths.legacy_env_file.string() + ".");
+        }
+        output << "HUB_URL=" << env_quote(config.hub_url) << '\n'
+               << "AGENT_TOKEN=" << env_quote(config.token) << '\n'
+               << "AGENT_NAME=" << env_quote(config.agent_name) << '\n'
+               << "AGENT_CONNECTION_NOTIFY=" << (config.agent_connection_notify ? "true" : "false") << '\n';
+        if (!output) {
+            return OperationResult::failure("Could not finish writing " + paths.legacy_env_file.string() + ".");
+        }
+        std::filesystem::permissions(
+            paths.legacy_env_file,
+            std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
+            std::filesystem::perm_options::replace,
+            error);
+        if (error) {
+            return OperationResult::failure("Could not secure " + paths.legacy_env_file.string() + ": " + error.message());
+        }
+    }
+
+    if (current_platform() == Platform::windows) {
+        if (const OperationResult secured = PlatformOperations::secure_config_file(paths.config_file); !secured.ok) {
+            return secured;
+        }
+    }
+
+    return OperationResult::success("Saved agent configuration.");
+}
+
+Logger::Logger(std::filesystem::path file_path) : file_path_(std::move(file_path)) {}
+
+void Logger::info(std::string_view message) const {
+    write("INFO", message);
+}
+
+void Logger::error(std::string_view message) const {
+    write("ERROR", message);
+}
+
+void Logger::write(std::string_view level, std::string_view message) const {
+    const std::string line = timestamp() + " [" + std::string(level) + "] " + std::string(message);
+    std::clog << line << '\n';
+    if (file_path_.empty()) {
+        return;
+    }
+    std::error_code error;
+    std::filesystem::create_directories(file_path_.parent_path(), error);
+    if (error) {
+        return;
+    }
+    std::ofstream output(file_path_, std::ios::app);
+    if (output) {
+        output << line << '\n';
+    }
+}
+
+}  // namespace cmdiqo::installer

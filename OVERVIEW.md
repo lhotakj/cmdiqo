@@ -102,7 +102,7 @@ sequenceDiagram
    {
      "type": "hello",
      "name": "PC-OLO",
-     "version": "1.0.dev6AB4BAC9",
+     "version": "1.0.devel+6AB4BAC9",
      "platform": "windows"
    }
    ```

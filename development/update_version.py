@@ -5,10 +5,10 @@ Single Source of Truth:
 - version.txt in the repository root holds the true baseline version (e.g. 1.0.0).
 
 Build Version Resolution:
-- On GitHub Actions (GITHUB_RUN_NUMBER or GITHUB_RUN_ID is present):
-    VERSION = <major>.<minor>.<BUILD_ID> (e.g. 1.0.42)
+- On GitHub Actions (GITHUB_SHA is present):
+    VERSION = <major>.<minor>.<SHORT_GIT_SHA> (e.g. 1.0.a1b2c3d4)
 - On Local Builds (GitHub build ID not present):
-    VERSION = <major>.<minor>.dev<HEX_TIMESTAMP> (e.g. 1.0.dev6A9C0B2D)
+    VERSION = <major>.<minor>.devel+<HEX_TIMESTAMP> (e.g. 1.0.devel+6A9C0B2D)
 - Explicit override via --version:
     VERSION = <override_version>
 
@@ -101,22 +101,11 @@ def update_versions(
     major = parts[0] if len(parts) > 0 else "1"
     minor = parts[1] if len(parts) > 1 else "0"
 
-    github_ref_name = os.environ.get("GITHUB_REF_NAME", "")
-    github_ref_type = os.environ.get("GITHUB_REF_TYPE", "")
-    github_run = (
-        os.environ.get("GITHUB_RUN_NUMBER")
-        or os.environ.get("GITHUB_RUN_ID")
-        or os.environ.get("BUILD_ID")
-    )
-
-    # If triggered by a release tag in GitHub Actions (e.g. v1.1.0 or 1.1.0)
-    tag_match = re.match(r"^v?(\d+\.\d+(?:\.\d+)?.*)$", github_ref_name)
-    if not override_version and github_ref_type == "tag" and tag_match:
-        override_version = tag_match.group(1)
+    github_sha = os.environ.get("GITHUB_SHA", "").strip()
 
     if override_version:
         version = override_version.strip()
-        dev_match = re.match(r"^(\d+)\.(\d+)\.dev([0-9A-Fa-f]+)$", version)
+        dev_match = re.match(r"^(\d+)\.(\d+)\.devel\+([0-9A-Fa-f]+)$", version)
         if dev_match:
             pe_tuple = (
                 int(dev_match.group(1)),
@@ -124,21 +113,27 @@ def update_versions(
                 int(dev_match.group(3), 16) & 0xFFFF,
                 0,
             )
+        elif sha_match := re.match(r"^(\d+)\.(\d+)\.([0-9A-Fa-f]{7,40})$", version):
+            pe_tuple = (
+                int(sha_match.group(1)),
+                int(sha_match.group(2)),
+                int(sha_match.group(3)[-4:], 16),
+                0,
+            )
         else:
             digits = [int(m) for m in re.findall(r"\d+", version)]
             while len(digits) < 4:
                 digits.append(0)
             pe_tuple = (digits[0], digits[1], digits[2], digits[3])
-    elif github_run:
-        # CI build on GitHub Actions: third number (patch) is taken from GitHub build ID
-        version = f"{major}.{minor}.{github_run}"
-        run_num = int(re.sub(r"\D", "", str(github_run)) or "0")
-        pe_tuple = (int(major), int(minor), run_num & 0xFFFF, 0)
+    elif github_sha:
+        short_sha = github_sha[:12]
+        version = f"{major}.{minor}.{short_sha}"
+        pe_tuple = (int(major), int(minor), int(short_sha[-4:], 16), 0)
     else:
         # Local builds use the two-part baseline plus a hex timestamp.
         ts = int(time.time()) if timestamp is None else timestamp
         hex_ts = f"{ts:X}"
-        version = f"{major}.{minor}.dev{hex_ts}"
+        version = f"{major}.{minor}.devel+{hex_ts}"
         pe_tuple = (int(major), int(minor), ts & 0xFFFF, 0)
 
     short_version = f"{major}.{minor}"

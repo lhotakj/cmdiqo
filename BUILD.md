@@ -88,21 +88,22 @@ development/update_version.py
    Defines the `<major>.<minor>.<patch>` baseline (e.g., `1.0.0`).
 
 2. **CI Builds (GitHub Actions):**
-   - When building on GitHub Actions (`GITHUB_RUN_NUMBER` or `GITHUB_RUN_ID` is present), the third part of the version (patch) is automatically taken from the **GitHub build ID**:
-     $$\text{VERSION} = \langle\text{major}\rangle.\langle\text{minor}\rangle.\langle\text{BUILD\_ID}\rangle$$
-     *(Example: `1.0.42` for GitHub Actions run #42)*.
+   - The third component is the first 12 characters of `GITHUB_SHA`:
+     $$\text{VERSION} = \langle\text{major}\rangle.\langle\text{minor}\rangle.\langle\text{SHORT\_GIT\_SHA}\rangle$$
+     *(Example: `1.0.a1b2c3d4e5f6`)*.
 
 3. **Local Builds (Developer Machine):**
-   - When building locally (outside GitHub Actions), the build system keeps the current **`dev+timestamp`** format: the current Unix timestamp is encoded as an uppercase **hexadecimal** (base16) string:
-     $$\text{VERSION} = \langle\text{major}\rangle.\langle\text{minor}\rangle.\text{dev}\langle\text{HEX\_TIMESTAMP}\rangle$$
-     *(Example: If timestamp is `1788611373`, its hex representation is `6A9C0B2D`, resulting in `1.0.dev6A9C0B2D`)*.
-   - Hexadecimal formatting is fully compliant with PEP 440, Windows PE headers, and Docker image tag naming constraints (which disallow special base64 characters like `+`, `/`, and `=`).
+   - The build system uses `devel+` followed by the uppercase hexadecimal Unix
+     timestamp:
+     $$\text{VERSION} = \langle\text{major}\rangle.\langle\text{minor}\rangle.\text{devel}+\langle\text{HEX\_TIMESTAMP}\rangle$$
+     *(Example: timestamp `1788611373` becomes
+     `1.0.devel+6A9C0B2D`)*.
 
 4. **Windows PE Executable Metadata (`version_info.txt`):**
-   - Windows PE binary headers require fixed 16-bit unsigned integers (`0`–`65535`) in `filevers=(major, minor, patch, build)`. For local dev builds, the lower 16 bits of the timestamp (`ts & 0xFFFF`) populate the binary tuple, while the full string (`1.0.dev6A9C0B2D`) is written to `FileVersion` and `ProductVersion`.
+   - Windows PE binary headers require fixed 16-bit unsigned integers (`0`–`65535`) in `filevers=(major, minor, patch, build)`. For local builds, the lower 16 bits of the timestamp (`ts & 0xFFFF`) populate the binary tuple. For CI builds, the lower 16 bits of the short SHA populate it. The full build version is written to `FileVersion` and `ProductVersion`.
    - Right-clicking `cmdiqo-agent.exe` $\rightarrow$ Properties $\rightarrow$ Details shows:
-     - **File version:** `1.0.dev6A9C0B2D` (or `1.0.42` in CI)
-     - **Product version:** `1.0.dev6A9C0B2D` (or `1.0.42` in CI)
+     - **File version:** `1.0.devel+6A9C0B2D` (or `1.0.a1b2c3d4e5f6` in CI)
+     - **Product version:** `1.0.devel+6A9C0B2D` (or `1.0.a1b2c3d4e5f6` in CI)
      - **Product name:** `Cmdiqo Agent`
      - **Legal copyright:** `Copyright (c) 2026 Jaroslav Lhotak. Verified GitHub build.`
 
@@ -160,10 +161,10 @@ Supporting utilities (`build_agent.py`, `update_version.py`, certificates, and e
 Run `.\build.ps1`:
 
 ```powershell
-# In case you get errors with untrusted command, bypass the policy with (example to build installer for Win64)
-powershell -ExecutionPolicy Bypass -File .\build.ps1 --target installer --platform win64
+# In case you get errors with an untrusted command, bypass the policy (Windows agent package example)
+powershell -ExecutionPolicy Bypass -File .\build.ps1 --target agent --platform win64
 
-# 1. Build the Windows agent ZIP, PE binary, and WebView GUI installer:
+# 1. Build the Windows agent ZIP and PE binary:
 .\build.ps1 --clean --platform win64 --target agent
 
 # 2. Build and copy directly to a test location (e.g. C:\tmp\):
@@ -172,26 +173,35 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1 --target installer --platfo
 # 3. Clean previous build artifacts and build with explicit version:
 .\build.ps1 --clean --version "1.2.0"
 
-# 4. Build both agent executable and bot Docker container:
+# 4. Build the Windows agent package and native setup executable:
+.\build.ps1 --installer
+
+# 5. Rebuild only the native setup using the existing agent ZIP:
+.\build.ps1 --installer --skip-agent-build
+
+# 6. Build agent, native setup, and bot Docker container:
 .\build.ps1 --all
 
-# 5. Build bot Docker container only:
+# 7. Build bot Docker container only:
 .\build.ps1 --bot
 
-# 6. Build and push multi-arch Docker container:
+# 8. Build and push multi-arch Docker container:
 .\build.ps1 --bot --push
 ```
 
 #### Parameters for `build.ps1`:
-- `-Agent`: Switch to build standalone Windows agent executable and installer (default).
-- `-Installer`: Switch to build standalone agent executable and GUI installer (WebView, Tkinter fallback).
+- `-Agent`: Switch to build the standalone Windows agent executable and ZIP package (default).
+- `-Installer`: Build the standalone Windows agent executable and ZIP package,
+  then build the native C++ setup executable with that exact ZIP beside it.
 - `-Bot`: Switch to build `cmdiqo-bot` Docker container image.
-- `-All`: Switch to build standalone agent binary, installer package, and bot container.
+- `-All`: Switch to build the agent package, native setup executable, and bot container.
 - `-Target <Agent|Installer|Bot|All>`: Explicit target selection parameter.
 - `-Platform, -p <win64|linux64|all>`: Target platform selection (default: `win64`). Use `all` with Docker Desktop to build Linux binaries too.
 - `-Version, -v <string>`: Explicit version string override (e.g. `1.2.0`).
-- `-Dev`: Force development build format `<major>.<minor>.dev<HEX>`.
+- `-Dev`: Force development build format `<major>.<minor>.devel+<HEX>`.
 - `-Clean`: Clean `build/` and `dist/` directories before compiling.
+- `-SkipAgentBuild`: With `-Installer`, reuse the existing platform ZIP and
+  rebuild only the native C++ setup executable.
 - `-SkipSign`: Skip Authenticode digital signing on Windows.
 - `-CopyTo <path>`: Automatically copy built executable to destination path upon completion.
 - `-Push`: Build and push multi-architecture Docker image to registry (`linux/amd64,linux/arm64`).
@@ -203,8 +213,8 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1 --target installer --platfo
 Run `./build.sh`:
 
 ```bash
-# 1. Build the Linux agent ZIP, ELF binary, and WebView (GTK/WebKit2) GUI installer:
-./build.sh --clean --target installer
+# 1. Build the Linux agent ZIP and ELF binary:
+./build.sh --clean --target agent
 
 # 2. Build Linux artifacts explicitly:
 ./build.sh --platform linux64
@@ -212,26 +222,35 @@ Run `./build.sh`:
 # 3. Build with explicit version and clean artifacts:
 ./build.sh -v 1.2.0 --clean
 
-# 4. Build Docker container for cmdiqo-bot:
+# 4. Build the Linux agent package and native setup executable:
+./build.sh --installer
+
+# 5. Rebuild only the native setup using the existing agent ZIP:
+./build.sh --installer --skip-agent-build
+
+# 6. Build Docker container for cmdiqo-bot:
 ./build.sh --bot
 
-# 5. Build both standalone agent and Docker bot:
+# 7. Build agent, native setup, and Docker bot:
 ./build.sh --all
 
-# 6. Build and push multi-arch Docker container:
+# 8. Build and push multi-arch Docker container:
 ./build.sh --bot --push
 ```
 
 #### Parameters for `build.sh`:
-- `--agent, -a`: Build standalone agent binary and GUI installer (default).
-- `--installer, -i`: Build standalone agent binary and GUI installer (WebView, Tkinter fallback).
+- `--agent, -a`: Build standalone agent binary and ZIP package (default).
+- `--installer, -i`: Build the standalone agent binary and ZIP package, then
+  build the native C++ setup executable with that exact ZIP beside it.
 - `--bot, -b, --docker`: Build Docker container for `cmdiqo-bot`.
-- `--all`: Build Linux agent binary, GUI installer, and bot container.
+- `--all`: Build the Linux agent package, native setup executable, and bot container.
 - `--target <agent|installer|bot|all>`: Explicit target selection parameter.
 - `--platform, -p <linux64>`: Linux target selection (default: `linux64`).
 - `-v, --version <string>`: Explicit version override (e.g. `1.2.0`).
-- `--dev`: Force development build format `<major>.<minor>.dev<HEX>`.
+- `--dev`: Force development build format `<major>.<minor>.devel+<HEX>`.
 - `--clean`: Clean `build/` and `dist/` directories before compiling.
+- `--skip-agent-build`: With `--installer`, reuse the existing Linux agent ZIP
+  and rebuild only the native C++ setup executable.
 - `--copy-to <path>`: Automatically copy built binary to destination path upon completion.
 - `--push`: Build and push multi-architecture Docker image to registry (`linux/amd64,linux/arm64`).
 - `--docker-user <string>`: Docker Hub registry namespace/username (defaults to `$DOCKERHUB_USERNAME` or `lhotakj`).
@@ -239,20 +258,33 @@ Run `./build.sh`:
 
 > [!TIP]
 > **Containerized Linux builds**:
-> When Docker is present on the Linux build host, `build.sh` automatically compiles the Linux agent and installer inside a lightweight container (`python:3.13-slim-trixie`, the latest Debian stable) that packages the GTK/WebKit2 Python backend. The target system must still provide a compatible native WebKit2GTK runtime; on openSUSE, install it with `sudo zypper install typelib-1_0-WebKit2-4_1`. If Docker is not available, the build cleanly falls back to the host Python. On a target without WebKit2GTK, the installer skips WebView and falls back to Tkinter, then to its interactive CLI wizard on headless hosts.
+> When Docker is present on the Linux build host, `build.sh` compiles the Linux agent package inside a lightweight `python:3.13-slim-trixie` container. If Docker is not available, the build cleanly falls back to the host Python.
 
-> **Windows artifacts:** PyInstaller produces native binaries and does not cross-compile. `build.sh` produces Linux artifacts only. Run `build.ps1 --platform win64` on Windows, or use the Windows GitHub Actions job, which publishes the native Windows agent and GUI installer alongside the Linux artifacts.
+> **Windows artifacts:** PyInstaller produces native binaries and does not cross-compile. `build.sh` produces Linux artifacts only. Run `build.ps1 --platform win64` on Windows, or use the Windows GitHub Actions job, which publishes the native Windows agent package alongside the Linux package.
 
 ### Distribution Files
 
-Each native build produces a platform ZIP containing the agent binary, command-line service installer/uninstaller scripts, and configuration examples. Release builds also upload the raw agent binary and GUI installer:
+Each native build produces a platform ZIP containing the agent binary, command-line service install/uninstall scripts, and configuration examples. Release builds also upload the raw agent binary:
 
-| Platform | ZIP service package | Raw agent | GUI installer |
+| Platform | ZIP service package | Raw agent | ZIP scripts |
 |---|---|---|---|
-| Linux x64 | `cmdiqo-agent-linux-x64.zip` | `cmdiqo-agent` | `cmdiqo-agent-linux-x64-setup` |
-| Windows x64 | `cmdiqo-agent-windows-x64.zip` | `cmdiqo-agent.exe` | `cmdiqo-agent-windows-x64-setup.exe` |
+| Linux x64 | `cmdiqo-agent-linux-x64.zip` | `cmdiqo-agent` | `install.sh`, `uninstall.sh` |
+| Windows x64 | `cmdiqo-agent-windows-x64.zip` | `cmdiqo-agent.exe` | `install.ps1`, `uninstall.ps1` |
 
-Use the ZIP package for command-line installation. The raw installer is the graphical GUI installer for that platform — a modern WebView UI (Edge WebView2 on Windows, GTK/WebKit2 on Linux) that automatically falls back to Tkinter, and then to an interactive terminal wizard on headless hosts. Linux binaries downloaded outside the ZIP may need `chmod +x`.
+Use the ZIP package for service installation. Extract it, then run the platform-specific install script as an administrator/root user. Linux binaries downloaded outside the ZIP may need `chmod +x`.
+
+`--installer` / `-Installer` additionally produces a native setup bundle whose
+two files must remain together:
+
+| Platform | Native setup bundle |
+|---|---|
+| Linux x64 | `dist/cmdiqo-agent-linux-x64-setup` and `dist/cmdiqo-agent-linux-x64.zip` |
+| Windows x64 | `dist\cmdiqo-agent-windows-x64-setup.exe` and `dist\cmdiqo-agent-windows-x64.zip` |
+
+The root build scripts create the agent ZIP first, validate its `version.txt`,
+compile and test the C++ setup executable in Release mode, and publish both
+files to `dist/`. See [installer.c/BUILD-C.md](installer.c/BUILD-C.md) for native
+development environment setup and manual CMake commands.
 
 ### Building Container with Docker CLI & Compose
 
@@ -270,7 +302,7 @@ docker compose -f docker/docker-compose.yml build
 
 ## 4. Windows Authenticode Signing & Certificate Trust
 
-The build system signs both the Windows agent and GUI installer with Authenticode. A signature identifies the publisher, but Windows only trusts a certificate chain that the target computer recognizes.
+The build system signs the Windows agent with Authenticode. A signature identifies the publisher, but Windows only trusts a certificate chain that the target computer recognizes.
 
 ### How Code Signing Works
 When `development/build_agent.py` runs on Windows:
@@ -283,12 +315,12 @@ When `development/build_agent.py` runs on Windows:
    - A generated self-signed certificate is useful for development and internal distribution, but is not trusted by other computers until its exported `.cer` is deployed to their certificate stores.
    - A publicly trusted Authenticode certificate is required to avoid publisher warnings on unmanaged Windows computers. SmartScreen reputation can still take time to establish for a newly issued certificate or newly published binary.
 4. **Timestamping:**
-   - Digitally signs `cmdiqo-agent.exe` and `cmdiqo-agent-windows-x64-setup.exe` with SHA256 Authenticode signatures and timestamps them through Sectigo's RFC 3161 service (`http://timestamp.sectigo.com`).
+   - Digitally signs `cmdiqo-agent.exe` with SHA256 Authenticode signatures and timestamps it through Sectigo's RFC 3161 service (`http://timestamp.sectigo.com`).
    - Valid timestamps ensure the digital signature remains valid even after the certificate expires.
 
 ### How to Trust the Binary on Target Windows Machines
 
-When you copy `cmdiqo-agent-windows-x64-setup.exe` or `cmdiqo-agent.exe` to another Windows PC, Windows Defender SmartScreen may warn about an untrusted publisher until the public certificate is installed into the machine's trusted certificate store. This applies to self-signed/internal certificates; use a publicly trusted Authenticode certificate for unmanaged machines.
+When you copy `cmdiqo-agent.exe` to another Windows PC, Windows Defender SmartScreen may warn about an untrusted publisher until the public certificate is installed into the machine's trusted certificate store. This applies to self-signed/internal certificates; use a publicly trusted Authenticode certificate for unmanaged machines.
 
 #### Option A: Quick Command (Administrator or Standard User)
 Open Command Prompt or PowerShell and run:
@@ -384,7 +416,7 @@ Cmdiqo CI/CD uses smart commit-message trigger commands to control formal releas
 
 | Commit Flag | Action Taken | Artifacts & Destination |
 | :--- | :--- | :--- |
-| **`/release-agent`** | Builds the agent and GUI installer on native Linux and Windows runners. | Creates/updates GitHub Release tag (`v<version>`) and uploads both ZIP service packages, both raw agent binaries, and both GUI installers. |
+| **`/release-agent`** | Builds the agent package on native Linux and Windows runners. | Creates/updates GitHub Release tag (`v<version>`) and uploads both ZIP service packages and both raw agent binaries. |
 | **`/release-bot`** | Builds multi-arch Docker image for `cmdiqo-bot`. | Creates/updates GitHub Release tag (`v<version>`) and pushes multi-arch image (`linux/amd64,linux/arm64`) to Docker Hub (`:latest`, `:<version>`, `:<major>.<minor>`). |
 | **`/release`** | **Executes both** agent build/release and bot build/release in parallel. | Full production release: GitHub Release tag + agent `.zip` assets + Docker Hub container push. |
 
@@ -422,6 +454,6 @@ The **Build Agent Binaries (Windows & Linux x64)** workflow can also be started 
 
 #### Downloading Built Binaries:
 1. Navigate to **Releases** on GitHub (`https://github.com/<user>/Cmdiqo/releases`):
-   - Every `/release-agent` or `/release` run attaches both platform ZIP service packages, raw agent binaries, and GUI installers listed in [Distribution Files](#distribution-files).
+   - Every `/release-agent` or `/release` run attaches both platform ZIP service packages and raw agent binaries listed in [Distribution Files](#distribution-files).
 2. Or open any completed workflow run under the **Actions** tab:
    - Scroll to **Artifacts** to download build packages directly.

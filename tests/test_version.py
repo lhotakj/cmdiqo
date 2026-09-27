@@ -24,25 +24,29 @@ def test_update_versions_local_hex_timestamp(tmp_path):
     short = ".".join(base.split(".")[:2])
     with patch.dict(os.environ, {}, clear=True):
         version = update_versions(timestamp=ts)
-        assert version == f"{short}.dev6A9C0B2D"
+        assert version == f"{short}.devel+6A9C0B2D"
 
 
 def test_update_versions_github_actions():
     base = get_base_version()
     short = ".".join(base.split(".")[:2])
-    with patch.dict(os.environ, {"GITHUB_RUN_NUMBER": "123"}, clear=True):
+    with patch.dict(os.environ, {"GITHUB_SHA": "a1b2c3d4e5f678901234567890abcdef"}, clear=True):
         version = update_versions()
-        assert version == f"{short}.123"
+        assert version == f"{short}.a1b2c3d4e5f6"
 
 
-def test_update_versions_github_release_tag():
+def test_update_versions_github_tag_uses_commit_sha():
     with patch.dict(
         os.environ,
-        {"GITHUB_REF_TYPE": "tag", "GITHUB_REF_NAME": "v1.1.0"},
+        {
+            "GITHUB_REF_TYPE": "tag",
+            "GITHUB_REF_NAME": "v1.1.0",
+            "GITHUB_SHA": "f1e2d3c4b5a697887766554433221100",
+        },
         clear=True,
     ):
         version = update_versions()
-        assert version == "1.1.0"
+        assert version == f"{'.'.join(get_base_version().split('.')[:2])}.f1e2d3c4b5a6"
 
 
 def test_update_versions_override():
@@ -51,16 +55,16 @@ def test_update_versions_override():
 
 
 def test_update_versions_local_override_preserves_hex_timestamp():
-    version = update_versions(override_version="2.5.dev6A9C0B2D")
-    assert version == "2.5.dev6A9C0B2D"
+    version = update_versions(override_version="2.5.devel+6A9C0B2D")
+    assert version == "2.5.devel+6A9C0B2D"
     assert "filevers=(2, 5, 2861, 0)" in AGENT_VERSION_INFO.read_text(encoding="utf-8")
 
 
 def test_generate_version_info_txt():
-    content = generate_version_info_txt("1.0.dev6A9C0B2D", (1, 0, 2861, 0))
+    content = generate_version_info_txt("1.0.devel+6A9C0B2D", (1, 0, 2861, 0))
     assert "filevers=(1, 0, 2861, 0)" in content
-    assert "StringStruct('FileVersion', '1.0.dev6A9C0B2D')" in content
-    assert "StringStruct('ProductVersion', '1.0.dev6A9C0B2D')" in content
+    assert "StringStruct('FileVersion', '1.0.devel+6A9C0B2D')" in content
+    assert "StringStruct('ProductVersion', '1.0.devel+6A9C0B2D')" in content
     assert "StringStruct('ProductName', 'Cmdiqo Agent')" in content
 
 

@@ -1,68 +1,18 @@
 <#
 .SYNOPSIS
-    Cross-platform build script for Cmdiqo standalone agent and bot container (PowerShell).
+    Builds Cmdiqo platform agents and the optional bot container.
 
 .DESCRIPTION
-    Builds the standalone cmdiqo-agent executable using PyInstaller, packages distribution
-    archives, applies Authenticode digital signing on Windows, calculates SHA256 checksums,
-    and builds/pushes multi-tagged Docker container images for cmdiqo-bot.
+    Builds the standalone cmdiqo-agent executable, packages its platform ZIP,
+    applies Authenticode signing on Windows, and builds or pushes cmdiqo-bot
+    Docker images.
 
 .PARAMETER Target
-    Component to build: 'Agent', 'Installer', 'Bot', or 'All'. Defaults to 'Agent'.
-
-.PARAMETER Agent
-    Switch shortcut to build the standalone cmdiqo-agent executable and installer.
+    Component to build: 'Agent', 'Installer', 'Bot', or 'All'. Installer
+    builds the agent executable and ZIP package, then the matching native setup.
 
 .PARAMETER Installer
-    Switch shortcut to build the standalone cmdiqo-agent and setup installer executables.
-
-.PARAMETER Bot
-    Switch shortcut to build the cmdiqo-bot Docker container image.
-
-.PARAMETER All
-    Switch shortcut to build standalone agent executable, installer, and bot Docker container.
-
-
-.PARAMETER Version
-    Explicit semantic version string override (e.g. '1.2.0').
-
-.PARAMETER Dev
-    Tag version as a local development build (<major>.<minor>.dev<HEX_TIMESTAMP>).
-
-.PARAMETER SkipSign
-    Skip Authenticode digital signing and certificate generation on Windows.
-
-.PARAMETER CopyTo
-    Destination path to copy the compiled binary upon build completion.
-    Defaults to 'C:\tmp\cmdiqo-agent-windows-x64.exe'.
-
-.PARAMETER Clean
-    Remove previous build artifacts in 'build/' and 'dist/' directories before building.
-
-.PARAMETER Push
-    Build and push multi-architecture Docker container images to registry (linux/amd64,linux/arm64).
-
-.PARAMETER DockerUser
-    Docker Hub username or namespace. Defaults to $env:DOCKERHUB_USERNAME or 'lhotakj'.
-
-.PARAMETER Help
-    Show detailed help with explained parameters and usage examples.
-
-.EXAMPLE
-    .\build.ps1
-    Build standalone cmdiqo-agent executable for Windows.
-
-.EXAMPLE
-    .\build.ps1 -Bot
-    Build Docker container image for cmdiqo-bot.
-
-.EXAMPLE
-    .\build.ps1 -All -Clean -Push
-    Clean artifacts, build platform binaries and multi-arch Docker images, and push to Docker Hub.
-
-.EXAMPLE
-    .\build.ps1 -Version "1.2.0" -CopyTo "C:\deploy\cmdiqo-agent.exe"
-    Build with explicit version override and copy binary to deploy directory.
+    Shortcut for the standalone agent executable, ZIP package, and native setup.
 #>
 
 [CmdletBinding()]
@@ -82,6 +32,7 @@ $Dev = $false
 $SkipSign = $false
 $CopyTo = ""
 $Clean = $false
+$SkipAgentBuild = $false
 $Push = $false
 $DockerUser = if ($env:DOCKERHUB_USERNAME) { $env:DOCKERHUB_USERNAME } else { "lhotakj" }
 $Platform = "win64"
@@ -100,25 +51,26 @@ for ($index = 0; $index -lt $CliArgs.Count; $index++) {
     }
 
     switch -Regex ($argument) {
-        "^--platform$|^-p$" { $Platform = Get-OptionValue $argument; break }
-        "^--platform=(.+)$" { $Platform = $Matches[1]; break }
-        "^--agent$|^-a$" { $Agent = $true; break }
-        "^--installer$|^-i$" { $Installer = $true; break }
-        "^--bot$|^-b$|^--docker$" { $Bot = $true; break }
-        "^--all$" { $All = $true; break }
-        "^--target$" { $Target = Get-OptionValue $argument; break }
-        "^--target=(.+)$" { $Target = $Matches[1]; break }
-        "^--clean$" { $Clean = $true; break }
-        "^--skip-sign$" { $SkipSign = $true; break }
-        "^--copy-to$" { $CopyTo = Get-OptionValue $argument; break }
-        "^--copy-to=(.+)$" { $CopyTo = $Matches[1]; break }
-        "^--push$" { $Push = $true; $Bot = $true; break }
-        "^--docker-user$" { $DockerUser = Get-OptionValue $argument; break }
-        "^--docker-user=(.+)$" { $DockerUser = $Matches[1]; break }
-        "^--dev$" { $Dev = $true; break }
-        "^--version$|^-v$" { $Version = Get-OptionValue $argument; break }
-        "^--version=(.+)$" { $Version = $Matches[1]; break }
-        "^--help$|^-h$" { $Help = $true; break }
+        "^--platform$|^-platform$|^-p$" { $Platform = Get-OptionValue $argument; break }
+        "^--platform=(.+)$|^-platform=(.+)$" { $Platform = $argument.Substring($argument.IndexOf("=") + 1); break }
+        "^--agent$|^-agent$|^-a$" { $Agent = $true; break }
+        "^--installer$|^-installer$|^-i$" { $Installer = $true; break }
+        "^--bot$|^-bot$|^-b$|^--docker$|^-docker$" { $Bot = $true; break }
+        "^--all$|^-all$" { $All = $true; break }
+        "^--target$|^-target$" { $Target = Get-OptionValue $argument; break }
+        "^--target=(.+)$|^-target=(.+)$" { $Target = $argument.Substring($argument.IndexOf("=") + 1); break }
+        "^--clean$|^-clean$" { $Clean = $true; break }
+        "^--skip-agent-build$|^-skipagentbuild$" { $SkipAgentBuild = $true; break }
+        "^--skip-sign$|^-skip-sign$|^-skipsign$" { $SkipSign = $true; break }
+        "^--copy-to$|^-copy-to$|^-copyto$" { $CopyTo = Get-OptionValue $argument; break }
+        "^--copy-to=(.+)$|^-copy-to=(.+)$|^-copyto=(.+)$" { $CopyTo = $argument.Substring($argument.IndexOf("=") + 1); break }
+        "^--push$|^-push$" { $Push = $true; $Bot = $true; break }
+        "^--docker-user$|^-docker-user$|^-dockeruser$" { $DockerUser = Get-OptionValue $argument; break }
+        "^--docker-user=(.+)$|^-docker-user=(.+)$|^-dockeruser=(.+)$" { $DockerUser = $argument.Substring($argument.IndexOf("=") + 1); break }
+        "^--dev$|^-dev$" { $Dev = $true; break }
+        "^--version$|^-version$|^-v$" { $Version = Get-OptionValue $argument; break }
+        "^--version=(.+)$|^-version=(.+)$" { $Version = $argument.Substring($argument.IndexOf("=") + 1); break }
+        "^--help$|^-help$|^-h$|^-\?$" { $Help = $true; break }
         default { throw "Unknown argument '$argument'. Run with --help for available options." }
     }
 }
@@ -127,7 +79,6 @@ $Platform = $Platform.ToLower()
 if ($Platform -notin @("win64", "linux64", "all")) {
     throw "Invalid platform '$Platform'. Expected win64, linux64, or all."
 }
-
 if ($Target) {
     $Target = $Target.ToLower()
     if ($Target -notin @("agent", "installer", "bot", "all")) {
@@ -152,37 +103,37 @@ function Show-Usage {
 Usage: .\build.ps1 [options]
 
 Build Targets:
-  --agent, -a          Build standalone cmdiqo-agent executable and installer (default)
-  --installer, -i      Build agent executable and installer package
-  --bot, -b, --docker  Build Docker container image for cmdiqo-bot
-  --all                Build agent executable, installer package, and bot container
-  --target <string>    Explicit target: 'agent', 'installer', 'bot', or 'all'
+  -Agent, --agent          Build standalone agent executable and ZIP package (default)
+  -Installer, --installer  Build the agent executable, ZIP package, and native setup
+  -Bot, --bot, --docker    Build Docker container image for cmdiqo-bot
+  -All, --all              Build the agent package, native setup, and bot container
+  -Target <string>         Explicit target: 'agent', 'installer', 'bot', or 'all'
 
 Platform Selection:
-  --platform, -p <str> Target platform: 'win64', 'linux64', or 'all' (default: win64)
+  -Platform, --platform <str>  Target platform: 'win64', 'linux64', or 'all' (default: win64)
 
 Versioning:
-  --version, -v <str>  Override version string (e.g. '1.2.0')
-  --dev                Tag version as development build (<major>.<minor>.dev<HEX>)
+  -Version, --version <str>    Override version string (e.g. '1.2.0')
+  -Dev, --dev                  Tag version as development build (<major>.<minor>.dev<HEX>)
 
 Compilation & Packaging:
-  --clean              Clean build/ and dist/ directories before building
-  --skip-sign          Skip Authenticode digital signing on Windows
-  --copy-to <path>     Copy compiled binary to destination path upon completion
+  -Clean, --clean              Clean build, dist, and selected native installer outputs before building
+  -SkipAgentBuild, --skip-agent-build
+                               With -Installer, reuse the existing agent ZIP and build only the native setup
+  -SkipSign, --skip-sign       Skip Authenticode signing on Windows
+  -CopyTo, --copy-to <path>    Copy compiled binary to destination path
 
 Docker Options:
-  --push               Build and push multi-arch Docker images to registry
-  --docker-user <usr>  Docker Hub registry username (default: `$env:DOCKERHUB_USERNAME or 'lhotakj')
-
-Help:
-  --help, -h           Show this help message and exit
+  -Push, --push                Build and push multi-arch Docker images
+  -DockerUser, --docker-user   Docker Hub registry username
 
 Examples:
-  .\build.ps1                                       # Build standalone agent binary
-  .\build.ps1 --bot                                 # Build bot Docker container
-  .\build.ps1 --all --clean                         # Clean build artifacts and build both
-  .\build.ps1 --version "1.2.0" --copy-to "C:\bin\app.exe" # Build specific version and copy
-  .\build.ps1 --bot --push                          # Build and push multi-arch container
+  .\build.ps1 -Agent
+  .\build.ps1 -Installer                  # Windows agent ZIP and native setup
+  .\build.ps1 -Installer -SkipAgentBuild  # Rebuild only the native setup
+  .\build.ps1 -Installer -Platform Linux  # Linux agent ZIP and native setup via Docker
+  .\build.ps1 -Target Installer
+  .\build.ps1 -All -Clean
 "@ -ForegroundColor Cyan
 }
 
@@ -193,48 +144,163 @@ if ($Help) {
 
 $rootDir = $PSScriptRoot
 Set-Location $rootDir
-$windowsInstallerName = "cmdiqo-agent-windows-x64-setup.exe"
-$linuxInstallerName = "cmdiqo-agent-linux-x64-setup"
 
-# Resolve build targets
 $buildAgent = $false
 $buildInstaller = $false
 $buildBot = $false
-
-if ($All -or ($Target -and $Target.ToLower() -eq "all")) {
+if ($All -or ($Target -eq "all")) {
     $buildAgent = $true
     $buildInstaller = $true
     $buildBot = $true
-} elseif ($Bot -or ($Target -and $Target.ToLower() -eq "bot")) {
+} elseif ($Bot -or ($Target -eq "bot")) {
     $buildBot = $true
-} elseif ($Installer -or ($Target -and $Target.ToLower() -eq "installer")) {
+} elseif ($Installer -or ($Target -eq "installer")) {
     $buildAgent = $true
     $buildInstaller = $true
-} elseif ($Agent -or ($Target -and $Target.ToLower() -eq "agent")) {
+} elseif ($Agent -or ($Target -eq "agent")) {
     $buildAgent = $true
-    $buildInstaller = $true
 } else {
-    # Default target is Agent + Installer
     $buildAgent = $true
-    $buildInstaller = $true
 }
 
-# 0. Clean old build artifacts if requested
+if ($SkipAgentBuild) {
+    if (-not $buildInstaller -or $buildBot) {
+        throw "-SkipAgentBuild is only valid with -Installer."
+    }
+    $buildAgent = $false
+}
+
+function Get-PayloadVersion {
+    param([string]$PayloadArchive)
+
+    if (-not (Test-Path $PayloadArchive -PathType Leaf)) {
+        throw "Native installer packaging requires $PayloadArchive."
+    }
+    $payloadVersion = (& python -c "import sys, zipfile; archive = zipfile.ZipFile(sys.argv[1]); name = 'version.txt'; sys.exit('Payload is missing version.txt.') if name not in archive.namelist() else print(archive.read(name).decode('utf-8').strip())" $PayloadArchive).Trim()
+    if ($LASTEXITCODE -ne 0 -or $payloadVersion -notmatch '^\d+\.\d+\.(devel\+[0-9A-F]+|[0-9A-Fa-f]{7,40})$') {
+        throw "The agent payload has an invalid or missing version.txt. Rebuild it with .\build.ps1 -Agent."
+    }
+    return $payloadVersion
+}
+
+function Invoke-NativeWindowsInstaller {
+    param([string]$PayloadArchive)
+
+    $installerRoot = Join-Path $rootDir "installer.c"
+    $vcpkgExe = Join-Path $installerRoot ".vcpkg\vcpkg.exe"
+    if (-not (Test-Path $vcpkgExe -PathType Leaf)) {
+        throw "Native installer dependencies are missing. Run .\installer.c\setup-env.ps1 first."
+    }
+
+    $payloadVersion = Get-PayloadVersion $PayloadArchive
+    $buildDirectory = Join-Path $installerRoot "out\build\windows-x64"
+    if ($Clean -and (Test-Path $buildDirectory)) {
+        Remove-Item -Recurse -Force $buildDirectory
+    }
+
+    Write-Info "=== Building native Windows installer ==="
+    $previousVcpkgRoot = $env:VCPKG_ROOT
+    $env:VCPKG_ROOT = Join-Path $installerRoot ".vcpkg"
+    Push-Location $installerRoot
+    try {
+        cmake --fresh --preset windows-x64 "-DCMAKE_BUILD_TYPE=Release" "-DCMDIQO_BUILD_VERSION=$payloadVersion"
+        cmake --build --preset build-windows-x64 --config Release
+        ctest --preset test-windows-x64 -C Release
+        Copy-Item -LiteralPath (Join-Path $buildDirectory "cmdiqo-agent-setup.exe") -Destination (Join-Path $rootDir "dist\cmdiqo-agent-windows-x64-setup.exe") -Force
+    }
+    finally {
+        $env:VCPKG_ROOT = $previousVcpkgRoot
+        Pop-Location
+    }
+    Write-Info "Native installer: $(Join-Path $rootDir 'dist\cmdiqo-agent-windows-x64-setup.exe')"
+}
+
+function Invoke-NativeLinuxInstaller {
+    param([string]$PayloadArchive)
+
+    $installerRoot = Join-Path $rootDir "installer.c"
+    $dockerfile = Join-Path $installerRoot "Dockerfile.linux"
+    $image = "cmdiqo-installer-builder:ubuntu-22.04"
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        throw "Docker Desktop is required to build the native Linux installer."
+    }
+    & docker info *> $null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Docker Desktop is installed but its daemon is unavailable. Start Docker Desktop and retry."
+    }
+
+    $payloadVersion = Get-PayloadVersion $PayloadArchive
+    $buildDirectory = Join-Path $installerRoot "out\build\linux-x64"
+    if ($Clean -and (Test-Path $buildDirectory)) {
+        Remove-Item -Recurse -Force $buildDirectory
+    }
+    foreach ($directory in @(
+        (Join-Path $installerRoot ".cache\vcpkg\binary"),
+        (Join-Path $installerRoot ".cache\vcpkg\downloads"),
+        (Join-Path $installerRoot ".cache\ccache"),
+        (Join-Path $installerRoot ".cache\home")
+    )) {
+        New-Item -ItemType Directory -Force -Path $directory | Out-Null
+    }
+    $manifest = Join-Path $installerRoot "vcpkg.json"
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        foreach ($path in @($dockerfile, $manifest)) {
+            $bytes = [System.IO.File]::ReadAllBytes($path)
+            [void]$sha256.TransformBlock($bytes, 0, $bytes.Length, $bytes, 0)
+        }
+        [void]$sha256.TransformFinalBlock([byte[]]::new(0), 0, 0)
+        $buildInputHash = ([System.BitConverter]::ToString($sha256.Hash) -replace '-', '').ToLowerInvariant()
+    }
+    finally {
+        $sha256.Dispose()
+    }
+    $imageInputHash = & docker image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' $image 2>$null
+    if ($LASTEXITCODE -ne 0 -or $imageInputHash -ne $buildInputHash) {
+        Write-Info "=== Building native installer Docker image ($image) ==="
+        & docker build --tag $image --file $dockerfile --build-arg "BUILDER_INPUT_SHA=$buildInputHash" $installerRoot
+        if ($LASTEXITCODE -ne 0) {
+            throw "Native installer Docker image build failed."
+        }
+    }
+
+    Write-Info "=== Building native Linux installer ==="
+    $command = @'
+set -euo pipefail
+cmake --fresh --preset linux-x64 -DCMAKE_BUILD_TYPE=Release "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}" "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR}" -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+cmake --build --preset build-linux-x64 --config Release
+ctest --preset test-linux-x64 -C Release
+'@
+    & docker run --rm `
+        --workdir /workspace/installer.c `
+        --volume "${rootDir}:/workspace" `
+        --env "CMDIQO_BUILD_VERSION=$payloadVersion" `
+        --env "VCPKG_ROOT=/opt/vcpkg" `
+        --env "VCPKG_INSTALLED_DIR=/opt/cmdiqo-vcpkg-installed" `
+        --env "VCPKG_DEFAULT_BINARY_CACHE=/workspace/installer.c/.cache/vcpkg/binary" `
+        --env "VCPKG_DOWNLOADS=/workspace/installer.c/.cache/vcpkg/downloads" `
+        --env "CCACHE_DIR=/workspace/installer.c/.cache/ccache" `
+        --env "HOME=/workspace/installer.c/.cache/home" `
+        $image bash -c $command
+    if ($LASTEXITCODE -ne 0) {
+        throw "Native Linux installer build failed."
+    }
+    Copy-Item -LiteralPath (Join-Path $buildDirectory "cmdiqo-agent-setup") -Destination (Join-Path $rootDir "dist\cmdiqo-agent-linux-x64-setup") -Force
+    Write-Info "Native installer: $(Join-Path $rootDir 'dist\cmdiqo-agent-linux-x64-setup')"
+}
+
 if ($Clean) {
     Write-Info "Cleaning previous build artifacts in build/ and dist/ ..."
     if (Test-Path "$rootDir\build") { Remove-Item -Recurse -Force "$rootDir\build" }
-    if (Test-Path "$rootDir\dist") { Remove-Item -Recurse -Force "$rootDir\dist" }
+    if (-not $SkipAgentBuild -and (Test-Path "$rootDir\dist")) { Remove-Item -Recurse -Force "$rootDir\dist" }
 }
 
-# 1. Synchronize version
-Write-Info "Synchronizing version numbers from version.txt ..."
 $versionArgs = @()
 if ($Version) {
     $versionArgs += @("--version", $Version)
 } elseif ($Dev) {
-    $versionArgs += @("--dev")
+    $versionArgs += "--dev"
 }
-
 $currentVersion = (python "$rootDir\development\update_version.py" @versionArgs --print-version).Trim()
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($currentVersion)) {
     Write-Err "Failed to synchronize version."
@@ -243,19 +309,16 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($currentVersion)) {
 
 $parts = $currentVersion.Split('.')
 $shortVersion = "$($parts[0]).$($parts[1])"
-Write-Info "Building target version: $currentVersion (Short: $shortVersion)"
-
 $plat = $Platform.ToLower()
 $buildWin = ($plat -eq "win64" -or $plat -eq "all")
 $buildLinux = ($plat -eq "linux64" -or $plat -eq "all")
-
+Write-Info "Building target version: $currentVersion (Short: $shortVersion)"
 Write-Info "Platform selection: $Platform (win64: $buildWin, linux64: $buildLinux)"
 
-# 2. Build standalone Windows agent binary
 if ($buildAgent -and $buildWin) {
     Write-Info "=== Building standalone cmdiqo-agent Windows executable ==="
     $buildArgs = @("$rootDir\development\build_agent.py", "--version", $currentVersion)
-    if ($SkipSign) { $buildArgs += @("--skip-sign") }
+    if ($SkipSign) { $buildArgs += "--skip-sign" }
     if ($CopyTo) { $buildArgs += @("--copy-to", $CopyTo) }
 
     python @buildArgs
@@ -263,177 +326,34 @@ if ($buildAgent -and $buildWin) {
         Write-Err "Agent build failed."
         exit 1
     }
-
-    $distExe = "$rootDir\dist\cmdiqo-agent.exe"
-    $distZip = "$rootDir\dist\cmdiqo-agent-windows-x64.zip"
-    if (Test-Path $distExe) {
-        Write-Host ""
-        Write-Info "=== Artifact Verification ($distExe) ==="
-        (Get-Item $distExe).VersionInfo | Format-List FileDescription, FileVersion, ProductName, ProductVersion, LegalCopyright, CompanyName
-        if (-not $SkipSign) {
-            Get-AuthenticodeSignature $distExe | Format-List Status, StatusMessage, SignatureType, SignerCertificate, TimeStamperCertificate
-        }
-        
-        $hashExe = (Get-FileHash -Path $distExe -Algorithm SHA256).Hash
-        Write-Info "Binary SHA256 Checksum: $hashExe"
-    }
-    if (Test-Path $distZip) {
-        $hashZip = (Get-FileHash -Path $distZip -Algorithm SHA256).Hash
-        Write-Info "Zip Package ($distZip) SHA256 Checksum: $hashZip"
-    }
 }
 
-# 2b. Build standalone Windows installer executable (single executable in dist\)
-if ($buildInstaller -and $buildWin) {
-    Write-Info "=== Building standalone $windowsInstallerName ==="
-    python -c "import webview" | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Info "PyWebView is required to build the GUI installer. Installing installer dependencies..."
-        python -m pip install -r "$rootDir\requirements.txt"
-        if ($LASTEXITCODE -ne 0) {
-            throw "Could not install PyWebView. Run 'python -m pip install -r requirements.txt' and try again."
-        }
-        python -c "import webview" | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            throw "PyWebView is required to build the GUI installer but could not be imported after installation."
-        }
-    }
-
-    $payloadZip = "$rootDir\dist\cmdiqo-agent-windows-x64.zip"
-    $resolvedVersionFile = "$rootDir\dist\build-version.txt"
-    if (-not (Test-Path $payloadZip)) {
-        Write-Info "Payload zip not found. Running build_agent.py first..."
-        python "$rootDir\development\build_agent.py" --version $currentVersion
-    }
-    if (-not (Test-Path $resolvedVersionFile)) {
-        Set-Content -Path $resolvedVersionFile -Value $currentVersion -NoNewline
-    }
-
-    # Clean previous build directory to avoid Samba rmtree collisions
-    python -c "import shutil; shutil.rmtree(r'$rootDir\build\cmdiqo-agent-windows-x64-setup', ignore_errors=True)"
-
-    # Use a local temp workpath to avoid network-share localpycs failures (PyInstaller on UNC/Samba)
-    $localWorkDir = Join-Path $env:TEMP "cmdiqo-pyi-setup"
-    $localSpecDir = Join-Path $env:TEMP "cmdiqo-pyi-setup-spec"
-    New-Item -ItemType Directory -Force -Path $localWorkDir | Out-Null
-    New-Item -ItemType Directory -Force -Path $localSpecDir | Out-Null
-
-    $pyArgs = @(
-        "-m", "PyInstaller",
-        "--onefile",
-        "--noconfirm",
-        "--clean",
-        "--optimize", "2",
-        "--workpath", $localWorkDir,
-        "--specpath", $localSpecDir,
-        "--distpath", "$rootDir\dist",
-        "--exclude-module", "unittest",
-        "--exclude-module", "pydoc",
-        "--exclude-module", "test",
-        "--exclude-module", "sqlite3",
-        "--exclude-module", "tkinter",
-        "--name", "cmdiqo-agent-windows-x64-setup",
-        "--paths", $rootDir,
-        "--paths", "$rootDir\installer",
-        "--add-data", "$payloadZip;.",
-        "--add-data", "$rootDir\version.txt;.",
-        "--add-data", "$resolvedVersionFile;.",
-        "--hidden-import", "installer.backend",
-        "--hidden-import", "installer.gui",
-        "--uac-admin",
-        "--windowed"
-    )
-
-    if (Test-Path "$rootDir\development\cmdiqo.ico") {
-        $pyArgs += @(
-            "--icon", "$rootDir\development\cmdiqo.ico",
-            "--add-data", "$rootDir\development\cmdiqo.ico;."
-        )
-    }
-
-    if (Test-Path "$rootDir\agent\version_info.txt") {
-        $pyArgs += @("--version-file", "$rootDir\agent\version_info.txt")
-    }
-
-    $pyArgs += "$rootDir\installer\gui.py"
-
-    Write-Info "Running PyInstaller (single executable mode)..."
-    python @pyArgs
-    if ($LASTEXITCODE -ne 0) {
-        Write-Err "Installer compilation failed."
-        exit 1
-    }
-
-    $distSetupExe = "$rootDir\dist\$windowsInstallerName"
-    if (-not (Test-Path $distSetupExe)) {
-        Write-Err "Installer executable not found at $distSetupExe."
-        exit 1
-    }
-
-    # Authenticode Signing
-    if (-not $SkipSign) {
-        Write-Info "Applying Authenticode digital signature to installer executable..."
-        python -c "from development.build_agent import sign_windows_binary; from pathlib import Path; sign_windows_binary(Path(r'$distSetupExe'))"
-        if ($LASTEXITCODE -ne 0) {
-            Write-Err "Installer signing failed."
-            exit 1
-        }
-    }
-
-    Write-Host ""
-    Write-Info "=== Installer Artifact: $distSetupExe ==="
-    (Get-Item $distSetupExe).VersionInfo | Format-List FileDescription, FileVersion, ProductName, ProductVersion, LegalCopyright
-    if (-not $SkipSign) {
-        Get-AuthenticodeSignature $distSetupExe | Format-List Status, StatusMessage, SignatureType, SignerCertificate
-    }
-
-    $hashSetupExe = (Get-FileHash -Path $distSetupExe -Algorithm SHA256).Hash
-    Write-Info "Installer Executable ($distSetupExe) SHA256: $hashSetupExe"
-}
-
-# 2c. Build Linux binaries in the latest Debian stable container (if requested on Windows via Docker)
-if ($buildLinux -and ($buildAgent -or $buildInstaller)) {
+if ($buildAgent -and $buildLinux) {
     $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
-    if ($dockerCmd) {
-        Write-Info "=== Building Linux binaries in Debian trixie container via Docker ==="
-        docker build -t cmdiqo-builder-linux:trixie -f "$rootDir\docker\Dockerfile.builder-linux" "$rootDir"
-        if ($LASTEXITCODE -eq 0) {
-            $linuxBashScript = "rm -rf /workspace/dist/cmdiqo-agent-linux-x64-setup /workspace/dist/_delete_me_on_linux 2>/dev/null; python3 development/build_agent.py --version $currentVersion && python3 -m PyInstaller --onefile --clean --optimize 2 --exclude-module unittest --exclude-module pydoc --exclude-module test --exclude-module sqlite3 --name cmdiqo-agent-linux-x64-setup --paths /workspace --paths /workspace/installer --additional-hooks-dir /workspace/development/pyinstaller-hooks --add-data /workspace/dist/cmdiqo-agent-linux-x64.zip:. --add-data /workspace/version.txt:. --add-data /workspace/development/cmdiqo.ico:. --collect-all webview --collect-all gi --hidden-import installer.backend --hidden-import installer.gui --hidden-import webview.platforms.gtk --strip /workspace/installer/gui.py && chmod +x /workspace/dist/cmdiqo-agent /workspace/dist/cmdiqo-agent-linux-x64-setup"
-            docker run --rm -v "${rootDir}:/workspace" -w /workspace -e HOME=/tmp cmdiqo-builder-linux:trixie bash -c $linuxBashScript
-            $distLinuxSetup = "$rootDir\dist\$linuxInstallerName"
-            if (Test-Path $distLinuxSetup) {
-                Write-Info "Linux Installer Executable ($distLinuxSetup) SHA256: $((Get-FileHash -Path $distLinuxSetup -Algorithm SHA256).Hash)"
-            }
-        }
+    if (-not $dockerCmd) {
+        Write-Warn "Building linux64 binaries on Windows requires Docker Desktop. Start Docker or run build.sh on Linux."
     } else {
-        if ($plat -eq "linux64") {
-            Write-Warn "Building linux64 binaries on Windows requires Docker Desktop. Please start Docker or run build.sh on Linux."
-        } else {
-            Write-Info "Docker Desktop not detected; skipping linux64 binary build on Windows host."
+        Write-Info "=== Building Linux agent in Debian trixie container via Docker ==="
+        docker build -t cmdiqo-builder-linux:trixie -f "$rootDir\docker\Dockerfile.builder-linux" "$rootDir"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Linux Docker builder image creation failed."
+        }
+
+        $linuxBashScript = "python3 development/build_agent.py --version $currentVersion"
+        docker run --rm -v "${rootDir}:/workspace" -w /workspace -e HOME=/workspace cmdiqo-builder-linux:trixie bash -c $linuxBashScript
+        if ($LASTEXITCODE -ne 0) {
+            throw "Linux agent build failed."
         }
     }
 }
 
-# Unified installer verification
-Write-Host ""
-Write-Info "=== Installer Artifacts Verification in dist\ ==="
-$installerFiles = @("$rootDir\dist\$windowsInstallerName", "$rootDir\dist\$linuxInstallerName")
-foreach ($f in $installerFiles) {
-    if (Test-Path $f -PathType Leaf) {
-        $mb = [math]::Round(((Get-Item $f).Length / 1MB), 2)
-        $h = (Get-FileHash -Path $f -Algorithm SHA256).Hash
-        Write-Info "  + Found: $f ($mb MB)"
-        Write-Info "    SHA256: $h"
-    }
+if ($buildInstaller -and $buildWin) {
+    Invoke-NativeWindowsInstaller (Join-Path $rootDir "dist\cmdiqo-agent-windows-x64.zip")
 }
-if ($buildWin -and -not (Test-Path "$rootDir\dist\$windowsInstallerName" -PathType Leaf)) {
-    Write-Info "  * Note: Windows installer ($windowsInstallerName) can be built on Windows (.\build.ps1 -Installer)."
-}
-if ($buildLinux -and -not (Test-Path "$rootDir\dist\$linuxInstallerName" -PathType Leaf)) {
-    Write-Info "  * Note: Linux installer ($linuxInstallerName) can be built on Linux (./build.sh --installer) or with Docker Desktop."
+if ($buildInstaller -and $buildLinux) {
+    Invoke-NativeLinuxInstaller (Join-Path $rootDir "dist\cmdiqo-agent-linux-x64.zip")
 }
 
-# 3. Build Docker container for bot (if requested)
 if ($buildBot) {
     Write-Info "=== Building Docker image for cmdiqo-bot ==="
     $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
@@ -458,12 +378,6 @@ if ($buildBot) {
                 -f docker/Dockerfile `
                 --push `
                 .
-            if ($LASTEXITCODE -eq 0) {
-                Write-Info "Docker multi-arch images built and pushed successfully."
-            } else {
-                Write-Err "Docker multi-arch build/push failed."
-                exit 1
-            }
         } else {
             Write-Info "Building local container image ($imgFull) ..."
             docker build `
@@ -473,52 +387,55 @@ if ($buildBot) {
                 -t $imgTs `
                 -f docker/Dockerfile `
                 .
-            if ($LASTEXITCODE -eq 0) {
-                Write-Info "Built container image: $imgFull"
-            } else {
-                Write-Err "Docker build failed."
-                exit 1
-            }
+        }
+        if ($LASTEXITCODE -ne 0) {
+            throw "Docker build failed."
         }
     }
 }
 
-Write-Host ""
-Write-Info "=== Distribution Binary Artifacts (dist\) ==="
-Write-Info "Windows (x64):"
-if (Test-Path "$rootDir\dist\cmdiqo-agent.exe" -PathType Leaf) {
-    Write-Info "  • Application Binary:     $rootDir\dist\cmdiqo-agent.exe ($([math]::Round((Get-Item "$rootDir\dist\cmdiqo-agent.exe").Length / 1MB, 2)) MB)"
-} else {
-    Write-Warn "  • Application Binary:     Missing"
-}
-if (Test-Path "$rootDir\dist\$windowsInstallerName" -PathType Leaf) {
-    Write-Info "  • Installer Binary:       $rootDir\dist\$windowsInstallerName ($([math]::Round((Get-Item "$rootDir\dist\$windowsInstallerName").Length / 1MB, 2)) MB)"
-} else {
-    Write-Warn "  • Installer Binary:       Missing"
-}
-Write-Info "Linux (x86_64):"
-if (Test-Path "$rootDir\dist\cmdiqo-agent" -PathType Leaf) {
-    Write-Info "  • Application Binary:     $rootDir\dist\cmdiqo-agent ($([math]::Round((Get-Item "$rootDir\dist\cmdiqo-agent").Length / 1MB, 2)) MB)"
-} else {
-    Write-Warn "  • Application Binary:     Missing"
-}
-if (Test-Path "$rootDir\dist\$linuxInstallerName" -PathType Leaf) {
-    Write-Info "  • Installer Binary:       $rootDir\dist\$linuxInstallerName ($([math]::Round((Get-Item "$rootDir\dist\$linuxInstallerName").Length / 1MB, 2)) MB)"
-} else {
-    Write-Warn "  • Installer Binary:       Missing"
+function Show-AgentArtifact([string]$path, [string]$label) {
+    if (Test-Path $path -PathType Leaf) {
+        $size = [math]::Round((Get-Item $path).Length / 1MB, 2)
+        $hash = (Get-FileHash -Path $path -Algorithm SHA256).Hash
+        Write-Info "  • ${label}: $path ($size MB)"
+        Write-Info "    SHA256: $hash"
+    } else {
+        Write-Warn "  • ${label}: Missing"
+    }
 }
 
-if ($buildAgent -and $buildWin -and -not (Test-Path "$rootDir\dist\cmdiqo-agent.exe" -PathType Leaf)) {
-    throw "Requested Windows agent binary was not produced."
+Write-Host ""
+Write-Info "=== Distribution Agent Artifacts (dist\) ==="
+if (($buildAgent -or $buildInstaller) -and $buildWin) {
+    if ($buildAgent) {
+        Show-AgentArtifact "$rootDir\dist\cmdiqo-agent.exe" "Windows agent binary"
+    }
+    Show-AgentArtifact "$rootDir\dist\cmdiqo-agent-windows-x64.zip" "Windows agent ZIP"
+    if ($buildInstaller) {
+        Show-AgentArtifact "$rootDir\dist\cmdiqo-agent-windows-x64-setup.exe" "Windows native installer"
+    }
+    if ($buildAgent -and -not (Test-Path "$rootDir\dist\cmdiqo-agent.exe" -PathType Leaf)) {
+        throw "Requested Windows agent binary was not produced."
+    }
+    if (-not (Test-Path "$rootDir\dist\cmdiqo-agent-windows-x64.zip" -PathType Leaf)) {
+        throw "Requested Windows agent ZIP package was not produced."
+    }
 }
-if ($buildInstaller -and $buildWin -and -not (Test-Path "$rootDir\dist\$windowsInstallerName" -PathType Leaf)) {
-    throw "Requested Windows installer was not produced."
-}
-if ($buildAgent -and $buildLinux -and -not (Test-Path "$rootDir\dist\cmdiqo-agent" -PathType Leaf)) {
-    throw "Requested Linux agent binary was not produced. Docker Desktop must be running."
-}
-if ($buildInstaller -and $buildLinux -and -not (Test-Path "$rootDir\dist\$linuxInstallerName" -PathType Leaf)) {
-    throw "Requested Linux installer was not produced. Docker Desktop must be running."
+if (($buildAgent -or $buildInstaller) -and $buildLinux) {
+    if ($buildAgent) {
+        Show-AgentArtifact "$rootDir\dist\cmdiqo-agent" "Linux agent binary"
+    }
+    Show-AgentArtifact "$rootDir\dist\cmdiqo-agent-linux-x64.zip" "Linux agent ZIP"
+    if ($buildInstaller) {
+        Show-AgentArtifact "$rootDir\dist\cmdiqo-agent-linux-x64-setup" "Linux native installer"
+    }
+    if ($buildAgent -and -not (Test-Path "$rootDir\dist\cmdiqo-agent" -PathType Leaf)) {
+        throw "Requested Linux agent binary was not produced. Docker Desktop must be running."
+    }
+    if (-not (Test-Path "$rootDir\dist\cmdiqo-agent-linux-x64.zip" -PathType Leaf)) {
+        throw "Requested Linux agent ZIP package was not produced. Docker Desktop must be running."
+    }
 }
 
 Write-Info "[+] Build complete successfully for version $currentVersion!"

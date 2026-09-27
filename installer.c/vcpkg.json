@@ -1,0 +1,11 @@
+{
+  "name": "cmdiqo-native-installer",
+  "version-string": "0.9.0",
+  "description": "Native C++20 Windows and Linux installer for the Cmdiqo Agent.",
+  "dependencies": [
+    "catch2",
+    "libzip",
+    "nlohmann-json",
+    "wxwidgets"
+  ]
+}
