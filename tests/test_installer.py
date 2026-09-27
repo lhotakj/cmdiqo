@@ -234,6 +234,16 @@ def test_register_and_remove_windows_app_entry(tmp_path):
                 reg_ok = register_windows_app_entry(fake_paths, "0.9.0")
                 assert reg_ok is True
                 assert mock_winreg.SetValueEx.called
+                set_values = {
+                    call.args[1]: call.args[4]
+                    for call in mock_winreg.SetValueEx.call_args_list
+                }
+                assert set_values["UninstallString"] == (
+                    f'"{fake_paths.setup_path}" --uninstall --purge'
+                )
+                assert set_values["QuietUninstallString"] == (
+                    f'"{fake_paths.setup_path}" --uninstall --quiet --purge'
+                )
 
             # Test unregistration
             rem_ok = remove_windows_app_entry(fake_paths)

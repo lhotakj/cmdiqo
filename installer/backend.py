@@ -969,8 +969,20 @@ def register_windows_app_entry(paths: PlatformPaths, version: str) -> bool:
             winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "Cmdiqo")
             winreg.SetValueEx(key, "InstallLocation", 0, winreg.REG_SZ, str(paths.install_dir))
             winreg.SetValueEx(key, "DisplayIcon", 0, winreg.REG_SZ, icon_str)
-            winreg.SetValueEx(key, "UninstallString", 0, winreg.REG_SZ, f'"{setup_exe}" --uninstall')
-            winreg.SetValueEx(key, "QuietUninstallString", 0, winreg.REG_SZ, f'"{setup_exe}" --uninstall --quiet')
+            winreg.SetValueEx(
+                key,
+                "UninstallString",
+                0,
+                winreg.REG_SZ,
+                f'"{setup_exe}" --uninstall --purge',
+            )
+            winreg.SetValueEx(
+                key,
+                "QuietUninstallString",
+                0,
+                winreg.REG_SZ,
+                f'"{setup_exe}" --uninstall --quiet --purge',
+            )
             winreg.SetValueEx(key, "ModifyPath", 0, winreg.REG_SZ, f'"{setup_exe}"')
             winreg.SetValueEx(key, "EstimatedSize", 0, winreg.REG_DWORD, est_size_kb)
             winreg.SetValueEx(key, "URLInfoAbout", 0, winreg.REG_SZ, "https://www.cmdiqo.dev/")
