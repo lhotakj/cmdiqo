@@ -29,7 +29,10 @@ from installer.backend import (
     is_admin,
     perform_uninstall,
     request_elevation,
+    restart_service,
     check_hub_connection,
+    start_service,
+    stop_service,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -282,6 +285,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .service-dot.running { background: #22c55e; box-shadow: 0 0 9px #22c55e; }
     .service-dot.stopped { background: #3b82f6; }
     .service-dot.not-installed { background: #ef4444; }
+    .service-controls { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+    button:disabled { cursor: not-allowed; opacity: 0.45; }
   </style>
 </head>
 <body>
@@ -309,6 +314,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         <button type="button" class="btn-primary" onclick="reinstall()">Reinstall / Repair</button>
         <button type="button" class="btn-secondary" onclick="showView('view_form')">Reconfigure Settings</button>
         <button type="button" class="btn-danger" onclick="triggerUninstall()">Uninstall Service</button>
+      </div>
+      <div class="service-controls">
+        <button type="button" class="btn-primary" id="btn_start_service" onclick="manageService('start')" disabled>&#9658; Start Service</button>
+        <button type="button" class="btn-secondary" id="btn_restart_service" onclick="manageService('restart')" disabled>&#9632;&#9658; Restart Service</button>
+        <button type="button" class="btn-danger" id="btn_stop_service" onclick="manageService('stop')" disabled>&#9632; Stop Service</button>
       </div>
     </div>
 
@@ -462,6 +472,33 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }
     }
 
+    function updateServiceControls(status) {
+      const isRunning = status === 'running';
+      const isStopped = status === 'stopped';
+      document.getElementById('btn_start_service').disabled = !isStopped;
+      document.getElementById('btn_restart_service').disabled = !isRunning;
+      document.getElementById('btn_stop_service').disabled = !isRunning;
+    }
+
+    function manageService(action) {
+      if (!(window.pywebview && window.pywebview.api && typeof window.pywebview.api.manage_service === 'function')) {
+        return;
+      }
+
+      ['btn_start_service', 'btn_restart_service', 'btn_stop_service'].forEach(id => {
+        document.getElementById(id).disabled = true;
+      });
+      window.pywebview.api.manage_service(action).then(result => {
+        if (!result.ok) {
+          alert(result.message);
+        }
+        syncWithBackend();
+      }).catch(error => {
+        alert('Service operation failed: ' + error);
+        syncWithBackend();
+      });
+    }
+
     function initUI(data) {
       if (!data) return;
       if (data.bundled_version) {
@@ -486,6 +523,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         const label = status === 'not_installed' ? 'not installed' : status;
         statusNode.innerHTML = '<span class="service-dot ' + status.replace('_', '-') + '"></span><span>' + label + '</span>';
       }
+      updateServiceControls(status);
 
       if (!installed) {
         // If no version is found, do NOT show (Detecting) or anything - just hide the element completely
@@ -668,6 +706,31 @@ class WebViewApi:
         self.window.evaluate_js("showView('view_progress')")
         self.window.evaluate_js("appendLog('[*] Reinstalling Cmdiqo Agent version " + self.bundled_ver + "...')")
         threading.Thread(target=self._run_reinstall, daemon=True).start()
+
+    def manage_service(self, action: str) -> dict[str, str | bool]:
+        """Perform a service action from the installer and return its refreshed status."""
+        actions = {
+            "start": start_service,
+            "restart": restart_service,
+            "stop": stop_service,
+        }
+        operation = actions.get(action)
+        if operation is None:
+            return {"ok": False, "message": f"Unsupported service action: {action}"}
+
+        ok = operation(self.paths)
+        status = get_service_status(self.paths)
+        if ok:
+            return {
+                "ok": True,
+                "message": f"Service {action} completed.",
+                "service_status": status,
+            }
+        return {
+            "ok": False,
+            "message": f"Could not {action} the service. Check installer.log and service.log.",
+            "service_status": status,
+        }
 
     def uninstall(self, purge: bool = False) -> None:
         """User clicked Uninstall."""

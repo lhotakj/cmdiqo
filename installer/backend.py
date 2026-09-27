@@ -520,31 +520,60 @@ def check_hub_connection(hub_url: str, timeout: float = 3.0) -> tuple[bool, str]
         return False, f"Could not connect to Hub: {exc}"
 
 
-def stop_service(paths: Optional[PlatformPaths] = None) -> None:
+def stop_service(paths: Optional[PlatformPaths] = None) -> bool:
     """Stop the running service on Windows or Linux and ensure process has exited."""
     if paths is None:
         paths = get_platform_paths()
 
     if IS_WINDOWS:
         try:
-            run_cmd_silent(["sc.exe", "stop", paths.service_name], capture_output=True, check=False)
+            result = run_cmd_silent(
+                ["sc.exe", "stop", paths.service_name],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode not in (0, 1062):
+                log.error(
+                    "Could not stop Windows service %s: %s",
+                    paths.service_name,
+                    result.stderr.strip() or result.stdout.strip(),
+                )
+                return False
             time.sleep(1)
-        except Exception:
-            pass
+        except OSError as exc:
+            log.error("Could not stop Windows service %s: %s", paths.service_name, exc)
+            return False
         # Kill any lingering cmdiqo-agent.exe process to release file locks
         try:
-            run_cmd_silent(["taskkill.exe", "/F", "/IM", "cmdiqo-agent.exe", "/T"], capture_output=True, check=False)
-        except Exception:
-            pass
+            run_cmd_silent(
+                ["taskkill.exe", "/F", "/IM", "cmdiqo-agent.exe", "/T"],
+                capture_output=True,
+                check=False,
+            )
+        except OSError as exc:
+            log.warning("Could not terminate lingering agent process: %s", exc)
+        return get_service_status(paths) == "stopped"
     elif IS_LINUX:
         try:
-            run_cmd_silent(["systemctl", "stop", paths.service_name], capture_output=True, check=False)
-        except Exception:
-            pass
+            result = run_cmd_silent(
+                ["systemctl", "stop", paths.service_name],
+                capture_output=True,
+                check=False,
+            )
+        except OSError as exc:
+            log.error("Could not stop Linux service %s: %s", paths.service_name, exc)
+            return False
         try:
-            run_cmd_silent(["pkill", "-9", "-f", "cmdiqo-agent"], capture_output=True, check=False)
-        except Exception:
-            pass
+            run_cmd_silent(
+                ["pkill", "-9", "-f", "cmdiqo-agent"],
+                capture_output=True,
+                check=False,
+            )
+        except OSError as exc:
+            log.warning("Could not terminate lingering agent process: %s", exc)
+        return result.returncode == 0 and get_service_status(paths) == "stopped"
+    return False
 
 
 def start_service(paths: Optional[PlatformPaths] = None) -> bool:
@@ -558,6 +587,20 @@ def start_service(paths: Optional[PlatformPaths] = None) -> bool:
     elif IS_LINUX:
         res = run_cmd_silent(["systemctl", "restart", paths.service_name], capture_output=True, text=True, check=False)
         return res.returncode == 0
+    return False
+
+
+def restart_service(paths: Optional[PlatformPaths] = None) -> bool:
+    """Restart the installed service and report whether it accepted the start request."""
+    if paths is None:
+        paths = get_platform_paths()
+
+    if IS_WINDOWS:
+        if get_service_status(paths) == "running" and not stop_service(paths):
+            return False
+        return start_service(paths)
+    if IS_LINUX:
+        return start_service(paths)
     return False
 
 

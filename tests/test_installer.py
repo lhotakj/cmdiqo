@@ -22,6 +22,7 @@ from installer.backend import (
     parse_version_tuple,
     perform_uninstall,
     register_service,
+    restart_service,
     register_linux_desktop_entry,
     register_windows_app_entry,
     remove_linux_desktop_entry,
@@ -375,6 +376,26 @@ def test_install_or_upgrade_fails_when_service_does_not_start(tmp_path):
     assert any("failed to start" in report for report in reports)
 
 
+def test_restart_service_stops_running_windows_service(tmp_path):
+    fake_paths = PlatformPaths(
+        install_dir=tmp_path / "install",
+        binary_path=tmp_path / "install" / "cmdiqo-agent.exe",
+        config_dir=tmp_path / "config",
+        config_file=tmp_path / "config" / "config.json",
+        log_dir=tmp_path / "logs",
+        service_name="CmdiqoAgent",
+    )
+
+    with patch("installer.backend.IS_WINDOWS", True):
+        with patch("installer.backend.get_service_status", return_value="running"):
+            with patch("installer.backend.stop_service", return_value=True) as mock_stop:
+                with patch("installer.backend.start_service", return_value=True) as mock_start:
+                    assert restart_service(fake_paths) is True
+
+    mock_stop.assert_called_once_with(fake_paths)
+    mock_start.assert_called_once_with(fake_paths)
+
+
 def test_register_and_remove_linux_desktop_entry(tmp_path):
     fake_paths = PlatformPaths(
         install_dir=tmp_path / "bin",
@@ -413,6 +434,10 @@ def test_gui_html_template_and_state_injection():
     assert 'id="install_dir"' in HTML_TEMPLATE
     assert 'id="btn_toggle_token"' in HTML_TEMPLATE
     assert "setTimeout(syncWithBackend, 250)" in HTML_TEMPLATE
+    assert "btn_start_service" in HTML_TEMPLATE
+    assert "btn_restart_service" in HTML_TEMPLATE
+    assert "btn_stop_service" in HTML_TEMPLATE
+    assert "function manageService(action)" in HTML_TEMPLATE
 
     # 3. Verify placeholder exists for state injection
     assert "__INITIAL_STATE_JSON__" in HTML_TEMPLATE
