@@ -24,6 +24,7 @@ from installer.backend import (
     get_existing_config,
     get_installed_version,
     get_platform_paths,
+    get_service_status,
     install_or_upgrade,
     is_admin,
     perform_uninstall,
@@ -49,24 +50,6 @@ if getattr(sys, "frozen", False):
         log.info("Log file: %s", _log_file)
     except Exception:
         pass
-
-# Check GUI availability
-# On Windows, force the EdgeChromium (WebView2) backend before importing webview.
-# The default WinForms backend uses pythonnet, which causes infinite property-chain
-# traversal on native Windows objects (window.native.AccessibilityObject.Bounds.Empty…)
-# leading to "maximum recursion depth exceeded" crashes at startup.
-# EdgeChromium is a pure native extension with no pythonnet dependency and is
-# built into Windows 10/11 (shipped via the Evergreen WebView2 Runtime).
-if IS_WINDOWS:
-    os.environ.setdefault("PYWEBVIEW_GUI", "edgechromium")
-
-HAS_WEBVIEW = False
-try:
-    import webview
-    HAS_WEBVIEW = True
-    log.info("pywebview loaded (backend: %s)", os.environ.get("PYWEBVIEW_GUI", "auto"))
-except ImportError:
-    pass
 
 HAS_TKINTER = False
 try:
@@ -282,6 +265,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }
 
     .hidden { display: none !important; }
+    .service-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .service-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .service-dot.running { background: #22c55e; box-shadow: 0 0 9px #22c55e; }
+    .service-dot.stopped { background: #3b82f6; }
+    .service-dot.not-installed { background: #ef4444; }
   </style>
 </head>
 <body>
@@ -303,6 +303,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div id="view_same" class="card hidden">
       <div class="banner-icon">✓</div>
       <div class="banner-title" id="same_message">You have already installed version 0.9.0</div>
+      <div class="service-status" id="service_status"><span class="service-dot not-installed"></span><span>not installed</span></div>
       <div class="banner-desc">The Cmdiqo agent is installed and running as a native background service. What would you like to do?</div>
       <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
         <button type="button" class="btn-primary" onclick="reinstall()">Reinstall / Repair</button>
@@ -479,6 +480,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const installed = data.installed_version;
       const bundled = data.bundled_version;
       const badge = document.getElementById('installed_badge');
+      const status = data.service_status || 'not_installed';
+      const statusNode = document.getElementById('service_status');
+      if (statusNode) {
+        const label = status === 'not_installed' ? 'not installed' : status;
+        statusNode.innerHTML = '<span class="service-dot ' + status.replace('_', '-') + '"></span><span>' + label + '</span>';
+      }
 
       if (!installed) {
         // If no version is found, do NOT show (Detecting) or anything - just hide the element completely
@@ -622,12 +629,14 @@ class WebViewApi:
             else None
         )
         self.config = get_existing_config(self.paths)
+        self.service_status = get_service_status(self.paths)
 
     def get_state(self) -> dict:
         return {
             "bundled_version": self.bundled_ver,
             "installed_version": self.installed_ver,
             "cmp": self.cmp,
+            "service_status": self.service_status,
             "config": self.config,
             "paths": {
                 "install_dir": str(self.paths.install_dir),
@@ -693,9 +702,11 @@ class WebViewApi:
 
 def run_webview_gui() -> bool:
     """Launch modern HTML-based desktop GUI using pywebview."""
-    if not HAS_WEBVIEW:
-        return False
     try:
+        if IS_WINDOWS:
+            os.environ.setdefault("PYWEBVIEW_GUI", "edgechromium")
+        import webview
+
         api = WebViewApi(None)
         state = api.get_state()
         state_json = json.dumps(state)
@@ -743,6 +754,7 @@ def run_tkinter_gui() -> bool:
     installed_ver = get_installed_version(paths)
     cmp = compare_versions(installed_ver, bundled_ver) if installed_ver is not None else None
     config = get_existing_config(paths)
+    service_status = get_service_status(paths)
 
     root.title("Cmdiqo Agent Setup")
     root.geometry("540x520")
@@ -778,6 +790,37 @@ def run_tkinter_gui() -> bool:
             font=("Segoe UI" if IS_WINDOWS else "Helvetica", 12, "bold"),
             foreground="#16a34a",
         ).pack(pady=15)
+        status_colors = {
+            "running": "#22c55e",
+            "stopped": "#3b82f6",
+            "not_installed": "#ef4444",
+        }
+        status_labels = {
+            "running": "running",
+            "stopped": "stopped",
+            "not_installed": "not installed",
+        }
+        status_row = tk.Frame(content)
+        status_row.pack(pady=(0, 5))
+        status_icon = tk.Canvas(
+            status_row,
+            width=16,
+            height=16,
+            highlightthickness=0,
+            background=root.cget("background"),
+        )
+        if service_status == "running":
+            status_icon.create_oval(1, 1, 15, 15, fill="#bbf7d0", outline="")
+            status_icon.create_oval(4, 4, 12, 12, fill=status_colors[service_status], outline="")
+        else:
+            status_icon.create_oval(4, 4, 12, 12, fill=status_colors[service_status], outline="")
+        status_icon.pack(side="left")
+        tk.Label(
+            status_row,
+            text=status_labels[service_status],
+            foreground=status_colors[service_status],
+            font=("Segoe UI" if IS_WINDOWS else "Helvetica", 11, "bold"),
+        ).pack(side="left", padx=(5, 0))
         ttk.Label(
             content,
             text="The service is already up to date. What would you like to do?",
@@ -1089,12 +1132,12 @@ def main() -> None:
         run_cli_installer()
         return
 
-    # Try Webview GUI first (modern desktop HTML window)
-    if HAS_WEBVIEW and run_webview_gui():
+    # Tkinter starts immediately and is bundled in both native installers.
+    if HAS_TKINTER and run_tkinter_gui():
         return
 
-    # Try Tkinter GUI fallback
-    if HAS_TKINTER and run_tkinter_gui():
+    # Keep the optional WebView UI only for systems without Tkinter.
+    if run_webview_gui():
         return
 
     # Fallback to interactive terminal wizard if no GUI display available

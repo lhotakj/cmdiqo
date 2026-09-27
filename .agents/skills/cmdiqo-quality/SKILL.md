@@ -131,8 +131,8 @@ All build and maintenance scripts are organized across the repository:
 - `development/build_agent.py`: Unified standalone compiler (PyInstaller, UPX, Authenticode signer).
 
 ### Native Binary Release Pipeline
-- `build.sh --clean --target installer` produces Linux x64 artifacts only: `cmdiqo-agent`, `cmdiqo-agent-linux-x64.zip`, and `cmdiqo-agent-setup`. Docker builds use Bullseye/glibc 2.31 when available.
-- `build.ps1 -Clean -Platform win64 -Target Agent` produces the Windows PE agent, service ZIP, and Tkinter installer: `cmdiqo-agent.exe`, `cmdiqo-agent-windows-x64.zip`, and `cmdiqo-agent-setup.exe`.
+- `build.sh --clean --target installer` produces Linux x64 artifacts only: `cmdiqo-agent`, `cmdiqo-agent-linux-x64.zip`, and `cmdiqo-agent-linux-x64-setup`. Docker builds use Bullseye/glibc 2.31 when available.
+- `build.ps1 -Clean -Platform win64 -Target Agent` produces the Windows PE agent, service ZIP, and Tkinter installer: `cmdiqo-agent.exe`, `cmdiqo-agent-windows-x64.zip`, and `cmdiqo-agent-windows-x64-setup.exe`.
 - Do not attempt Linux-to-Windows PyInstaller cross-compilation. Use the native Windows matrix runner in `.github/workflows/build-agent.yml`.
 - A manual **Build Agent Binaries (Windows & Linux x64)** workflow run retains both platform artifact sets for 90 days. `/release-agent` and `/release` publish the two ZIP service packages, two raw agent binaries, and two GUI installers to the GitHub Release.
 

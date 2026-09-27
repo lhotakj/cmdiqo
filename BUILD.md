@@ -246,8 +246,8 @@ Each native build produces a platform ZIP containing the agent binary, command-l
 
 | Platform | ZIP service package | Raw agent | Tkinter GUI installer |
 |---|---|---|---|
-| Linux x64 | `cmdiqo-agent-linux-x64.zip` | `cmdiqo-agent` | `cmdiqo-agent-setup` |
-| Windows x64 | `cmdiqo-agent-windows-x64.zip` | `cmdiqo-agent.exe` | `cmdiqo-agent-setup.exe` |
+| Linux x64 | `cmdiqo-agent-linux-x64.zip` | `cmdiqo-agent` | `cmdiqo-agent-linux-x64-setup` |
+| Windows x64 | `cmdiqo-agent-windows-x64.zip` | `cmdiqo-agent.exe` | `cmdiqo-agent-windows-x64-setup.exe` |
 
 Use the ZIP package for command-line installation. The raw installer is the graphical Tkinter installer for that platform. Linux binaries downloaded outside the ZIP may need `chmod +x`.
 
@@ -267,7 +267,7 @@ docker compose -f docker/docker-compose.yml build
 
 ## 4. Windows Authenticode Signing & Certificate Trust
 
-To ensure the Windows binary is safe, verified, and free of security warnings, the build system integrates Authenticode digital signing and certificate management.
+The build system signs both the Windows agent and GUI installer with Authenticode. A signature identifies the publisher, but Windows only trusts a certificate chain that the target computer recognizes.
 
 ### How Code Signing Works
 When `development/build_agent.py` runs on Windows:
@@ -276,15 +276,16 @@ When `development/build_agent.py` runs on Windows:
    - Otherwise, it checks `Cert:\CurrentUser\My` for an existing code-signing certificate, or generates a dedicated Cmdiqo Authenticode certificate (`CN=Cmdiqo, O=Cmdiqo, OU=Verified Build`).
 2. **Dual Certificate Export:**
    - Exports the public certificate to `dist\cmdiqo-agent.cer` and `cmdiqo-agent.cer`.
-3. **Local Store Registration:**
-   - Adds the certificate to `Cert:\CurrentUser\TrustedPublisher` store, making the executable trusted on the local build machine.
+3. **Trust Scope:**
+   - A generated self-signed certificate is useful for development and internal distribution, but is not trusted by other computers until its exported `.cer` is deployed to their certificate stores.
+   - A publicly trusted Authenticode certificate is required to avoid publisher warnings on unmanaged Windows computers. SmartScreen reputation can still take time to establish for a newly issued certificate or newly published binary.
 4. **Dual Timestamping:**
-   - Digitally signs `cmdiqo-agent.exe` with SHA256 Authenticode signatures and queries official RFC 3161 timestamp servers (`http://timestamp.digicert.com` with fallback to `http://timestamp.sectigo.com`).
+   - Digitally signs `cmdiqo-agent.exe` and `cmdiqo-agent-windows-x64-setup.exe` with SHA256 Authenticode signatures and queries official RFC 3161 timestamp servers (`http://timestamp.digicert.com` with fallback to `http://timestamp.sectigo.com`).
    - Valid timestamps ensure the digital signature remains valid even after the certificate expires.
 
 ### How to Trust the Binary on Target Windows Machines
 
-When you copy `cmdiqo-agent.exe` to another Windows PC or download it from GitHub Actions, Windows Defender SmartScreen may inspect untrusted publishers until the public certificate is installed into the machine's trusted certificate store.
+When you copy `cmdiqo-agent-windows-x64-setup.exe` or `cmdiqo-agent.exe` to another Windows PC, Windows Defender SmartScreen may warn about an untrusted publisher until the public certificate is installed into the machine's trusted certificate store. This applies to self-signed/internal certificates; use a publicly trusted Authenticode certificate for unmanaged machines.
 
 #### Option A: Quick Command (Administrator or Standard User)
 Open Command Prompt or PowerShell and run:
@@ -304,7 +305,7 @@ Import-Certificate -FilePath .\dist\cmdiqo-agent.cer -CertStoreLocation Cert:\Cu
 5. Click **Next** $\rightarrow$ click **Finish**.
 6. When the Windows Security confirmation dialog appears, click **Yes**.
 
-Once trusted, `cmdiqo-agent.exe` runs smoothly without warnings.
+Once the internal certificate is trusted, Windows recognizes binaries signed by that certificate. This does not establish SmartScreen reputation outside the managed environment.
 
 ---
 

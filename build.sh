@@ -85,6 +85,8 @@ COPY_TO=""
 VERSION_OVERRIDE=""
 DOCKER_USERNAME="${DOCKERHUB_USERNAME:-lhotakj}"
 PLATFORM="linux64"
+LINUX_INSTALLER_NAME="cmdiqo-agent-linux-x64-setup"
+WINDOWS_INSTALLER_NAME="cmdiqo-agent-windows-x64-setup.exe"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -191,15 +193,15 @@ IS_HOST_WINDOWS=false
 if [[ "$CLEAN" = true ]]; then
     info "Cleaning previous build artifacts in build/ and dist/ ..."
     rm -rf "$ROOT_DIR/build"
-    rm -rf "$ROOT_DIR/dist/cmdiqo-agent-setup" "$ROOT_DIR/dist/_delete_me_on_linux" "$ROOT_DIR/dist/package" 2>/dev/null || true
+    rm -rf "$ROOT_DIR/dist/$LINUX_INSTALLER_NAME" "$ROOT_DIR/dist/${WINDOWS_INSTALLER_NAME}" "$ROOT_DIR/dist/_delete_me_on_linux" "$ROOT_DIR/dist/package" 2>/dev/null || true
     if [[ "$PLATFORM" == "linux64" ]]; then
-        rm -rf "$ROOT_DIR/dist/cmdiqo-agent" "$ROOT_DIR/dist/cmdiqo-agent-setup" "$ROOT_DIR/dist/cmdiqo-agent-linux-x64.zip" 2>/dev/null || true
+        rm -rf "$ROOT_DIR/dist/cmdiqo-agent" "$ROOT_DIR/dist/$LINUX_INSTALLER_NAME" "$ROOT_DIR/dist/cmdiqo-agent-linux-x64.zip" 2>/dev/null || true
     elif [[ "$PLATFORM" == "win64" ]]; then
-        rm -rf "$ROOT_DIR/dist/cmdiqo-agent.exe" "$ROOT_DIR/dist/cmdiqo-agent-setup.exe" "$ROOT_DIR/dist/cmdiqo-agent-windows-x64.zip" 2>/dev/null || true
+        rm -rf "$ROOT_DIR/dist/cmdiqo-agent.exe" "$ROOT_DIR/dist/${WINDOWS_INSTALLER_NAME}" "$ROOT_DIR/dist/cmdiqo-agent-windows-x64.zip" 2>/dev/null || true
     else
-        rm -rf "$ROOT_DIR/dist/cmdiqo-agent" "$ROOT_DIR/dist/cmdiqo-agent-setup" \
+        rm -rf "$ROOT_DIR/dist/cmdiqo-agent" "$ROOT_DIR/dist/$LINUX_INSTALLER_NAME" \
             "$ROOT_DIR/dist/cmdiqo-agent-linux-x64.zip" "$ROOT_DIR/dist/cmdiqo-agent.exe" \
-            "$ROOT_DIR/dist/cmdiqo-agent-setup.exe" "$ROOT_DIR/dist/cmdiqo-agent-windows-x64.zip" 2>/dev/null || true
+            "$ROOT_DIR/dist/${WINDOWS_INSTALLER_NAME}" "$ROOT_DIR/dist/cmdiqo-agent-windows-x64.zip" 2>/dev/null || true
     fi
 fi
 
@@ -326,14 +328,14 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
             "$PYTHON_CMD" "$ROOT_DIR/development/build_agent.py"
         fi
 
-        # Remove any lingering directory named cmdiqo-agent-setup so PyInstaller outputs a single binary file
-        if [[ -d "$DIST_DIR/cmdiqo-agent-setup" ]]; then
-            rm -rf "$DIST_DIR/cmdiqo-agent-setup" 2>/dev/null || (command -v docker >/dev/null 2>&1 && docker run --rm -v "$ROOT_DIR:/workspace" alpine rm -rf /workspace/dist/cmdiqo-agent-setup 2>/dev/null) || true
+        # Remove any lingering output directory so PyInstaller produces a single binary file.
+        if [[ -d "$DIST_DIR/$LINUX_INSTALLER_NAME" ]]; then
+            rm -rf "$DIST_DIR/$LINUX_INSTALLER_NAME" 2>/dev/null || (command -v docker >/dev/null 2>&1 && docker run --rm -v "$ROOT_DIR:/workspace" alpine rm -rf "/workspace/dist/$LINUX_INSTALLER_NAME" 2>/dev/null) || true
         fi
         rm -rf "$DIST_DIR/_delete_me_on_linux" 2>/dev/null || true
 
         if [[ "$DOCKER_RUNNING" = true ]]; then
-            info "=== Building standalone cmdiqo-agent-setup Linux executable in glibc 2.31 container ==="
+            info "=== Building standalone $LINUX_INSTALLER_NAME Linux executable in glibc 2.31 container ==="
             BUILDER_IMAGE="cmdiqo-builder-linux:bullseye"
             docker run --rm \
                 --user "$(id -u):$(id -g)" \
@@ -341,23 +343,23 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
                 -w /workspace \
                 -e HOME=/tmp \
                 "$BUILDER_IMAGE" \
-                bash -c "rm -rf /workspace/dist/cmdiqo-agent-setup /workspace/dist/_delete_me_on_linux 2>/dev/null || true; \
+                bash -c "rm -rf /workspace/dist/$LINUX_INSTALLER_NAME /workspace/dist/_delete_me_on_linux 2>/dev/null || true; \
                          python3 -m PyInstaller --onefile --clean --optimize 2 \
                              --exclude-module unittest --exclude-module pydoc --exclude-module test --exclude-module sqlite3 \
-                             --name cmdiqo-agent-setup \
+                             --name $LINUX_INSTALLER_NAME \
                              --paths /workspace --paths /workspace/installer \
                              --add-data '/workspace/dist/cmdiqo-agent-linux-x64.zip:.' \
                              --add-data '/workspace/version.txt:.' \
                              --hidden-import installer.backend --hidden-import installer.gui \
                              --strip /workspace/installer/gui.py && \
-                         chmod +x /workspace/dist/cmdiqo-agent /workspace/dist/cmdiqo-agent-setup"
+                         chmod +x /workspace/dist/cmdiqo-agent /workspace/dist/$LINUX_INSTALLER_NAME"
         else
             warn "Docker is not running; compiling installer with host Python."
             if ! "$PYTHON_CMD" -c "import tkinter; tkinter.Tcl()" >/dev/null 2>&1; then
                 error "Tkinter is required to build the GUI installer. Install your distribution's Tk package or start Docker."
                 exit 1
             fi
-            rm -rf "$DIST_DIR/cmdiqo-agent-setup" 2>/dev/null || true
+            rm -rf "$DIST_DIR/$LINUX_INSTALLER_NAME" 2>/dev/null || true
             # Use local temp dirs for PyInstaller work to avoid network-share localpycs failures
             LOCAL_WORK_DIR="${TMPDIR:-/tmp}/cmdiqo-pyi-setup"
             LOCAL_SPEC_DIR="${TMPDIR:-/tmp}/cmdiqo-pyi-setup-spec"
@@ -374,7 +376,7 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
                 "--exclude-module" "pydoc"
                 "--exclude-module" "test"
                 "--exclude-module" "sqlite3"
-                "--name" "cmdiqo-agent-setup"
+                "--name" "$LINUX_INSTALLER_NAME"
                 "--paths" "$ROOT_DIR"
                 "--paths" "$ROOT_DIR/installer"
                 "--add-data" "${PAYLOAD_ZIP}:."
@@ -385,15 +387,15 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
                 "$ROOT_DIR/installer/gui.py"
             )
             "${INSTALLER_PYARGS[@]}"
-            chmod +x "$DIST_DIR/cmdiqo-agent-setup" 2>/dev/null || true
+            chmod +x "$DIST_DIR/$LINUX_INSTALLER_NAME" 2>/dev/null || true
         fi
         # Also apply chmod on the host side in case Docker's chmod didn't propagate through the volume
-        chmod +x "$DIST_DIR/cmdiqo-agent" "$DIST_DIR/cmdiqo-agent-setup" 2>/dev/null || true
+        chmod +x "$DIST_DIR/cmdiqo-agent" "$DIST_DIR/$LINUX_INSTALLER_NAME" 2>/dev/null || true
 
-        DIST_SETUP_BIN="$DIST_DIR/cmdiqo-agent-setup"
+        DIST_SETUP_BIN="$DIST_DIR/$LINUX_INSTALLER_NAME"
 
     elif [[ "$IS_HOST_WINDOWS" = true && "$BUILD_WIN64" = true ]]; then
-        info "=== Building standalone cmdiqo-agent-setup Windows executable ==="
+        info "=== Building standalone $WINDOWS_INSTALLER_NAME ==="
         if ! "$PYTHON_CMD" -c "import tkinter; tkinter.Tcl()" >/dev/null 2>&1; then
             error "Tkinter is required to build the GUI installer. Install a standard Python distribution with Tcl/Tk."
             exit 1
@@ -420,7 +422,7 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
             "--exclude-module" "pydoc"
             "--exclude-module" "test"
             "--exclude-module" "sqlite3"
-            "--name" "cmdiqo-agent-setup"
+            "--name" "${WINDOWS_INSTALLER_NAME%.exe}"
             "--paths" "$ROOT_DIR"
             "--paths" "$ROOT_DIR/installer"
             "--add-data" "${PAYLOAD_ZIP};."
@@ -440,17 +442,17 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
 
         "${INSTALLER_PYARGS[@]}"
 
-        DIST_SETUP_BIN="$DIST_DIR/cmdiqo-agent-setup.exe"
+        DIST_SETUP_BIN="$DIST_DIR/$WINDOWS_INSTALLER_NAME"
         if [[ "$SKIP_SIGN" != true ]]; then
             info "Applying Authenticode digital signature to installer..."
-            "$PYTHON_CMD" -c "from development.build_agent import sign_windows_binary; from pathlib import Path; sign_windows_binary(Path(r'$DIST_SETUP_BIN'))" || true
+            "$PYTHON_CMD" -c "from development.build_agent import sign_windows_binary; from pathlib import Path; sign_windows_binary(Path(r'$DIST_SETUP_BIN'))"
         fi
     fi
 
     # Display verification for all installer executables in dist/
     info ""
     info "=== Installer Artifacts Verification in dist/ ==="
-    for inst in "$DIST_DIR/cmdiqo-agent-setup" "$DIST_DIR/cmdiqo-agent-setup.exe"; do
+    for inst in "$DIST_DIR/$LINUX_INSTALLER_NAME" "$DIST_DIR/$WINDOWS_INSTALLER_NAME"; do
         if [[ -f "$inst" ]]; then
             chmod +x "$inst" 2>/dev/null || true
             info "  + Found: $inst ($(ls -lh "$inst" | awk '{print $5}'))"
@@ -459,11 +461,11 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
             fi
         fi
     done
-    if [[ "$BUILD_WIN64" = true && ! -f "$DIST_DIR/cmdiqo-agent-setup.exe" ]]; then
-        info "  * Note: Windows installer (cmdiqo-agent-setup.exe) can be built on Windows (.\\build.ps1 -Installer) or with Wine on Linux."
+    if [[ "$BUILD_WIN64" = true && ! -f "$DIST_DIR/$WINDOWS_INSTALLER_NAME" ]]; then
+        info "  * Note: Windows installer ($WINDOWS_INSTALLER_NAME) can be built on Windows (.\\build.ps1 -Installer)."
     fi
-    if [[ "$BUILD_LINUX64" = true && ! -f "$DIST_DIR/cmdiqo-agent-setup" ]]; then
-        info "  * Note: Linux installer (cmdiqo-agent-setup) can be built on Linux (./build.sh --installer) or on Windows with Docker Desktop."
+    if [[ "$BUILD_LINUX64" = true && ! -f "$DIST_DIR/$LINUX_INSTALLER_NAME" ]]; then
+        info "  * Note: Linux installer ($LINUX_INSTALLER_NAME) can be built on Linux (./build.sh --installer) or on Windows with Docker Desktop."
     fi
 fi
 
@@ -511,12 +513,12 @@ info "=== Distribution Binary Artifacts (dist/) ==="
 if [[ "$BUILD_LINUX64" = true ]]; then
     info "Linux (x86_64):"
     [[ -f "$DIST_DIR/cmdiqo-agent" ]] && info "  • Application Binary:     $DIST_DIR/cmdiqo-agent ($(ls -lh "$DIST_DIR/cmdiqo-agent" | awk '{print $5}'))" || warn "  • Application Binary:     Missing"
-    [[ -f "$DIST_DIR/cmdiqo-agent-setup" ]] && info "  • Installer Binary:       $DIST_DIR/cmdiqo-agent-setup ($(ls -lh "$DIST_DIR/cmdiqo-agent-setup" | awk '{print $5}'))" || warn "  • Installer Binary:       Missing"
+    [[ -f "$DIST_DIR/$LINUX_INSTALLER_NAME" ]] && info "  • Installer Binary:       $DIST_DIR/$LINUX_INSTALLER_NAME ($(ls -lh "$DIST_DIR/$LINUX_INSTALLER_NAME" | awk '{print $5}'))" || warn "  • Installer Binary:       Missing"
 fi
 if [[ "$BUILD_WIN64" = true ]]; then
     info "Windows (x64):"
     [[ -f "$DIST_DIR/cmdiqo-agent.exe" ]] && info "  • Application Binary:     $DIST_DIR/cmdiqo-agent.exe ($(ls -lh "$DIST_DIR/cmdiqo-agent.exe" | awk '{print $5}'))" || warn "  • Application Binary:     Missing"
-    [[ -f "$DIST_DIR/cmdiqo-agent-setup.exe" ]] && info "  • Installer Binary:       $DIST_DIR/cmdiqo-agent-setup.exe ($(ls -lh "$DIST_DIR/cmdiqo-agent-setup.exe" | awk '{print $5}'))" || warn "  • Installer Binary:       Missing"
+    [[ -f "$DIST_DIR/$WINDOWS_INSTALLER_NAME" ]] && info "  • Installer Binary:       $DIST_DIR/$WINDOWS_INSTALLER_NAME ($(ls -lh "$DIST_DIR/$WINDOWS_INSTALLER_NAME" | awk '{print $5}'))" || warn "  • Installer Binary:       Missing"
 else
     info "Windows (x64): not requested; build on Windows or use the Windows CI job."
 fi
@@ -525,7 +527,7 @@ if [[ "$BUILD_AGENT" = true && "$BUILD_LINUX64" = true && ! -f "$DIST_DIR/cmdiqo
     error "Requested Linux agent binary was not produced."
     exit 1
 fi
-if [[ "$BUILD_INSTALLER" = true && "$BUILD_LINUX64" = true && ! -f "$DIST_DIR/cmdiqo-agent-setup" ]]; then
+if [[ "$BUILD_INSTALLER" = true && "$BUILD_LINUX64" = true && ! -f "$DIST_DIR/$LINUX_INSTALLER_NAME" ]]; then
     error "Requested Linux installer was not produced."
     exit 1
 fi

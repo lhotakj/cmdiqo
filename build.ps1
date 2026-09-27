@@ -167,6 +167,8 @@ if ($Help) {
 
 $rootDir = $PSScriptRoot
 Set-Location $rootDir
+$windowsInstallerName = "cmdiqo-agent-windows-x64-setup.exe"
+$linuxInstallerName = "cmdiqo-agent-linux-x64-setup"
 
 # Resolve build targets
 $buildAgent = $false
@@ -258,7 +260,7 @@ if ($buildAgent -and $buildWin) {
 
 # 2b. Build standalone Windows installer executable (single executable in dist\)
 if ($buildInstaller -and $buildWin) {
-    Write-Info "=== Building standalone cmdiqo-agent-setup Windows executable ==="
+    Write-Info "=== Building standalone $windowsInstallerName ==="
     python -c "import tkinter; tkinter.Tcl()" | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "Tkinter is required to build the GUI installer. Install a standard Python distribution with Tcl/Tk."
@@ -271,7 +273,7 @@ if ($buildInstaller -and $buildWin) {
     }
 
     # Clean previous build directory to avoid Samba rmtree collisions
-    python -c "import shutil; shutil.rmtree(r'$rootDir\build\cmdiqo-agent-setup', ignore_errors=True)"
+    python -c "import shutil; shutil.rmtree(r'$rootDir\build\cmdiqo-agent-windows-x64-setup', ignore_errors=True)"
 
     # Use a local temp workpath to avoid network-share localpycs failures (PyInstaller on UNC/Samba)
     $localWorkDir = Join-Path $env:TEMP "cmdiqo-pyi-setup"
@@ -292,7 +294,7 @@ if ($buildInstaller -and $buildWin) {
         "--exclude-module", "pydoc",
         "--exclude-module", "test",
         "--exclude-module", "sqlite3",
-        "--name", "cmdiqo-agent-setup",
+        "--name", "cmdiqo-agent-windows-x64-setup",
         "--paths", $rootDir,
         "--paths", "$rootDir\installer",
         "--add-data", "$payloadZip;.",
@@ -320,7 +322,7 @@ if ($buildInstaller -and $buildWin) {
         exit 1
     }
 
-    $distSetupExe = "$rootDir\dist\cmdiqo-agent-setup.exe"
+    $distSetupExe = "$rootDir\dist\$windowsInstallerName"
     if (-not (Test-Path $distSetupExe)) {
         Write-Err "Installer executable not found at $distSetupExe."
         exit 1
@@ -330,6 +332,10 @@ if ($buildInstaller -and $buildWin) {
     if (-not $SkipSign) {
         Write-Info "Applying Authenticode digital signature to installer executable..."
         python -c "from development.build_agent import sign_windows_binary; from pathlib import Path; sign_windows_binary(Path(r'$distSetupExe'))"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Err "Installer signing failed."
+            exit 1
+        }
     }
 
     Write-Host ""
@@ -350,9 +356,9 @@ if ($buildLinux -and ($buildAgent -or $buildInstaller)) {
         Write-Info "=== Building Linux binaries in glibc 2.31 container via Docker ==="
         docker build -t cmdiqo-builder-linux:bullseye -f "$rootDir\docker\Dockerfile.builder-linux" "$rootDir"
         if ($LASTEXITCODE -eq 0) {
-            $linuxBashScript = "rm -rf /workspace/dist/cmdiqo-agent-setup /workspace/dist/_delete_me_on_linux 2>/dev/null; python3 development/build_agent.py --version $currentVersion && python3 -m PyInstaller --onefile --clean --optimize 2 --exclude-module unittest --exclude-module pydoc --exclude-module test --exclude-module sqlite3 --name cmdiqo-agent-setup --paths /workspace --paths /workspace/installer --add-data /workspace/dist/cmdiqo-agent-linux-x64.zip:. --add-data /workspace/version.txt:. --hidden-import installer.backend --hidden-import installer.gui --strip /workspace/installer/gui.py && chmod +x /workspace/dist/cmdiqo-agent /workspace/dist/cmdiqo-agent-setup"
+            $linuxBashScript = "rm -rf /workspace/dist/cmdiqo-agent-linux-x64-setup /workspace/dist/_delete_me_on_linux 2>/dev/null; python3 development/build_agent.py --version $currentVersion && python3 -m PyInstaller --onefile --clean --optimize 2 --exclude-module unittest --exclude-module pydoc --exclude-module test --exclude-module sqlite3 --name cmdiqo-agent-linux-x64-setup --paths /workspace --paths /workspace/installer --add-data /workspace/dist/cmdiqo-agent-linux-x64.zip:. --add-data /workspace/version.txt:. --hidden-import installer.backend --hidden-import installer.gui --strip /workspace/installer/gui.py && chmod +x /workspace/dist/cmdiqo-agent /workspace/dist/cmdiqo-agent-linux-x64-setup"
             docker run --rm -v "${rootDir}:/workspace" -w /workspace -e HOME=/tmp cmdiqo-builder-linux:bullseye bash -c $linuxBashScript
-            $distLinuxSetup = "$rootDir\dist\cmdiqo-agent-setup"
+            $distLinuxSetup = "$rootDir\dist\$linuxInstallerName"
             if (Test-Path $distLinuxSetup) {
                 Write-Info "Linux Installer Executable ($distLinuxSetup) SHA256: $((Get-FileHash -Path $distLinuxSetup -Algorithm SHA256).Hash)"
             }
@@ -369,7 +375,7 @@ if ($buildLinux -and ($buildAgent -or $buildInstaller)) {
 # Unified installer verification
 Write-Host ""
 Write-Info "=== Installer Artifacts Verification in dist\ ==="
-$installerFiles = @("$rootDir\dist\cmdiqo-agent-setup.exe", "$rootDir\dist\cmdiqo-agent-setup")
+$installerFiles = @("$rootDir\dist\$windowsInstallerName", "$rootDir\dist\$linuxInstallerName")
 foreach ($f in $installerFiles) {
     if (Test-Path $f -PathType Leaf) {
         $mb = [math]::Round(((Get-Item $f).Length / 1MB), 2)
@@ -378,11 +384,11 @@ foreach ($f in $installerFiles) {
         Write-Info "    SHA256: $h"
     }
 }
-if ($buildWin -and -not (Test-Path "$rootDir\dist\cmdiqo-agent-setup.exe" -PathType Leaf)) {
-    Write-Info "  * Note: Windows installer (cmdiqo-agent-setup.exe) can be built on Windows (.\build.ps1 -Installer)."
+if ($buildWin -and -not (Test-Path "$rootDir\dist\$windowsInstallerName" -PathType Leaf)) {
+    Write-Info "  * Note: Windows installer ($windowsInstallerName) can be built on Windows (.\build.ps1 -Installer)."
 }
-if ($buildLinux -and -not (Test-Path "$rootDir\dist\cmdiqo-agent-setup" -PathType Leaf)) {
-    Write-Info "  * Note: Linux installer (cmdiqo-agent-setup) can be built on Linux (./build.sh --installer) or with Docker Desktop."
+if ($buildLinux -and -not (Test-Path "$rootDir\dist\$linuxInstallerName" -PathType Leaf)) {
+    Write-Info "  * Note: Linux installer ($linuxInstallerName) can be built on Linux (./build.sh --installer) or with Docker Desktop."
 }
 
 # 3. Build Docker container for bot (if requested)
@@ -443,8 +449,8 @@ if (Test-Path "$rootDir\dist\cmdiqo-agent.exe" -PathType Leaf) {
 } else {
     Write-Warn "  • Application Binary:     Missing"
 }
-if (Test-Path "$rootDir\dist\cmdiqo-agent-setup.exe" -PathType Leaf) {
-    Write-Info "  • Installer Binary:       $rootDir\dist\cmdiqo-agent-setup.exe ($([math]::Round((Get-Item "$rootDir\dist\cmdiqo-agent-setup.exe").Length / 1MB, 2)) MB)"
+if (Test-Path "$rootDir\dist\$windowsInstallerName" -PathType Leaf) {
+    Write-Info "  • Installer Binary:       $rootDir\dist\$windowsInstallerName ($([math]::Round((Get-Item "$rootDir\dist\$windowsInstallerName").Length / 1MB, 2)) MB)"
 } else {
     Write-Warn "  • Installer Binary:       Missing"
 }
@@ -454,8 +460,8 @@ if (Test-Path "$rootDir\dist\cmdiqo-agent" -PathType Leaf) {
 } else {
     Write-Warn "  • Application Binary:     Missing"
 }
-if (Test-Path "$rootDir\dist\cmdiqo-agent-setup" -PathType Leaf) {
-    Write-Info "  • Installer Binary:       $rootDir\dist\cmdiqo-agent-setup ($([math]::Round((Get-Item "$rootDir\dist\cmdiqo-agent-setup").Length / 1MB, 2)) MB)"
+if (Test-Path "$rootDir\dist\$linuxInstallerName" -PathType Leaf) {
+    Write-Info "  • Installer Binary:       $rootDir\dist\$linuxInstallerName ($([math]::Round((Get-Item "$rootDir\dist\$linuxInstallerName").Length / 1MB, 2)) MB)"
 } else {
     Write-Warn "  • Installer Binary:       Missing"
 }
@@ -463,13 +469,13 @@ if (Test-Path "$rootDir\dist\cmdiqo-agent-setup" -PathType Leaf) {
 if ($buildAgent -and $buildWin -and -not (Test-Path "$rootDir\dist\cmdiqo-agent.exe" -PathType Leaf)) {
     throw "Requested Windows agent binary was not produced."
 }
-if ($buildInstaller -and $buildWin -and -not (Test-Path "$rootDir\dist\cmdiqo-agent-setup.exe" -PathType Leaf)) {
+if ($buildInstaller -and $buildWin -and -not (Test-Path "$rootDir\dist\$windowsInstallerName" -PathType Leaf)) {
     throw "Requested Windows installer was not produced."
 }
 if ($buildAgent -and $buildLinux -and -not (Test-Path "$rootDir\dist\cmdiqo-agent" -PathType Leaf)) {
     throw "Requested Linux agent binary was not produced. Docker Desktop must be running."
 }
-if ($buildInstaller -and $buildLinux -and -not (Test-Path "$rootDir\dist\cmdiqo-agent-setup" -PathType Leaf)) {
+if ($buildInstaller -and $buildLinux -and -not (Test-Path "$rootDir\dist\$linuxInstallerName" -PathType Leaf)) {
     throw "Requested Linux installer was not produced. Docker Desktop must be running."
 }
 

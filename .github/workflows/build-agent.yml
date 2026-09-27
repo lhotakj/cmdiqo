@@ -80,7 +80,7 @@ jobs:
         if: matrix.os == 'ubuntu-24.04'
         shell: bash
         run: |
-          ./build.sh --clean --platform linux64 --target agent --version ${{ needs.check-release.outputs.version }}
+          ./build.sh --clean --platform linux64 --target agent
 
       - name: Build and sign Windows agent and Tkinter installer
         if: matrix.os == 'windows-latest'
@@ -89,23 +89,33 @@ jobs:
           SIGNING_CERT_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}
           SIGNING_CERT_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERT_PASSWORD }}
         run: |
-          .\build.ps1 -Clean -Platform win64 -Target Agent -Version ${{ needs.check-release.outputs.version }}
+          .\build.ps1 -Clean -Platform win64 -Target Agent
 
       - name: Verify Windows Signature & Certificate
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          Write-Host "[+] Verifying Authenticode signature of ${{ matrix.binary_src }}:"
-          Get-AuthenticodeSignature "${{ matrix.binary_src }}" | Format-List Status, StatusMessage, SignatureType, SignerCertificate, TimeStamperCertificate
+          $signedFiles = @(
+            "${{ matrix.binary_src }}",
+            "dist/cmdiqo-agent-windows-x64-setup.exe"
+          )
+          foreach ($signedFile in $signedFiles) {
+            Write-Host "[+] Verifying Authenticode signature of $signedFile:"
+            $signature = Get-AuthenticodeSignature $signedFile
+            $signature | Format-List Status, StatusMessage, SignatureType, SignerCertificate, TimeStamperCertificate
+            if ($signature.SignatureType -ne "Authenticode") {
+              throw "Authenticode signature is missing from $signedFile."
+            }
+          }
 
       - name: Verify distribution archive and installer
         shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "windows"* ]]; then
-            installer="dist/cmdiqo-agent-setup.exe"
+            installer="dist/cmdiqo-agent-windows-x64-setup.exe"
             expected=(cmdiqo-agent.exe install-service.ps1 uninstall-service.ps1 agent.env.example agent.json.example)
           else
-            installer="dist/cmdiqo-agent-setup"
+            installer="dist/cmdiqo-agent-linux-x64-setup"
             expected=(cmdiqo-agent install-service.sh uninstall-service.sh cmdiqo-agent.service agent.env.example agent.json.example)
           fi
 
@@ -144,7 +154,7 @@ jobs:
           path: |
             dist/${{ matrix.zip_name }}
             ${{ matrix.binary_src }}
-            dist/cmdiqo-agent-setup*
+            dist/cmdiqo-agent-*-setup*
             dist/package/*
           retention-days: 90
           if-no-files-found: error
@@ -171,7 +181,7 @@ jobs:
           mkdir -p dist/release-assets
           find dist/downloaded -name "*.zip" -exec cp {} dist/release-assets/ \;
           find dist/downloaded -name "cmdiqo-agent.cer" -exec cp {} dist/release-assets/ \; 2>/dev/null || true
-          find dist/downloaded -type f \( -name "cmdiqo-agent" -o -name "cmdiqo-agent.exe" -o -name "cmdiqo-agent-setup" -o -name "cmdiqo-agent-setup.exe" \) -exec cp {} dist/release-assets/ \;
+          find dist/downloaded -type f \( -name "cmdiqo-agent" -o -name "cmdiqo-agent.exe" -o -name "cmdiqo-agent-linux-x64-setup" -o -name "cmdiqo-agent-windows-x64-setup.exe" \) -exec cp {} dist/release-assets/ \;
           for d in dist/downloaded/*; do
             if [ -d "$d" ]; then
               name=$(basename "$d")

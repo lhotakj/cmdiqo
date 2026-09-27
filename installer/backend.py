@@ -20,7 +20,7 @@ import time
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Literal, Optional
 
 log = logging.getLogger("cmdiqo-installer")
 
@@ -30,6 +30,7 @@ IS_LINUX = platform.system().lower() == "linux"
 CREATE_NO_WINDOW = 0x08000000
 STARTF_USESHOWWINDOW = 0x00000001
 SW_HIDE = 0
+ServiceStatus = Literal["running", "stopped", "not_installed"]
 
 
 def run_cmd_silent(cmd: list[str] | str, **kwargs) -> subprocess.CompletedProcess:
@@ -60,7 +61,11 @@ class PlatformPaths:
 
     def __post_init__(self):
         if self.setup_path is None:
-            self.setup_path = self.install_dir / ("cmdiqo-agent-setup.exe" if IS_WINDOWS else "cmdiqo-agent-setup")
+            self.setup_path = self.install_dir / (
+                "cmdiqo-agent-windows-x64-setup.exe"
+                if IS_WINDOWS
+                else "cmdiqo-agent-linux-x64-setup"
+            )
         if self.desktop_file is None and IS_LINUX:
             self.desktop_file = Path("/usr/share/applications/cmdiqo-agent.desktop")
         if self.start_menu_file is None and IS_WINDOWS:
@@ -79,7 +84,7 @@ def get_platform_paths() -> PlatformPaths:
         return PlatformPaths(
             install_dir=install_dir,
             binary_path=install_dir / "cmdiqo-agent.exe",
-            setup_path=install_dir / "cmdiqo-agent-setup.exe",
+            setup_path=install_dir / "cmdiqo-agent-windows-x64-setup.exe",
             config_dir=config_dir,
             config_file=config_dir / "config.json",
             log_dir=config_dir / "logs",
@@ -95,7 +100,7 @@ def get_platform_paths() -> PlatformPaths:
         return PlatformPaths(
             install_dir=install_dir,
             binary_path=install_dir / "cmdiqo-agent",
-            setup_path=install_dir / "cmdiqo-agent-setup",
+            setup_path=install_dir / "cmdiqo-agent-linux-x64-setup",
             config_dir=config_dir,
             config_file=config_dir / "agent.env",
             log_dir=Path("/var/log/cmdiqo-agent"),
@@ -306,6 +311,49 @@ def get_bundled_version() -> str:
     return "0.9.0"
 
 
+def get_service_status(paths: Optional[PlatformPaths] = None) -> ServiceStatus:
+    """Return the installed agent service's current state without changing it."""
+    if paths is None:
+        paths = get_platform_paths()
+
+    if IS_WINDOWS:
+        try:
+            result = run_cmd_silent(
+                ["sc.exe", "query", paths.service_name],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except OSError as exc:
+            log.warning("Could not query Windows service %s: %s", paths.service_name, exc)
+            return "not_installed"
+        output = f"{result.stdout}\n{result.stderr}".upper()
+        if result.returncode != 0 or "FAILED 1060" in output:
+            return "not_installed"
+        if "RUNNING" in output:
+            return "running"
+        return "stopped"
+
+    if IS_LINUX:
+        if not paths.binary_path.exists() and not (
+            paths.service_file and paths.service_file.exists()
+        ):
+            return "not_installed"
+        try:
+            result = run_cmd_silent(
+                ["systemctl", "is-active", paths.service_name],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except OSError as exc:
+            log.warning("Could not query Linux service %s: %s", paths.service_name, exc)
+            return "stopped"
+        return "running" if result.stdout.strip() == "active" else "stopped"
+
+    return "not_installed"
+
+
 def find_bundled_zip() -> Optional[Path]:
     """Find the bundled agent zip payload."""
     candidates = []
@@ -333,10 +381,10 @@ def find_bundled_zip() -> Optional[Path]:
         dist_dir / "cmdiqo-agent-windows-x64.zip",
         dist_dir / "cmdiqo-agent-linux-x64.zip",
         dist_dir / "agent-payload.zip",
-        dist_dir / "cmdiqo-agent-setup" / "cmdiqo-agent-windows-x64.zip",
-        dist_dir / "cmdiqo-agent-setup" / "cmdiqo-agent-linux-x64.zip",
-        dist_dir / "cmdiqo-agent-setup" / "_internal" / "cmdiqo-agent-windows-x64.zip",
-        dist_dir / "cmdiqo-agent-setup" / "_internal" / "cmdiqo-agent-linux-x64.zip",
+        dist_dir / "cmdiqo-agent-windows-x64-setup" / "cmdiqo-agent-windows-x64.zip",
+        dist_dir / "cmdiqo-agent-linux-x64-setup" / "cmdiqo-agent-linux-x64.zip",
+        dist_dir / "cmdiqo-agent-windows-x64-setup" / "_internal" / "cmdiqo-agent-windows-x64.zip",
+        dist_dir / "cmdiqo-agent-linux-x64-setup" / "_internal" / "cmdiqo-agent-linux-x64.zip",
         root / "agent-payload.zip",
     ])
 
@@ -692,11 +740,23 @@ def copy_setup_executable(
         src_exe = Path(sys.executable)
     else:
         root = Path(__file__).resolve().parent.parent
-        dist_setup = root / "dist" / ("cmdiqo-agent-setup.exe" if IS_WINDOWS else "cmdiqo-agent-setup")
+        dist_setup = root / "dist" / (
+            "cmdiqo-agent-windows-x64-setup.exe"
+            if IS_WINDOWS
+            else "cmdiqo-agent-linux-x64-setup"
+        )
         if dist_setup.exists():
             src_exe = dist_setup
         else:
-            dist_setup_dir = root / "dist" / "cmdiqo-agent-setup" / ("cmdiqo-agent-setup.exe" if IS_WINDOWS else "cmdiqo-agent-setup")
+            dist_setup_dir = root / "dist" / (
+                "cmdiqo-agent-windows-x64-setup"
+                if IS_WINDOWS
+                else "cmdiqo-agent-linux-x64-setup"
+            ) / (
+                "cmdiqo-agent-windows-x64-setup.exe"
+                if IS_WINDOWS
+                else "cmdiqo-agent-linux-x64-setup"
+            )
             if dist_setup_dir.exists():
                 src_exe = dist_setup_dir
 
@@ -707,7 +767,7 @@ def copy_setup_executable(
                 (src_exe.parent / "_internal").exists()
                 or (src_exe.parent / "python3.dll").exists()
                 or (src_exe.parent / "base_library.zip").exists()
-                or src_exe.parent.name == "cmdiqo-agent-setup"
+                or src_exe.parent.name.endswith("-setup")
             )
             if is_onedir:
                 dest_dir = paths.install_dir / "setup"

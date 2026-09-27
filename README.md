@@ -458,7 +458,7 @@ On any Windows machine:
 # Compiles the PE agent, Windows service ZIP, and Tkinter GUI installer:
 .\build.ps1 -Clean -Platform win64 -Target Agent
 ```
-Outputs: `dist/cmdiqo-agent.exe`, `dist/cmdiqo-agent-windows-x64.zip`, and `dist/cmdiqo-agent-setup.exe`.
+Outputs: `dist/cmdiqo-agent.exe`, `dist/cmdiqo-agent-windows-x64.zip`, and `dist/cmdiqo-agent-windows-x64-setup.exe`.
 
 #### 2. Build Linux 64-bit Agent and GUI Installer
 
@@ -466,7 +466,7 @@ On Linux:
 ```bash
 ./build.sh --clean --target installer
 ```
-Outputs: `dist/cmdiqo-agent`, `dist/cmdiqo-agent-linux-x64.zip`, and `dist/cmdiqo-agent-setup`. When Docker is available, the build uses a Debian Bullseye (glibc 2.31) image for broad Linux compatibility.
+Outputs: `dist/cmdiqo-agent`, `dist/cmdiqo-agent-linux-x64.zip`, and `dist/cmdiqo-agent-linux-x64-setup`. When Docker is available, the build uses a Debian Bullseye (glibc 2.31) image for broad Linux compatibility.
 
 `build.sh` produces Linux executables only. PyInstaller emits Windows PE files only when run by Windows Python, so use `build.ps1` on Windows or the native Windows GitHub Actions runner for `.exe` files.
 

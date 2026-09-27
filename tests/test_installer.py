@@ -17,6 +17,7 @@ from installer.backend import (
     get_existing_config,
     get_installed_version,
     get_platform_paths,
+    get_service_status,
     parse_version_tuple,
     perform_uninstall,
     register_linux_desktop_entry,
@@ -59,6 +60,51 @@ def test_get_platform_paths():
     assert paths.config_dir is not None
     assert paths.config_file is not None
     assert paths.service_name in ("CmdiqoAgent", "cmdiqo-agent.service")
+    expected_setup = (
+        "cmdiqo-agent-windows-x64-setup.exe"
+        if paths.service_name == "CmdiqoAgent"
+        else "cmdiqo-agent-linux-x64-setup"
+    )
+    assert paths.setup_path.name == expected_setup
+
+
+def test_get_service_status_not_installed(tmp_path):
+    fake_paths = PlatformPaths(
+        install_dir=tmp_path,
+        binary_path=tmp_path / "missing-agent",
+        config_dir=tmp_path,
+        config_file=tmp_path / "config.json",
+        log_dir=tmp_path / "logs",
+        service_name="TestAgent",
+    )
+    assert get_service_status(fake_paths) == "not_installed"
+
+
+def test_get_service_status_windows_states(tmp_path):
+    fake_paths = PlatformPaths(
+        install_dir=tmp_path,
+        binary_path=tmp_path / "cmdiqo-agent.exe",
+        config_dir=tmp_path,
+        config_file=tmp_path / "config.json",
+        log_dir=tmp_path / "logs",
+        service_name="TestAgent",
+    )
+    with patch("installer.backend.IS_WINDOWS", True):
+        with patch(
+            "installer.backend.run_cmd_silent",
+            return_value=MagicMock(returncode=0, stdout="STATE              : 4  RUNNING", stderr=""),
+        ):
+            assert get_service_status(fake_paths) == "running"
+        with patch(
+            "installer.backend.run_cmd_silent",
+            return_value=MagicMock(returncode=0, stdout="STATE              : 1  STOPPED", stderr=""),
+        ):
+            assert get_service_status(fake_paths) == "stopped"
+        with patch(
+            "installer.backend.run_cmd_silent",
+            return_value=MagicMock(returncode=1060, stdout="FAILED 1060", stderr=""),
+        ):
+            assert get_service_status(fake_paths) == "not_installed"
 
 
 def test_get_bundled_version():
@@ -165,7 +211,7 @@ def test_register_and_remove_windows_app_entry(tmp_path):
     fake_paths = PlatformPaths(
         install_dir=tmp_path / "install",
         binary_path=tmp_path / "install" / "cmdiqo-agent.exe",
-        setup_path=tmp_path / "install" / "cmdiqo-agent-setup.exe",
+        setup_path=tmp_path / "install" / "cmdiqo-agent-windows-x64-setup.exe",
         config_dir=tmp_path / "config",
         config_file=tmp_path / "config" / "config.json",
         log_dir=tmp_path / "logs",
@@ -239,6 +285,7 @@ def test_gui_html_template_and_state_injection():
     state = api.get_state()
     assert "bundled_version" in state
     assert "installed_version" in state
+    assert "service_status" in state
     assert "config" in state
     assert "paths" in state
 
@@ -246,4 +293,3 @@ def test_gui_html_template_and_state_injection():
     rendered = HTML_TEMPLATE.replace("__INITIAL_STATE_JSON__", state_json)
     assert "__INITIAL_STATE_JSON__" not in rendered
     assert state_json in rendered
-

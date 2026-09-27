@@ -24,7 +24,7 @@ def run_cmd(cmd: list[str], check: bool = True) -> None:
 
 
 def sign_windows_binary(exe_path: Path) -> None:
-    """Digitally sign the Windows executable using Authenticode and export certificate."""
+    """Digitally sign a Windows executable and export its public certificate."""
     cer_dist = exe_path.parent / "cmdiqo-agent.cer"
     cer_root = ROOT / "cmdiqo-agent.cer"
     ps_cmd = (
@@ -60,23 +60,22 @@ def sign_windows_binary(exe_path: Path) -> None:
         "    Write-Host \"[*] Timestamping via $ts...\"; "
         f"    $sig = Set-AuthenticodeSignature -FilePath '{exe_path}' -Certificate $cert -TimestampServer $ts -HashAlgorithm SHA256; "
         "    if ($sig.SignatureType -eq 'Authenticode') { $signed = $true; break } "
-        "  } catch {} "
+        "  } catch { Write-Host \"[!] Timestamp server failed: $($_.Exception.Message)\" } "
         "}; "
         "if (-not $signed) { "
         "  Write-Host '[*] Timestamp failed, signing directly without timestamp...'; "
         f"  Set-AuthenticodeSignature -FilePath '{exe_path}' -Certificate $cert -HashAlgorithm SHA256 | Out-Null; "
         "}; "
-        f"Get-AuthenticodeSignature '{exe_path}' | Format-List Status, StatusMessage, SignatureType, SignerCertificate, TimeStamperCertificate"
+        f"$verification = Get-AuthenticodeSignature '{exe_path}'; "
+        "$verification | Format-List Status, StatusMessage, SignatureType, SignerCertificate, TimeStamperCertificate; "
+        "if ($verification.SignatureType -ne 'Authenticode') { throw 'Authenticode signing did not produce a signature.' }"
     )
     print("\n[*] Digitally signing Windows executable...")
-    try:
-        subprocess.run(
-            ["powershell", "-NoProfile", "-Command", ps_cmd],
-            cwd=str(ROOT),
-            check=False,
-        )
-    except Exception as exc:  # noqa: BLE001
-        print(f"[-] Code signing skipped: {exc}")
+    subprocess.run(
+        ["powershell", "-NoProfile", "-Command", ps_cmd],
+        cwd=str(ROOT),
+        check=True,
+    )
 
 
 import zipfile
