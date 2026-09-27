@@ -285,8 +285,64 @@ def test_register_service_windows_creates_service(tmp_path):
                 MagicMock(returncode=0, stdout="SUCCESS", stderr=""),
                 MagicMock(returncode=0, stdout="SUCCESS", stderr=""),
             ],
-        ):
+        ) as mock_run:
             assert register_service(fake_paths) is True
+
+    assert mock_run.call_args_list[1].args[0] == [
+        "sc.exe",
+        "create",
+        "CmdiqoAgent",
+        "binPath=",
+        f'"{fake_paths.binary_path}" --service --config "{fake_paths.config_file}"',
+        "start=",
+        "auto",
+        "DisplayName=",
+        "Cmdiqo LAN Remote Agent",
+    ]
+    assert mock_run.call_args_list[3].args[0] == [
+        "sc.exe",
+        "failure",
+        "CmdiqoAgent",
+        "reset=",
+        "86400",
+        "actions=",
+        "restart/5000/restart/10000/restart/30000",
+    ]
+
+
+def test_register_service_windows_updates_service(tmp_path):
+    fake_paths = PlatformPaths(
+        install_dir=tmp_path / "install",
+        binary_path=tmp_path / "install" / "cmdiqo-agent.exe",
+        config_dir=tmp_path / "config",
+        config_file=tmp_path / "config" / "config.json",
+        log_dir=tmp_path / "logs",
+        service_name="CmdiqoAgent",
+    )
+
+    with patch("installer.backend.IS_WINDOWS", True):
+        with patch(
+            "installer.backend.run_cmd_silent",
+            side_effect=[
+                MagicMock(returncode=0, stdout="SERVICE_NAME: CmdiqoAgent", stderr=""),
+                MagicMock(returncode=0, stdout="SUCCESS", stderr=""),
+                MagicMock(returncode=0, stdout="SUCCESS", stderr=""),
+                MagicMock(returncode=0, stdout="SUCCESS", stderr=""),
+            ],
+        ) as mock_run:
+            assert register_service(fake_paths) is True
+
+    assert mock_run.call_args_list[1].args[0] == [
+        "sc.exe",
+        "config",
+        "CmdiqoAgent",
+        "binPath=",
+        f'"{fake_paths.binary_path}" --service --config "{fake_paths.config_file}"',
+        "start=",
+        "auto",
+        "DisplayName=",
+        "Cmdiqo LAN Remote Agent",
+    ]
 
 
 def test_install_or_upgrade_fails_when_service_does_not_start(tmp_path):
