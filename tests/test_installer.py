@@ -447,6 +447,8 @@ def test_gui_html_template_and_state_injection():
     assert "btn_start_service" in HTML_TEMPLATE
     assert "btn_restart_service" in HTML_TEMPLATE
     assert "btn_stop_service" in HTML_TEMPLATE
+    assert ".service-status" in HTML_TEMPLATE
+    assert "background: var(--card-bg);" in HTML_TEMPLATE
     assert "function manageService(action)" in HTML_TEMPLATE
 
     # 3. Verify placeholder exists for state injection

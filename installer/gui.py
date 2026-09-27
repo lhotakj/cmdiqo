@@ -273,6 +273,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       align-items: center;
       gap: 8px;
       margin-top: 12px;
+      background: var(--card-bg);
       font-size: 13px;
       font-weight: 600;
     }
