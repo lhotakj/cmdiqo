@@ -279,8 +279,8 @@ When `development/build_agent.py` runs on Windows:
 3. **Trust Scope:**
    - A generated self-signed certificate is useful for development and internal distribution, but is not trusted by other computers until its exported `.cer` is deployed to their certificate stores.
    - A publicly trusted Authenticode certificate is required to avoid publisher warnings on unmanaged Windows computers. SmartScreen reputation can still take time to establish for a newly issued certificate or newly published binary.
-4. **Dual Timestamping:**
-   - Digitally signs `cmdiqo-agent.exe` and `cmdiqo-agent-windows-x64-setup.exe` with SHA256 Authenticode signatures and queries official RFC 3161 timestamp servers (`http://timestamp.digicert.com` with fallback to `http://timestamp.sectigo.com`).
+4. **Timestamping:**
+   - Digitally signs `cmdiqo-agent.exe` and `cmdiqo-agent-windows-x64-setup.exe` with SHA256 Authenticode signatures and timestamps them through Sectigo's RFC 3161 service (`http://timestamp.sectigo.com`).
    - Valid timestamps ensure the digital signature remains valid even after the certificate expires.
 
 ### How to Trust the Binary on Target Windows Machines
@@ -320,15 +320,15 @@ Automated CI/CD workflows run in `.github/workflows/` using the exact same build
 
 > [!NOTE]
 > **No secrets are required to build and download binaries!**
-> The binary build workflow works 100% out of the box with zero secrets required. If signing secrets are omitted, the workflow automatically generates a dedicated Cmdiqo certificate, signs the `.exe`, and packages `cmdiqo-agent.cer` along with the binary.
+> The binary build workflow works out of the box with zero secrets required. If signing secrets are omitted, the workflow automatically generates a dedicated Cmdiqo certificate, signs the `.exe`, and packages `cmdiqo-agent.cer` along with the binary.
 
 | Secret Name | Workflow | Is it Required? | Description |
 | :--- | :--- | :---: | :--- |
 | `DOCKERHUB_USERNAME` | `docker-publish.yml` | **Only if publishing images** | Your Docker Hub account username. |
 | `DOCKERHUB_TOKEN` | `docker-publish.yml` | **Only if publishing images** | Docker Hub Personal Access Token (PAT). |
 | `SONAR_TOKEN` | `ci.yml` | **Optional** | SonarCloud token for code quality scanning. |
-| `WINDOWS_SIGNING_CERT_BASE64` | `build-agent.yml` | **Optional** | Base64-encoded commercial `.pfx` code-signing certificate. |
-| `WINDOWS_SIGNING_CERT_PASSWORD` | `build-agent.yml` | **Optional** | Password for the commercial `.pfx` certificate. |
+| `WINDOWS_SIGNING_CERT_BASE64` | `build-agent.yml` | **Optional** | Base64-encoded `.pfx` code-signing certificate. |
+| `WINDOWS_SIGNING_CERT_PASSWORD` | `build-agent.yml` | **Optional** | Password for the `.pfx` certificate. |
 
 ---
 
@@ -364,13 +364,14 @@ Automated CI/CD workflows run in `.github/workflows/` using the exact same build
 3. Generate a new token named `Cmdiqo-CI` and paste into GitHub Secrets as `SONAR_TOKEN`.
 *(If omitted, unit tests and linting still run 100% cleanly).*
 
-#### C. Commercial Windows Code-Signing Secrets (Optional)
-If you own a commercial Authenticode `.pfx` certificate:
-1. Encode your certificate to a Base64 string in PowerShell:
+#### C. Windows Code-Signing Certificate (Optional)
+1. To reuse a persistent internal self-signed certificate, run `development\generate_signing_cert.ps1`. For a commercial Authenticode certificate, use its `.pfx` file instead.
+2. Encode the certificate to a Base64 string in PowerShell:
    ```powershell
-   [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\path\to\mycert.pfx")) | Set-Clipboard
+   [Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\path\to\signing-cert.pfx")) | Set-Clipboard
    ```
-2. Save into GitHub Secrets as `WINDOWS_SIGNING_CERT_BASE64`, and save your certificate password as `WINDOWS_SIGNING_CERT_PASSWORD`.
+3. Save the Base64 string as `WINDOWS_SIGNING_CERT_BASE64` and its password as `WINDOWS_SIGNING_CERT_PASSWORD`.
+4. Install the exported `.cer` in the trusted root and trusted publisher stores of managed target machines. This verifies the internal signature but does not create public SmartScreen reputation.
 
 ---
 

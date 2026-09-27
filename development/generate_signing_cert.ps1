@@ -72,7 +72,7 @@ $pfxBase64 = [Convert]::ToBase64String($pfxBytes)
 Write-Host "`n" + ("=" * 72) -ForegroundColor Yellow
 Write-Host "               GITHUB ACTIONS SECRETS CONFIGURATION" -ForegroundColor Yellow
 Write-Host ("=" * 72) -ForegroundColor Yellow
-Write-Host "To make ALL future GitHub Actions builds trusted automatically, add these" -ForegroundColor White
+Write-Host "To reuse this self-signed certificate for future GitHub Actions builds, add these" -ForegroundColor White
 Write-Host "two secrets to your GitHub repository (Settings -> Secrets -> Actions):`n" -ForegroundColor DarkGray
 
 Write-Host "1. Secret Name:  WINDOWS_SIGNING_CERT_PASSWORD" -ForegroundColor Cyan
