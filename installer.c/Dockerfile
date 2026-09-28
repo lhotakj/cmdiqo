@@ -91,10 +91,12 @@ RUN apt-get update \
         libjpeg-dev \
         liblzma-dev \
         libncurses-dev \
+        libnotify-dev \
         libpango1.0-dev \
         libpng-dev \
         libpulse-dev \
         libreadline-dev \
+        libsecret-1-dev \
         libssl-dev \
         libtiff-dev \
         libtool \
@@ -143,6 +145,8 @@ RUN apt-get update \
         mingw-w64-tools \
         wine \
         wine64 \
+    && update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix \
+    && update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix \
     && rm -rf /var/lib/apt/lists/*
 
 ENV WINEDEBUG=-all
@@ -172,6 +176,8 @@ RUN apt-get update \
         mingw-w64-tools \
         wine \
         wine64 \
+    && update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix \
+    && update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix \
     && rm -rf /var/lib/apt/lists/*
 
 ENV WINEDEBUG=-all
