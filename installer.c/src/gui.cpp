@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <iostream>
 #include <functional>
 #include <iterator>
 #include <system_error>
@@ -405,10 +406,19 @@ int run_gui(
     char** argv,
     const std::optional<std::filesystem::path>& payload,
     const std::optional<std::filesystem::path>& initial_config) {
+    // If the user explicitly requested a GUI on a headless Linux host, fail fast
+    // with a clear message instead of letting wxWidgets attempt initialization
+    // (which can lead to allocator errors / double-free on some setups).
+    if (current_platform() == Platform::linux && !PlatformOperations::has_graphical_session()) {
+        std::cerr << "No graphical session detected; run without --gui for CLI mode, or start an X/Wayland session (or use X forwarding / Xvfb) to use the GUI." << std::endl;
+        return 1;
+    }
+
     auto* app = new InstallerApp(payload, initial_config);
     wxApp::SetInstance(app);
     if (!wxEntryStart(argc, argv)) {
-        delete app;
+        // Avoid deleting 'app' here: wxEntryStart may already free internal resources
+        // and deleting it again can cause a double-free in some wxWidgets builds.
         return 1;
     }
     if (!wxTheApp->CallOnInit()) {
