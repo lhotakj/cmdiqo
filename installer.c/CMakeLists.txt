@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(cmdiqo_native_installer VERSION 0.9.0 LANGUAGES CXX)
+project(cmdiqo_native_installer VERSION 0.9.0 LANGUAGES CXX C)
 
 include(CTest)
 
@@ -42,15 +42,30 @@ target_link_libraries(cmdiqo-agent-setup
         wx::base
 )
 
-if(UNIX AND NOT APPLE AND CMAKE_BUILD_TYPE STREQUAL "Release")
-    find_program(CMDIQO_STRIP_EXECUTABLE strip REQUIRED)
-    add_custom_command(
-        TARGET cmdiqo-agent-setup
-        POST_BUILD
-        COMMAND "${CMDIQO_STRIP_EXECUTABLE}" --strip-unneeded "$<TARGET_FILE:cmdiqo-agent-setup>"
-        COMMENT "Stripping release installer symbols"
-        VERBATIM
-    )
+if(MINGW)
+    target_link_options(cmdiqo-agent-setup PRIVATE -static -static-libgcc -static-libstdc++)
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        if(CMAKE_STRIP)
+            add_custom_command(
+                TARGET cmdiqo-agent-setup
+                POST_BUILD
+                COMMAND "${CMAKE_STRIP}" --strip-unneeded "$<TARGET_FILE:cmdiqo-agent-setup>"
+                COMMENT "Stripping release MinGW installer symbols"
+                VERBATIM
+            )
+        endif()
+    endif()
+elseif(UNIX AND NOT APPLE AND CMAKE_BUILD_TYPE STREQUAL "Release")
+    find_program(CMDIQO_STRIP_EXECUTABLE strip)
+    if(CMDIQO_STRIP_EXECUTABLE)
+        add_custom_command(
+            TARGET cmdiqo-agent-setup
+            POST_BUILD
+            COMMAND "${CMDIQO_STRIP_EXECUTABLE}" --strip-unneeded "$<TARGET_FILE:cmdiqo-agent-setup>"
+            COMMENT "Stripping release installer symbols"
+            VERBATIM
+        )
+    endif()
 endif()
 
 if(BUILD_TESTING)
@@ -60,5 +75,8 @@ if(BUILD_TESTING)
         tests/core_tests.cpp
     )
     target_link_libraries(cmdiqo-installer-tests PRIVATE cmdiqo_installer_core Catch2::Catch2WithMain)
+    if(MINGW)
+        target_link_options(cmdiqo-installer-tests PRIVATE -static -static-libgcc -static-libstdc++)
+    endif()
     add_test(NAME cmdiqo-installer-tests COMMAND cmdiqo-installer-tests)
 endif()

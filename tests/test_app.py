@@ -519,6 +519,7 @@ def test_format_bot_preflight_error():
 
 
 def test_run_main_configuration_error(capsys, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["app.py"])
     monkeypatch.delenv("SLACK_BOT_TOKEN", raising=False)
     monkeypatch.delenv("SLACK_APP_TOKEN", raising=False)
 
@@ -534,6 +535,7 @@ def test_run_main_configuration_error(capsys, monkeypatch):
 def test_run_main_keyboard_interrupt(monkeypatch):
     import asyncio
 
+    monkeypatch.setattr(sys, "argv", ["app.py"])
     monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
     monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-test")
 
@@ -551,6 +553,7 @@ def test_run_main_keyboard_interrupt(monkeypatch):
 def test_run_main_unhandled_exception(monkeypatch):
     import asyncio
 
+    monkeypatch.setattr(sys, "argv", ["app.py"])
     monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
     monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-test")
 

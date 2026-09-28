@@ -358,6 +358,17 @@ The script will:
 2. Create `/etc/cmdiqo-agent/agent.env`.
 3. Install and enable the systemd service `/etc/systemd/system/cmdiqo-agent.service`.
 
+> [!TIP]
+> **Alternative: Native C++ Setup Application (`cmdiqo-agent-linux-x64-setup`)**:
+> If you built or downloaded the native setup bundle, you can launch the GUI wizard or run headlessly:
+> ```bash
+> # Graphical setup wizard (requires X11 / Wayland desktop):
+> ./cmdiqo-agent-linux-x64-setup
+> 
+> # Headless CLI installation:
+> ./cmdiqo-agent-linux-x64-setup --cli install --hub-url "ws://192.168.1.10:8765" --token "your-agent-token" --name "nas"
+> ```
+
 ---
 
 ### Step 4.3: Configure the Linux Agent Secret
@@ -457,6 +468,12 @@ To verify and ensure the `.exe` is authentic and safe:
 > The ZIP contains `cmdiqo-agent.exe` beside `install.ps1`, so the installer
 > detects it automatically. You can also specify
 > `-BinaryPath "C:\path\to\cmdiqo-agent.exe"` if needed.
+>
+> **Alternative: Native Windows Setup Application (`cmdiqo-agent-windows-x64-setup.exe`)**:
+> You can also launch the native graphical setup wizard directly (keep `cmdiqo-agent-windows-x64.zip` in the same directory):
+> - Double-click `cmdiqo-agent-windows-x64-setup.exe`.
+> - Configure your Hub URL, Agent Token, and Machine Name.
+> - Click **Install Service** (runs with standard Windows UAC elevation).
 
 #### What the installer sets up automatically:
 - **Real Windows Service (`CmdiqoAgent`)**: Registered directly in Windows Service Control Manager (SCM). Visible in `services.msc`.

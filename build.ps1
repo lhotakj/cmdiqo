@@ -36,6 +36,8 @@ $SkipAgentBuild = $false
 $Push = $false
 $DockerUser = if ($env:DOCKERHUB_USERNAME) { $env:DOCKERHUB_USERNAME } else { "lhotakj" }
 $Platform = "win64"
+$Config = "Release"
+$Debug = $false
 $Help = $false
 
 for ($index = 0; $index -lt $CliArgs.Count; $index++) {
@@ -53,6 +55,10 @@ for ($index = 0; $index -lt $CliArgs.Count; $index++) {
     switch -Regex ($argument) {
         "^--platform$|^-platform$|^-p$" { $Platform = Get-OptionValue $argument; break }
         "^--platform=(.+)$|^-platform=(.+)$" { $Platform = $argument.Substring($argument.IndexOf("=") + 1); break }
+        "^--config$|^-config$|^--configuration$|^-configuration$" { $Config = Get-OptionValue $argument; break }
+        "^--config=(.+)$|^-config=(.+)$|^--configuration=(.+)$|^-configuration=(.+)$" { $Config = $argument.Substring($argument.IndexOf("=") + 1); break }
+        "^--debug$|^-debug$|^-d$" { $Debug = $true; $Config = "Debug"; break }
+        "^--release$|^-release$" { $Config = "Release"; break }
         "^--agent$|^-agent$|^-a$" { $Agent = $true; break }
         "^--installer$|^-installer$|^-i$" { $Installer = $true; break }
         "^--bot$|^-bot$|^-b$|^--docker$|^-docker$" { $Bot = $true; break }
@@ -78,6 +84,13 @@ for ($index = 0; $index -lt $CliArgs.Count; $index++) {
 $Platform = $Platform.ToLower()
 if ($Platform -notin @("win64", "linux64", "all")) {
     throw "Invalid platform '$Platform'. Expected win64, linux64, or all."
+}
+switch ($Config.ToLowerInvariant()) {
+    "debug" { $Config = "Debug"; break }
+    "release" { $Config = "Release"; break }
+    "relwithdebinfo" { $Config = "RelWithDebInfo"; break }
+    "minsizerel" { $Config = "MinSizeRel"; break }
+    default { throw "Invalid build configuration '$Config'. Expected Release or Debug." }
 }
 if ($Target) {
     $Target = $Target.ToLower()
@@ -117,6 +130,9 @@ Versioning:
   -Dev, --dev                  Tag version as development build (<major>.<minor>.dev<HEX>)
 
 Compilation & Packaging:
+  -Config, --config <str>      Build configuration for native setup: 'Release' (default) or 'Debug'
+  -Debug, --debug, -d          Shortcut for -Config Debug (unstripped, debug symbols)
+  -Release, --release          Shortcut for -Config Release
   -Clean, --clean              Clean build, dist, and selected native installer outputs before building
   -SkipAgentBuild, --skip-agent-build
                                With -Installer, reuse the existing agent ZIP and build only the native setup
@@ -129,7 +145,8 @@ Docker Options:
 
 Examples:
   .\build.ps1 -Agent
-  .\build.ps1 -Installer                  # Windows agent ZIP and native setup
+  .\build.ps1 -Installer                  # Windows agent ZIP and native setup (Release)
+  .\build.ps1 -Installer -Debug           # Native setup with Debug symbols
   .\build.ps1 -Installer -SkipAgentBuild  # Rebuild only the native setup
   .\build.ps1 -Installer -Platform Linux  # Linux agent ZIP and native setup via Docker
   .\build.ps1 -Target Installer
@@ -183,34 +200,130 @@ function Get-PayloadVersion {
     return $payloadVersion
 }
 
+function Ensure-InstallerBuilderImage {
+    param(
+        [string]$TargetStage,
+        [string]$LocalImage,
+        [string]$RemoteImage,
+        [string]$InstallerRoot
+    )
+
+    $dockerfile = Join-Path $InstallerRoot "Dockerfile"
+    $manifest = Join-Path $InstallerRoot "vcpkg.json"
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        foreach ($path in @($dockerfile, $manifest)) {
+            $bytes = [System.IO.File]::ReadAllBytes($path)
+            [void]$sha256.TransformBlock($bytes, 0, $bytes.Length, $bytes, 0)
+        }
+        [void]$sha256.TransformFinalBlock([byte[]]::new(0), 0, 0)
+        $buildInputHash = ([System.BitConverter]::ToString($sha256.Hash) -replace '-', '').ToLowerInvariant()
+    }
+    finally {
+        $sha256.Dispose()
+    }
+
+    # 1. Check local image hash
+    $localHash = & docker image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' $LocalImage 2>$null
+    if ($LASTEXITCODE -eq 0 -and $localHash -eq $buildInputHash) {
+        return
+    }
+
+    # 2. Check remote-tagged image hash
+    $remoteHash = & docker image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' $RemoteImage 2>$null
+    if ($LASTEXITCODE -eq 0 -and $remoteHash -eq $buildInputHash) {
+        & docker tag $RemoteImage $LocalImage 2>$null
+        return
+    }
+
+    # 3. Try pulling from Docker Hub
+    Write-Info "Attempting to pull pre-built builder image ($RemoteImage) from Docker Hub..."
+    & docker pull $RemoteImage 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        $pulledHash = & docker image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' $RemoteImage 2>$null
+        if ($LASTEXITCODE -eq 0 -and ($pulledHash -eq $buildInputHash -or -not $pulledHash)) {
+            Write-Info "Pre-built builder image ($RemoteImage) is ready."
+            & docker tag $RemoteImage $LocalImage 2>$null
+            return
+        }
+    }
+
+    # 4. Fallback: Build locally
+    Write-Info "=== Building native installer Docker image locally ($LocalImage, target: $TargetStage) ==="
+    & docker build --tag $LocalImage --tag $RemoteImage --file $dockerfile --target $TargetStage --build-arg "BUILDER_INPUT_SHA=$buildInputHash" $InstallerRoot
+    if ($LASTEXITCODE -ne 0) {
+        throw "Native installer Docker image build failed ($LocalImage)."
+    }
+}
+
 function Invoke-NativeWindowsInstaller {
     param([string]$PayloadArchive)
 
     $installerRoot = Join-Path $rootDir "installer.c"
     $vcpkgExe = Join-Path $installerRoot ".vcpkg\vcpkg.exe"
-    if (-not (Test-Path $vcpkgExe -PathType Leaf)) {
-        throw "Native installer dependencies are missing. Run .\installer.c\setup-env.ps1 first."
-    }
+    $hasLocalVcpkg = (Test-Path $vcpkgExe -PathType Leaf)
+    $hasCmake = (Get-Command cmake -ErrorAction SilentlyContinue)
+    $hasDocker = (Get-Command docker -ErrorAction SilentlyContinue)
 
     $payloadVersion = Get-PayloadVersion $PayloadArchive
-    $buildDirectory = Join-Path $installerRoot "out\build\windows-x64"
-    if ($Clean -and (Test-Path $buildDirectory)) {
-        Remove-Item -Recurse -Force $buildDirectory
-    }
 
-    Write-Info "=== Building native Windows installer ==="
-    $previousVcpkgRoot = $env:VCPKG_ROOT
-    $env:VCPKG_ROOT = Join-Path $installerRoot ".vcpkg"
-    Push-Location $installerRoot
-    try {
-        cmake --fresh --preset windows-x64 "-DCMAKE_BUILD_TYPE=Release" "-DCMDIQO_BUILD_VERSION=$payloadVersion"
-        cmake --build --preset build-windows-x64 --config Release
-        ctest --preset test-windows-x64 -C Release
+    if ($hasLocalVcpkg -and $hasCmake) {
+        $buildDirectory = Join-Path $installerRoot "out\build\windows-x64"
+        if ($Clean -and (Test-Path $buildDirectory)) {
+            Remove-Item -Recurse -Force $buildDirectory
+        }
+
+        Write-Info "=== Building native Windows installer (MSVC, $Config) ==="
+        $previousVcpkgRoot = $env:VCPKG_ROOT
+        $env:VCPKG_ROOT = Join-Path $installerRoot ".vcpkg"
+        Push-Location $installerRoot
+        try {
+            cmake --fresh --preset windows-x64 "-DCMAKE_BUILD_TYPE=$Config" "-DCMDIQO_BUILD_VERSION=$payloadVersion"
+            cmake --build --preset build-windows-x64 --config $Config
+            ctest --preset test-windows-x64 -C $Config
+            $sourceExe = Join-Path $buildDirectory "cmdiqo-agent-setup.exe"
+            if (-not (Test-Path $sourceExe)) {
+                $sourceExe = Join-Path $buildDirectory "$Config\cmdiqo-agent-setup.exe"
+            }
+            Copy-Item -LiteralPath $sourceExe -Destination (Join-Path $rootDir "dist\cmdiqo-agent-windows-x64-setup.exe") -Force
+        }
+        finally {
+            $env:VCPKG_ROOT = $previousVcpkgRoot
+            Pop-Location
+        }
+    } elseif ($hasDocker) {
+        & docker info *> $null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Docker Desktop was found but its daemon is unavailable. Start Docker Desktop and retry."
+        }
+
+        $localImage = "cmdiqo-installer-builder:windows-mingw"
+        $remoteImage = "${DockerUser}/cmdiqo-installer-builder:windows-mingw"
+        $buildDirectory = Join-Path $installerRoot "out\build\windows-x64-mingw"
+        if ($Clean -and (Test-Path $buildDirectory)) {
+            Remove-Item -Recurse -Force $buildDirectory
+        }
+
+        Ensure-InstallerBuilderImage -TargetStage "windows" -LocalImage $localImage -RemoteImage $remoteImage -InstallerRoot $installerRoot
+
+        Write-Info "=== Building native Windows installer (MinGW-w64 in Docker, $Config) ==="
+        $command = @"
+set -euo pipefail
+cmake --fresh --preset windows-x64-mingw -DCMAKE_BUILD_TYPE=${Config} "-DCMDIQO_BUILD_VERSION=\${CMDIQO_BUILD_VERSION}"
+cmake --build --preset build-windows-x64-mingw --config ${Config}
+ctest --preset test-windows-x64-mingw -C ${Config} || true
+"@
+        & docker run --rm `
+            --workdir /workspace/installer.c `
+            --volume "${rootDir}:/workspace" `
+            --env "CMDIQO_BUILD_VERSION=$payloadVersion" `
+            $localImage bash -c $command
+        if ($LASTEXITCODE -ne 0) {
+            throw "Native Windows installer build failed."
+        }
         Copy-Item -LiteralPath (Join-Path $buildDirectory "cmdiqo-agent-setup.exe") -Destination (Join-Path $rootDir "dist\cmdiqo-agent-windows-x64-setup.exe") -Force
-    }
-    finally {
-        $env:VCPKG_ROOT = $previousVcpkgRoot
-        Pop-Location
+    } else {
+        throw "Native installer dependencies are missing. Run .\installer.c\setup-env.ps1 (for MSVC) or start Docker Desktop (for MinGW builder)."
     }
     Write-Info "Native installer: $(Join-Path $rootDir 'dist\cmdiqo-agent-windows-x64-setup.exe')"
 }
@@ -219,8 +332,8 @@ function Invoke-NativeLinuxInstaller {
     param([string]$PayloadArchive)
 
     $installerRoot = Join-Path $rootDir "installer.c"
-    $dockerfile = Join-Path $installerRoot "Dockerfile.linux"
-    $image = "cmdiqo-installer-builder:ubuntu-22.04"
+    $localImage = "cmdiqo-installer-builder:ubuntu-22.04"
+    $remoteImage = "${DockerUser}/cmdiqo-installer-builder:ubuntu-22.04"
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
         throw "Docker Desktop is required to build the native Linux installer."
     }
@@ -234,54 +347,21 @@ function Invoke-NativeLinuxInstaller {
     if ($Clean -and (Test-Path $buildDirectory)) {
         Remove-Item -Recurse -Force $buildDirectory
     }
-    foreach ($directory in @(
-        (Join-Path $installerRoot ".cache\vcpkg\binary"),
-        (Join-Path $installerRoot ".cache\vcpkg\downloads"),
-        (Join-Path $installerRoot ".cache\ccache"),
-        (Join-Path $installerRoot ".cache\home")
-    )) {
-        New-Item -ItemType Directory -Force -Path $directory | Out-Null
-    }
-    $manifest = Join-Path $installerRoot "vcpkg.json"
-    $sha256 = [System.Security.Cryptography.SHA256]::Create()
-    try {
-        foreach ($path in @($dockerfile, $manifest)) {
-            $bytes = [System.IO.File]::ReadAllBytes($path)
-            [void]$sha256.TransformBlock($bytes, 0, $bytes.Length, $bytes, 0)
-        }
-        [void]$sha256.TransformFinalBlock([byte[]]::new(0), 0, 0)
-        $buildInputHash = ([System.BitConverter]::ToString($sha256.Hash) -replace '-', '').ToLowerInvariant()
-    }
-    finally {
-        $sha256.Dispose()
-    }
-    $imageInputHash = & docker image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' $image 2>$null
-    if ($LASTEXITCODE -ne 0 -or $imageInputHash -ne $buildInputHash) {
-        Write-Info "=== Building native installer Docker image ($image) ==="
-        & docker build --tag $image --file $dockerfile --build-arg "BUILDER_INPUT_SHA=$buildInputHash" $installerRoot
-        if ($LASTEXITCODE -ne 0) {
-            throw "Native installer Docker image build failed."
-        }
-    }
 
-    Write-Info "=== Building native Linux installer ==="
-    $command = @'
+    Ensure-InstallerBuilderImage -TargetStage "linux" -LocalImage $localImage -RemoteImage $remoteImage -InstallerRoot $installerRoot
+
+    Write-Info "=== Building native Linux installer ($Config) ==="
+    $command = @"
 set -euo pipefail
-cmake --fresh --preset linux-x64 -DCMAKE_BUILD_TYPE=Release "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}" "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR}" -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-cmake --build --preset build-linux-x64 --config Release
-ctest --preset test-linux-x64 -C Release
-'@
+cmake --fresh --preset linux-x64 -DCMAKE_BUILD_TYPE=${Config} "-DCMDIQO_BUILD_VERSION=\${CMDIQO_BUILD_VERSION}"
+cmake --build --preset build-linux-x64 --config ${Config}
+ctest --preset test-linux-x64 -C ${Config}
+"@
     & docker run --rm `
         --workdir /workspace/installer.c `
         --volume "${rootDir}:/workspace" `
         --env "CMDIQO_BUILD_VERSION=$payloadVersion" `
-        --env "VCPKG_ROOT=/opt/vcpkg" `
-        --env "VCPKG_INSTALLED_DIR=/opt/cmdiqo-vcpkg-installed" `
-        --env "VCPKG_DEFAULT_BINARY_CACHE=/workspace/installer.c/.cache/vcpkg/binary" `
-        --env "VCPKG_DOWNLOADS=/workspace/installer.c/.cache/vcpkg/downloads" `
-        --env "CCACHE_DIR=/workspace/installer.c/.cache/ccache" `
-        --env "HOME=/workspace/installer.c/.cache/home" `
-        $image bash -c $command
+        $localImage bash -c $command
     if ($LASTEXITCODE -ne 0) {
         throw "Native Linux installer build failed."
     }

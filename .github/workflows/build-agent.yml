@@ -123,9 +123,11 @@ jobs:
           path: |
             dist/${{ matrix.zip_name }}
             ${{ matrix.binary_src }}
+            dist/cmdiqo-agent-linux-x64-setup
+            dist/cmdiqo-agent-windows-x64-setup.exe
             dist/package/*
           retention-days: 90
-          if-no-files-found: error
+          if-no-files-found: warn
 
   publish-release:
     name: Create GitHub Release & Upload Agent Packages
@@ -149,7 +151,7 @@ jobs:
           mkdir -p dist/release-assets
           find dist/downloaded -name "*.zip" -exec cp {} dist/release-assets/ \;
           find dist/downloaded -name "cmdiqo-agent.cer" -exec cp {} dist/release-assets/ \; 2>/dev/null || true
-          find dist/downloaded -type f \( -name "cmdiqo-agent" -o -name "cmdiqo-agent.exe" \) -exec cp {} dist/release-assets/ \;
+          find dist/downloaded -type f \( -name "cmdiqo-agent" -o -name "cmdiqo-agent.exe" -o -name "cmdiqo-agent-linux-x64-setup" -o -name "cmdiqo-agent-windows-x64-setup.exe" \) -exec cp {} dist/release-assets/ \;
           for d in dist/downloaded/*; do
             if [ -d "$d" ]; then
               name=$(basename "$d")

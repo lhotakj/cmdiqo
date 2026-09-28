@@ -193,10 +193,13 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1 --target agent --platform w
 - `-Agent`: Switch to build the standalone Windows agent executable and ZIP package (default).
 - `-Installer`: Build the standalone Windows agent executable and ZIP package,
   then build the native C++ setup executable with that exact ZIP beside it.
+- `-Config, --config <Release|Debug>`: Build configuration for the native setup (default: `Release`).
+- `-Debug, -d`: Shortcut for `-Config Debug` (unstripped binary with debug symbols).
+- `-Release`: Shortcut for `-Config Release` (optimized, stripped binary).
 - `-Bot`: Switch to build `cmdiqo-bot` Docker container image.
 - `-All`: Switch to build the agent package, native setup executable, and bot container.
 - `-Target <Agent|Installer|Bot|All>`: Explicit target selection parameter.
-- `-Platform, -p <win64|linux64|all>`: Target platform selection (default: `win64`). Use `all` with Docker Desktop to build Linux binaries too.
+- `-Platform, -p <win64|linux64|all>`: Target platform selection (default: `win64`). Use `all` or `linux64` with Docker Desktop to build Linux binaries too.
 - `-Version, -v <string>`: Explicit version string override (e.g. `1.2.0`).
 - `-Dev`: Force development build format `<major>.<minor>.devel+<HEX>`.
 - `-Clean`: Clean `build/` and `dist/` directories before compiling.
@@ -222,19 +225,25 @@ Run `./build.sh`:
 # 3. Build with explicit version and clean artifacts:
 ./build.sh -v 1.2.0 --clean
 
-# 4. Build the Linux agent package and native setup executable:
+# 4. Build the Linux agent package and native setup executable (Release by default):
 ./build.sh --installer
 
-# 5. Rebuild only the native setup using the existing agent ZIP:
+# 5. Build Windows native setup from Linux via MinGW-w64 in Docker:
+./build.sh --installer --platform win64
+
+# 6. Rebuild only the native setup using the existing agent ZIP:
 ./build.sh --installer --skip-agent-build
 
-# 6. Build Docker container for cmdiqo-bot:
+# 7. Build with Debug symbols:
+./build.sh --installer --debug
+
+# 8. Build Docker container for cmdiqo-bot:
 ./build.sh --bot
 
-# 7. Build agent, native setup, and Docker bot:
+# 9. Build agent, native setup, and Docker bot:
 ./build.sh --all
 
-# 8. Build and push multi-arch Docker container:
+# 10. Build and push multi-arch Docker container:
 ./build.sh --bot --push
 ```
 
@@ -242,10 +251,13 @@ Run `./build.sh`:
 - `--agent, -a`: Build standalone agent binary and ZIP package (default).
 - `--installer, -i`: Build the standalone agent binary and ZIP package, then
   build the native C++ setup executable with that exact ZIP beside it.
+- `--config, --configuration <Release|Debug>`: Build configuration for native setup (default: `Release`).
+- `--debug, -d`: Shortcut for `--config Debug` (unstripped binary with full debug symbols).
+- `--release`: Shortcut for `--config Release` (optimized, stripped binary).
 - `--bot, -b, --docker`: Build Docker container for `cmdiqo-bot`.
 - `--all`: Build the Linux agent package, native setup executable, and bot container.
 - `--target <agent|installer|bot|all>`: Explicit target selection parameter.
-- `--platform, -p <linux64>`: Linux target selection (default: `linux64`).
+- `--platform, -p <linux64|win64|all>`: Target platform selection (default: `linux64`).
 - `-v, --version <string>`: Explicit version override (e.g. `1.2.0`).
 - `--dev`: Force development build format `<major>.<minor>.devel+<HEX>`.
 - `--clean`: Clean `build/` and `dist/` directories before compiling.
@@ -257,10 +269,8 @@ Run `./build.sh`:
 - `-h, --help`: Display detailed usage instructions.
 
 > [!TIP]
-> **Containerized Linux builds**:
-> When Docker is present on the Linux build host, `build.sh` compiles the Linux agent package inside a lightweight `python:3.13-slim-trixie` container. If Docker is not available, the build cleanly falls back to the host Python.
-
-> **Windows artifacts:** PyInstaller produces native binaries and does not cross-compile. `build.sh` produces Linux artifacts only. Run `build.ps1 --platform win64` on Windows, or use the Windows GitHub Actions job, which publishes the native Windows agent package alongside the Linux package.
+> **Containerized builds & Pre-built Docker Hub Images**:
+> When Docker is present, `build.sh` and `build.ps1` automatically pull pre-built builder images from Docker Hub (`lhotakj/cmdiqo-installer-builder:ubuntu-22.04` and `lhotakj/cmdiqo-installer-builder:windows-mingw`), making C++ installer compilation immediate without compiling vcpkg from source.
 
 ### Distribution Files
 
@@ -284,7 +294,7 @@ two files must remain together:
 The root build scripts create the agent ZIP first, validate its `version.txt`,
 compile and test the C++ setup executable in Release mode, and publish both
 files to `dist/`. See [installer.c/BUILD-C.md](installer.c/BUILD-C.md) for native
-development environment setup and manual CMake commands.
+development environment setup, Docker Hub publishing, and manual CMake commands.
 
 ### Building Container with Docker CLI & Compose
 

@@ -1,45 +1,61 @@
 <#
 .SYNOPSIS
-Prepares the native Windows environment or the optional Linux Docker builder.
+Prepares Docker builder images for native installer compilation using the multi-stage Dockerfile.
+All toolchains, tools, and vcpkg dependencies are built directly inside the container.
+No checkouts or package installations are performed on the host.
+
+.PARAMETER Platform
+Target builder platform: 'Windows', 'Linux', or 'All' (default: Windows).
+
+.PARAMETER DockerUser
+Docker Hub username/organization (defaults to $env:DOCKERHUB_USERNAME or 'lhotakj').
+
+.PARAMETER Push
+Push built builder images to Docker Hub.
+
+.PARAMETER RebuildImage
+Force rebuilding the image with base image refresh (--pull).
 
 .EXAMPLE
 .\setup-env.ps1
 
 .EXAMPLE
+.\setup-env.ps1 -Platform Windows
+
+.EXAMPLE
 .\setup-env.ps1 -Platform Linux
+
+.EXAMPLE
+.\setup-env.ps1 -Platform All -Push
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet("Windows", "Linux")]
+    [ValidateSet("Windows", "Linux", "All")]
     [string]$Platform = "Windows",
-    [ValidateSet("x64-windows")]
-    [string]$Triplet = "x64-windows",
-    [switch]$RebuildImage
+    [switch]$RebuildImage,
+    [switch]$Push,
+    [string]$DockerUser = $(if ($env:DOCKERHUB_USERNAME) { $env:DOCKERHUB_USERNAME } else { "lhotakj" })
 )
 
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
-$Vcpkg = Join-Path $Root ".vcpkg"
-$Image = "cmdiqo-installer-builder:ubuntu-22.04"
+$Dockerfile = Join-Path $Root "Dockerfile"
 
-function Test-DockerImage {
-    param(
-        [string]$Name,
-        [string]$Dockerfile
-    )
-
-    $expectedHash = Get-BuilderInputHash $Dockerfile
-    $actualHash = & docker image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' $Name 2>$null
-    return $LASTEXITCODE -eq 0 -and $actualHash -eq $expectedHash
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+    throw "Docker Desktop is required. Install and start Docker Desktop, then rerun this script."
+}
+& docker info *> $null
+if ($LASTEXITCODE -ne 0) {
+    throw "Docker Desktop was found but its daemon is unavailable. Start Docker Desktop, then rerun this command."
 }
 
 function Get-BuilderInputHash {
-    param([string]$Dockerfile)
+    param([string]$TargetFile)
 
     $manifest = Join-Path $Root "vcpkg.json"
     $sha256 = [System.Security.Cryptography.SHA256]::Create()
     try {
-        foreach ($Path in @($Dockerfile, $manifest)) {
+        foreach ($Path in @($TargetFile, $manifest)) {
             $bytes = [System.IO.File]::ReadAllBytes($Path)
             [void]$sha256.TransformBlock($bytes, 0, $bytes.Length, $bytes, 0)
         }
@@ -51,32 +67,37 @@ function Get-BuilderInputHash {
     }
 }
 
-function Test-SupportedCmake {
-    $versionOutput = & cmake --version
-    if ($LASTEXITCODE -ne 0 -or $versionOutput.Count -eq 0) {
-        return $false
-    }
-    if ($versionOutput[0] -notmatch '(\d+\.\d+\.\d+)') {
-        return $false
-    }
-    return [version]$Matches[1] -ge [version]"3.24.0"
+function Test-DockerImage {
+    param(
+        [string]$Name,
+        [string]$TargetFile
+    )
+
+    $expectedHash = Get-BuilderInputHash $TargetFile
+    $actualHash = & docker image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' $Name 2>$null
+    return $LASTEXITCODE -eq 0 -and $actualHash -eq $expectedHash
 }
 
-if ($Platform -eq "Linux") {
-    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        throw "Docker Desktop is required for the Linux builder. Install and start Docker Desktop, then rerun: .\setup-env.ps1 -Platform Linux"
-    }
-    & docker info *> $null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Docker Desktop was found but its daemon is unavailable. Start Docker Desktop, then rerun this command."
+function Build-DockerBuilder {
+    param(
+        [string]$TargetStage,
+        [string]$PlatformLabel,
+        [string]$LocalTag,
+        [string]$RemoteTag,
+        [string]$AltRemoteTag = ""
+    )
+
+    if (-not (Test-Path $Dockerfile)) {
+        throw "Dockerfile was not found at $Dockerfile"
     }
 
-    $Dockerfile = Join-Path $Root "Dockerfile.linux"
-    if (-not (Test-Path $Dockerfile)) {
-        throw "Linux Dockerfile was not found at $Dockerfile"
-    }
-    if ($RebuildImage -or -not (Test-DockerImage $Image $Dockerfile)) {
-        $BuildArguments = @("build", "--tag", $Image, "--file", $Dockerfile)
+    $isImageValid = (Test-DockerImage $LocalTag $Dockerfile) -or (Test-DockerImage $RemoteTag $Dockerfile)
+    if ($RebuildImage -or -not $isImageValid) {
+        Write-Host "=== Building $PlatformLabel Docker builder image (target: $TargetStage) ==="
+        $BuildArguments = @("build", "--tag", $LocalTag, "--tag", $RemoteTag, "--file", $Dockerfile, "--target", $TargetStage)
+        if ($AltRemoteTag) {
+            $BuildArguments += @("--tag", $AltRemoteTag)
+        }
         if ($RebuildImage) {
             $BuildArguments += "--pull"
         }
@@ -84,45 +105,49 @@ if ($Platform -eq "Linux") {
         $BuildArguments += @("--build-arg", "BUILDER_INPUT_SHA=$BuilderInputHash", $Root)
         & docker @BuildArguments
         if ($LASTEXITCODE -ne 0) {
-            throw "Docker image build failed."
+            throw "$PlatformLabel Docker image build failed."
+        }
+    } else {
+        & docker tag $LocalTag $RemoteTag 2>$null
+        & docker tag $RemoteTag $LocalTag 2>$null
+        if ($AltRemoteTag) {
+            & docker tag $RemoteTag $AltRemoteTag 2>$null
         }
     }
-    Write-Host "Linux Docker builder is ready. Build from the repository root with: .\build.ps1 -Installer -Platform Linux"
-    return
-}
 
-if ($RebuildImage) {
-    throw "-RebuildImage is only valid with -Platform Linux."
-}
-
-foreach ($Tool in @("git", "cmake")) {
-    if (-not (Get-Command $Tool -ErrorAction SilentlyContinue)) {
-        throw "$Tool is required. Install Git for Windows and CMake 3.24 or later, then run this script again."
+    if ($Push) {
+        Write-Host "=== Pushing $PlatformLabel Docker builder image to Docker Hub ($RemoteTag) ==="
+        & docker push $RemoteTag
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to push $RemoteTag to Docker Hub."
+        }
+        if ($AltRemoteTag) {
+            & docker push $AltRemoteTag
+        }
     }
-}
-if (-not (Test-SupportedCmake)) {
-    throw "CMake 3.24 or later is required. Upgrade CMake, restart the terminal, then run this script again."
+
+    Write-Host "[+] $PlatformLabel Docker builder is ready: $RemoteTag"
 }
 
-if (-not (Get-Command ninja -ErrorAction SilentlyContinue)) {
-    throw "Ninja is required. Install it with winget install Ninja-build.Ninja, restart the terminal, then rerun this script."
+if ($Platform -eq "Linux" -or $Platform -eq "All") {
+    Build-DockerBuilder -TargetStage "linux" -PlatformLabel "Linux" -LocalTag "cmdiqo-installer-builder:ubuntu-22.04" -RemoteTag "${DockerUser}/cmdiqo-installer-builder:ubuntu-22.04" -AltRemoteTag "${DockerUser}/cmdiqo-installer-builder:linux"
 }
 
-if (-not (Test-Path $Vcpkg)) {
-    Write-Host "Cloning vcpkg into $Vcpkg"
-    git clone https://github.com/microsoft/vcpkg.git $Vcpkg
+if ($Platform -eq "Windows" -or $Platform -eq "All") {
+    Build-DockerBuilder -TargetStage "windows" -PlatformLabel "Windows (MinGW-w64)" -LocalTag "cmdiqo-installer-builder:windows-mingw" -RemoteTag "${DockerUser}/cmdiqo-installer-builder:windows-mingw" -AltRemoteTag "${DockerUser}/cmdiqo-installer-builder:windows"
 }
 
-$VcpkgExe = Join-Path $Vcpkg "vcpkg.exe"
-if (-not (Test-Path $VcpkgExe)) {
-    & (Join-Path $Vcpkg "bootstrap-vcpkg.bat") -disableMetrics
+if ($Platform -eq "All") {
+    Build-DockerBuilder -TargetStage "all" -PlatformLabel "Unified Multi-Toolchain" -LocalTag "cmdiqo-installer-builder:all" -RemoteTag "${DockerUser}/cmdiqo-installer-builder:all" -AltRemoteTag "${DockerUser}/cmdiqo-installer-builder:ubuntu-22.04-all"
 }
-
-$env:VCPKG_ROOT = $Vcpkg
-Write-Host "Installing native installer dependencies for $Triplet"
-& $VcpkgExe install "--x-manifest-root=$Root" "--triplet=$Triplet"
 
 Write-Host ""
-Write-Host "Environment is ready. Build from the repository root with:"
+Write-Host "Docker builder environment is ready. Build from the repository root with:"
 Write-Host "  Set-Location $(Split-Path -Parent $Root)"
-Write-Host "  .\build.ps1 -Installer"
+if ($Platform -eq "Linux") {
+    Write-Host "  .\build.ps1 -Installer -Platform Linux"
+} elseif ($Platform -eq "All") {
+    Write-Host "  .\build.ps1 -Installer -Platform All"
+} else {
+    Write-Host "  .\build.ps1 -Installer"
+}
