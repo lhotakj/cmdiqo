@@ -1,2 +1,2 @@
 # Generated automatically by development/update_version.py. Do not edit manually.
-__version__ = "2.5.devel+6A9C0B2D"
+__version__ = "0.9.devel+6ABAD7A4"

@@ -112,8 +112,11 @@ build_docker_image() {
       build_args+=(--push)
     else
       # Load into local daemon for immediate use / testing.
-      # Note: --load supports only a single platform and a single tag.
-      build_args+=(--tag "${local_tag}" --load)
+      build_args+=(--tag "${local_tag}" --tag "${remote_tag}")
+      if [[ -n "${alt_remote_tag}" ]]; then
+        build_args+=(--tag "${alt_remote_tag}")
+      fi
+      build_args+=(--load)
     fi
     docker "${build_args[@]}" "${ROOT}"
   else
@@ -151,8 +154,8 @@ case "${PLATFORM}" in
     echo "Build from repository root with: ./build.sh --installer --platform win64"
     ;;
   all)
-    build_docker_image "linux" "Linux" "cmdiqo-installer-builder:ubuntu-22.04" "${DOCKER_USER}/cmdiqo-installer-builder:ubuntu-22.04" "${DOCKER_USER}/cmdiqo-installer-builder:linux"
-    build_docker_image "windows" "Windows (MinGW-w64)" "cmdiqo-installer-builder:windows-mingw" "${DOCKER_USER}/cmdiqo-installer-builder:windows-mingw" "${DOCKER_USER}/cmdiqo-installer-builder:windows"
+#    build_docker_image "linux" "Linux" "cmdiqo-installer-builder:ubuntu-22.04" "${DOCKER_USER}/cmdiqo-installer-builder:ubuntu-22.04" "${DOCKER_USER}/cmdiqo-installer-builder:linux"
+#    build_docker_image "windows" "Windows (MinGW-w64)" "cmdiqo-installer-builder:windows-mingw" "${DOCKER_USER}/cmdiqo-installer-builder:windows-mingw" "${DOCKER_USER}/cmdiqo-installer-builder:windows"
     build_docker_image "all" "Unified Multi-Toolchain" "cmdiqo-installer-builder:all" "${DOCKER_USER}/cmdiqo-installer-builder:all" "${DOCKER_USER}/cmdiqo-installer-builder:ubuntu-22.04-all"
     echo "Build from repository root with: ./build.sh --installer --platform all"
     ;;

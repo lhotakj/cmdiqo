@@ -1,0 +1,1848 @@
+jarda@home:~/WORKING/cmdiqo/installer.c$ ./setup-env.sh
+=== Building Linux Docker builder image (target: linux) ===
+[+] Building 2704.4s (14/14) FINISHED                                                                                                                                                                        docker:default
+ => [internal] load build definition from Dockerfile                                                                                                                                                                   0.0s
+ => => transferring dockerfile: 6.43kB                                                                                                                                                                                 0.0s
+ => resolve image config for docker-image://docker.io/docker/dockerfile:1                                                                                                                                              0.7s
+ => CACHED docker-image://docker.io/docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32                                                                                        0.0s
+ => [internal] load metadata for docker.io/library/ubuntu:22.04                                                                                                                                                        0.6s
+ => [internal] load .dockerignore                                                                                                                                                                                      0.0s
+ => => transferring context: 206B                                                                                                                                                                                      0.0s
+ => CACHED [base 1/4] FROM docker.io/library/ubuntu:22.04@sha256:b8b6ee6aa931ecd9d0d952abc34dc0e5f7c6a30c6bb71b079fe399fde0329c02                                                                                      0.0s
+ => [internal] load build context                                                                                                                                                                                      0.0s
+ => => transferring context: 433B                                                                                                                                                                                      0.0s
+ => [base 2/4] RUN apt-get update     && apt-get install --yes --no-install-recommends         autoconf         autoconf-archive         automake         bison         build-essential         ca-certificates       42.4s
+ => [base 3/4] RUN git clone https://github.com/microsoft/vcpkg.git /opt/vcpkg     && git -C /opt/vcpkg checkout "2026.07.29"     && /opt/vcpkg/bootstrap-vcpkg.sh -disableMetrics     && chmod -R a+rwx /opt/vcpkg   30.0s
+ => [base 4/4] COPY vcpkg.json /tmp/cmdiqo-manifest/vcpkg.json                                                                                                                                                         0.0s
+ => [linux 1/3] RUN apt-get update     && apt-get install --yes --no-install-recommends         gdb         libasound2-dev         libbz2-dev         libcairo2-dev         libdbus-1-dev         libegl1-mesa-dev    59.7s
+ => [linux 2/3] RUN /opt/vcpkg/vcpkg install         --clean-after-build         --x-manifest-root=/tmp/cmdiqo-manifest         --triplet=x64-linux         --x-install-root="/opt/cmdiqo-vcpkg-installed"     &&   2559.7s
+ => [linux 3/3] WORKDIR /workspace                                                                                                                                                                                     0.1s
+ => exporting to image                                                                                                                                                                                                10.9s
+ => => exporting layers                                                                                                                                                                                               10.8s
+ => => writing image sha256:a1cb8e4164399becc82ce1c100268b3f0dd05bf76864766795dc6581902a9307                                                                                                                           0.0s
+ => => naming to docker.io/library/cmdiqo-installer-builder:ubuntu-22.04                                                                                                                                               0.0s
+ => => naming to docker.io/lhotakj/cmdiqo-installer-builder:ubuntu-22.04                                                                                                                                               0.0s
+ => => naming to docker.io/lhotakj/cmdiqo-installer-builder:linux                                                                                                                                                      0.0s
+[+] Linux Docker builder is ready: lhotakj/cmdiqo-installer-builder:ubuntu-22.04
+Build from repository root with: ./build.sh --installer
+jarda@home:~/WORKING/cmdiqo/installer.c$ cd ..
+jarda@home:~/WORKING/cmdiqo$ ./build.sh --installer
+[INFO] Build target version: 0.9.devel+6ABAD7A4 (Short: 0.9)
+[INFO] Platform selection: linux64 (linux64: true, win64: false)
+[INFO] === Building standalone cmdiqo-agent in Debian trixie container ===
+[INFO] Refreshing Linux builder image (cmdiqo-builder-linux:trixie)...
+[+] Building 1.1s (8/8) FINISHED                                                                                                                                                                             docker:default
+ => [internal] load build definition from Dockerfile.builder-linux                                                                                                                                                     0.0s
+ => => transferring dockerfile: 486B                                                                                                                                                                                   0.0s
+ => [internal] load metadata for docker.io/library/python:3.13-slim-trixie                                                                                                                                             0.9s
+ => [internal] load .dockerignore                                                                                                                                                                                      0.0s
+ => => transferring context: 239B                                                                                                                                                                                      0.0s
+ => [1/4] FROM docker.io/library/python:3.13-slim-trixie@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b                                                                                       0.0s
+ => CACHED [2/4] RUN apt-get update &&     apt-get install -y --no-install-recommends binutils &&     rm -rf /var/lib/apt/lists/*                                                                                      0.0s
+ => CACHED [3/4] RUN pip install --no-cache-dir         pyinstaller         "websockets>=13"                                                                                                                           0.0s
+ => CACHED [4/4] WORKDIR /workspace                                                                                                                                                                                    0.0s
+ => exporting to image                                                                                                                                                                                                 0.0s
+ => => exporting layers                                                                                                                                                                                                0.0s
+ => => writing image sha256:7bcb4bd851832a42b9c003e57ac7a044387ca5dec7ac076afe905e8f9f0c6806                                                                                                                           0.0s
+ => => naming to docker.io/library/cmdiqo-builder-linux:trixie                                                                                                                                                         0.0s
+106 INFO: PyInstaller: 6.22.3, contrib hooks: 2026.7
+107 INFO: Python: 3.13.15
+108 INFO: Platform: Linux-7.0.0-34-generic-x86_64-with-glibc2.41
+108 INFO: Python environment: /usr/local
+109 INFO: wrote /workspace/cmdiqo-agent.spec
+110 INFO: Removing temporary files and cleaning cache in /workspace/.cache/pyinstaller
+112 INFO: Module search paths (PYTHONPATH):
+['/workspace',
+ '/usr/local/lib/python313.zip',
+ '/usr/local/lib/python3.13',
+ '/usr/local/lib/python3.13/lib-dynload',
+ '/usr/local/lib/python3.13/site-packages',
+ '/workspace',
+ '/workspace/agent']
+272 INFO: checking Analysis
+272 INFO: Building Analysis because Analysis-00.toc is non existent
+272 INFO: Looking for Python shared library...
+278 INFO: Using Python shared library: /usr/local/lib/libpython3.13.so.1.0
+278 INFO: Running Analysis Analysis-00.toc
+278 INFO: Target bytecode optimization level: 2
+278 INFO: Initializing module dependency graph...
+279 INFO: Initializing module graph hook caches...
+289 INFO: Analyzing modules for base_library.zip ...
+762 INFO: Processing standard module hook 'hook-math.py' from '/usr/local/lib/python3.13/site-packages/PyInstaller/hooks'
+978 INFO: Processing standard module hook 'hook-heapq.py' from '/usr/local/lib/python3.13/site-packages/PyInstaller/hooks'
+1323 INFO: Processing standard module hook 'hook-encodings.py' from '/usr/local/lib/python3.13/site-packages/PyInstaller/hooks'
+3283 INFO: Processing standard module hook 'hook-pickle.py' from '/usr/local/lib/python3.13/site-packages/PyInstaller/hooks'
+5267 INFO: Caching module dependency graph...
+5311 INFO: Analyzing /workspace/agent/agent.py
+5535 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from '/usr/local/lib/python3.13/site-packages/PyInstaller/hooks'
+5804 INFO: Processing standard module hook 'hook-xml.py' from '/usr/local/lib/python3.13/site-packages/PyInstaller/hooks'
+6167 INFO: Processing standard module hook 'hook-sysconfig.py' from '/usr/local/lib/python3.13/site-packages/PyInstaller/hooks'
+6173 INFO: Processing standard module hook 'hook-_ctypes.py' from '/usr/local/lib/python3.13/site-packages/PyInstaller/hooks'
+6718 INFO: Processing standard module hook 'hook-platform.py' from '/usr/local/lib/python3.13/site-packages/PyInstaller/hooks'
+6724 INFO: Processing standard module hook 'hook-websockets.py' from '/usr/local/lib/python3.13/site-packages/_pyinstaller_hooks_contrib/stdhooks'
+7445 INFO: Processing module hooks (post-graph stage)...
+7860 INFO: Performing binary vs. data reclassification (1 entries)
+7867 INFO: Looking for ctypes DLLs
+7902 INFO: Analyzing run-time hooks ...
+7903 INFO: Including run-time hook 'pyi_rth_inspect.py' from '/usr/local/lib/python3.13/site-packages/PyInstaller/hooks/rthooks'
+7907 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from '/usr/local/lib/python3.13/site-packages/PyInstaller/hooks/rthooks'
+7909 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from '/usr/local/lib/python3.13/site-packages/PyInstaller/hooks/rthooks'
+7916 INFO: Creating base_library.zip...
+8108 INFO: Looking for dynamic libraries
+8496 INFO: Warnings written to /workspace/build/cmdiqo-agent/warn-cmdiqo-agent.txt
+8512 INFO: Graph cross-reference written to /workspace/build/cmdiqo-agent/xref-cmdiqo-agent.html
+8526 INFO: checking PYZ
+8526 INFO: Building PYZ because PYZ-00.toc is non existent
+8526 INFO: Building PYZ (ZlibArchive) /workspace/build/cmdiqo-agent/PYZ-00.pyz
+9443 INFO: Building PYZ (ZlibArchive) /workspace/build/cmdiqo-agent/PYZ-00.pyz completed successfully.
+9452 INFO: checking PKG
+9452 INFO: Building PKG because PKG-00.toc is non existent
+9452 INFO: Building PKG (CArchive) cmdiqo-agent.pkg
+9456 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_struct.cpython-313-x86_64-linux-gnu.so
+9459 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/zlib.cpython-313-x86_64-linux-gnu.so
+9468 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/libpython3.13.so.1.0
+9483 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/grp.cpython-313-x86_64-linux-gnu.so
+9488 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/math.cpython-313-x86_64-linux-gnu.so
+9492 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/select.cpython-313-x86_64-linux-gnu.so
+9496 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_posixsubprocess.cpython-313-x86_64-linux-gnu.so
+9500 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/fcntl.cpython-313-x86_64-linux-gnu.so
+9505 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_datetime.cpython-313-x86_64-linux-gnu.so
+9509 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_posixshmem.cpython-313-x86_64-linux-gnu.so
+9513 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_multiprocessing.cpython-313-x86_64-linux-gnu.so
+9518 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/binascii.cpython-313-x86_64-linux-gnu.so
+9522 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/pyexpat.cpython-313-x86_64-linux-gnu.so
+9527 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/termios.cpython-313-x86_64-linux-gnu.so
+9531 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_statistics.cpython-313-x86_64-linux-gnu.so
+9536 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_sha2.cpython-313-x86_64-linux-gnu.so
+9540 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_random.cpython-313-x86_64-linux-gnu.so
+9545 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_ssl.cpython-313-x86_64-linux-gnu.so
+9550 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_hashlib.cpython-313-x86_64-linux-gnu.so
+9555 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_sha3.cpython-313-x86_64-linux-gnu.so
+9560 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_blake2.cpython-313-x86_64-linux-gnu.so
+9565 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_md5.cpython-313-x86_64-linux-gnu.so
+9570 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_sha1.cpython-313-x86_64-linux-gnu.so
+9574 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_bisect.cpython-313-x86_64-linux-gnu.so
+9579 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/unicodedata.cpython-313-x86_64-linux-gnu.so
+9585 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_contextvars.cpython-313-x86_64-linux-gnu.so
+9590 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_decimal.cpython-313-x86_64-linux-gnu.so
+9595 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_csv.cpython-313-x86_64-linux-gnu.so
+9600 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_opcode.cpython-313-x86_64-linux-gnu.so
+9604 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/resource.cpython-313-x86_64-linux-gnu.so
+9608 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_lzma.cpython-313-x86_64-linux-gnu.so
+9612 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_bz2.cpython-313-x86_64-linux-gnu.so
+9616 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/mmap.cpython-313-x86_64-linux-gnu.so
+9620 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_ctypes.cpython-313-x86_64-linux-gnu.so
+9624 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/array.cpython-313-x86_64-linux-gnu.so
+9627 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_queue.cpython-313-x86_64-linux-gnu.so
+9631 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_pickle.cpython-313-x86_64-linux-gnu.so
+9635 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_multibytecodec.cpython-313-x86_64-linux-gnu.so
+9639 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_codecs_jp.cpython-313-x86_64-linux-gnu.so
+9644 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_codecs_kr.cpython-313-x86_64-linux-gnu.so
+9647 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_codecs_iso2022.cpython-313-x86_64-linux-gnu.so
+9651 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_codecs_cn.cpython-313-x86_64-linux-gnu.so
+9655 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_codecs_tw.cpython-313-x86_64-linux-gnu.so
+9660 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_codecs_hk.cpython-313-x86_64-linux-gnu.so
+9665 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_heapq.cpython-313-x86_64-linux-gnu.so
+9670 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_socket.cpython-313-x86_64-linux-gnu.so
+9675 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_uuid.cpython-313-x86_64-linux-gnu.so
+9680 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/websockets/speedups.cpython-313-x86_64-linux-gnu.so
+9685 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/readline.cpython-313-x86_64-linux-gnu.so
+9689 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_json.cpython-313-x86_64-linux-gnu.so
+9694 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/python3.13/lib-dynload/_asyncio.cpython-313-x86_64-linux-gnu.so
+9700 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/libz.so.1
+9706 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/libssl.so.3
+9713 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/libzstd.so.1
+9726 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/libcrypto.so.3
+9743 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/liblzma.so.5
+9747 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/libbz2.so.1.0
+9752 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/libffi.so.8
+9757 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/libuuid.so.1
+9761 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/libtinfo.so.6
+9765 INFO: Executing: strip /workspace/.cache/pyinstaller/bincache10py31364bit/libreadline.so.8
+12975 INFO: Building PKG (CArchive) cmdiqo-agent.pkg completed successfully.
+12976 INFO: Bootloader /usr/local/lib/python3.13/site-packages/PyInstaller/bootloader/Linux-64bit-intel/run
+12977 INFO: checking EXE
+12977 INFO: Building EXE because EXE-00.toc is non existent
+12977 INFO: Building EXE from EXE-00.toc
+12977 INFO: Copying bootloader EXE to /workspace/dist/cmdiqo-agent
+12977 INFO: Appending PKG archive to custom ELF section in EXE
+12999 INFO: Building EXE from EXE-00.toc completed successfully.
+13000 INFO: Build complete! The results are available in: /workspace/dist
+=== Building cmdiqo-agent for linux (x86_64) ===
+[INFO] Version synchronized: 0.9.devel+6ABAD7A4 (Short: 0.9)
+[INFO] PE Tuple: (0, 9, 55204, 0)
+[build] Running: /usr/local/bin/python3 -m PyInstaller --onefile --clean --optimize 2 --exclude-module tkinter --exclude-module unittest --exclude-module pydoc --exclude-module test --exclude-module sqlite3 --paths /workspace/agent --hidden-import _version --hidden-import service_windows --name cmdiqo-agent --strip /workspace/agent/agent.py
+
+[+] Success! Built standalone binary: /workspace/dist/cmdiqo-agent (v0.9.devel+6ABAD7A4, 9.3 MB)
+
+[*] Packaging zip archive: /workspace/dist/cmdiqo-agent-linux-x64.zip
+  + Added: cmdiqo-agent
+  + Added: install.sh
+  + Added: uninstall.sh
+  + Added: cmdiqo-agent.service
+  + Added: agent.env.example
+  + Added: agent.json.example
+  + Added: version.txt
+[+] Zip package created successfully: /workspace/dist/cmdiqo-agent-linux-x64.zip (9.2 MB)
+[INFO] === Building native Linux installer (Release) ===
+Preset CMake variables:
+
+  BUILD_TESTING="ON"
+  CMAKE_TOOLCHAIN_FILE="/opt/vcpkg/scripts/buildsystems/vcpkg.cmake"
+  VCPKG_TARGET_TRIPLET="x64-linux"
+
+-- Running vcpkg install
+A suitable version of cmake was not found (required v4.4.0).
+Downloading https://github.com/Kitware/CMake/releases/download/v4.4.0/cmake-4.4.0-linux-x86_64.tar.gz -> cmake-4.4.0-linux-x86_64.tar.gz
+Successfully downloaded cmake-4.4.0-linux-x86_64.tar.gz
+Extracting cmake...
+Detecting compiler hash for triplet x64-linux...
+Compiler found: /usr/bin/c++
+The following packages will be built and installed:
+  * at-spi2-atk:x64-linux@2.38.0#2
+  * at-spi2-core:x64-linux@2.44.1#5
+  * atk:x64-linux@2.38.0#11
+  * brotli:x64-linux@1.2.0
+  * bzip2[core,tool]:x64-linux@1.0.8#6
+  * cairo[core,fontconfig,freetype,gobject,x11]:x64-linux@1.18.4#1
+    catch2:x64-linux@3.15.3
+  * curl[core,non-http,openssl,ssl]:x64-linux@8.21.0#1
+  * dbus[core,systemd]:x64-linux@1.16.2#5
+  * dirent:x64-linux@1.26
+  * egl-registry:x64-linux@2025-05-27
+  * expat:x64-linux@2.8.2
+  * fontconfig[core,iconv]:x64-linux@2.17.1#2
+  * freetype[brotli,bzip2,core,png,zlib]:x64-linux@2.14.3
+  * fribidi:x64-linux@1.0.16
+  * gdk-pixbuf[core,jpeg,png,tiff]:x64-linux@2.44.6#1
+  * gettext[core,tools]:x64-linux@0.22.5#4
+  * gettext-libintl:x64-linux@0.22.5#4
+  * glib:x64-linux@2.88.2
+  * gperf:x64-linux@3.3
+  * gtk3:x64-linux@3.24.52#2
+  * harfbuzz[core,freetype]:x64-linux@14.2.1#2
+  * libcap:x64-linux@2.78
+  * libepoxy:x64-linux@1.5.10#2
+  * libffi:x64-linux@3.7.1
+  * libiconv:x64-linux@1.19
+  * libjpeg-turbo:x64-linux@3.2.0
+  * liblzma:x64-linux@5.8.3
+  * libmount:x64-linux@2.41.3#1
+  * libpng:x64-linux@1.6.58
+  * libsystemd:x64-linux@260.2
+  * libuuid:x64-linux@1.0.3#17
+  * libwebp[core,libwebpmux,nearlossless,simd]:x64-linux@1.6.0#2
+  * libx11:x64-linux@1.8.1#6
+  * libxau:x64-linux@1.0.12#2
+  * libxcb:x64-linux@1.17.0
+  * libxcrypt:x64-linux@4.5.2
+  * libxdmcp:x64-linux@1.1.5#1
+  * libxext:x64-linux@1.3.7#1
+  * libxfixes:x64-linux@6.0.2#1
+  * libxi:x64-linux@1.8.2#1
+  * libxml2[core,iconv,tools,zlib]:x64-linux@2.15.3
+  * libxrandr:x64-linux@1.5.5#1
+  * libxrender:x64-linux@0.9.12#1
+  * libxslt[core,profiler,thread,tools]:x64-linux@1.1.45
+  * libxtst:x64-linux@1.2.5#1
+    libzip[bzip2,core,default-aes,openssl]:x64-linux@1.11.4
+  * lz4:x64-linux@1.10.0
+  * nanosvg:x64-linux@2023-12-29
+    nlohmann-json:x64-linux@3.12.0#2
+  * opengl:x64-linux@2022-12-04#3
+  * opengl-registry:x64-linux@2026-01-26
+  * openssl:x64-linux@3.6.3
+  * pango:x64-linux@1.58.0
+  * pcre2[core,jit,platform-default-features]:x64-linux@10.47#1
+  * pixman:x64-linux@0.46.4#1
+  * pthread:x64-linux@3.0.0#2
+  * pthread-stubs:x64-linux@0.5#1
+  * pthreads:x64-linux@3.0.0#14
+  * tiff[core,jpeg,lzma,zip]:x64-linux@4.7.2
+  * vcpkg-cmake:x64-linux@2024-04-23
+  * vcpkg-cmake-config:x64-linux@2026-07-21
+  * vcpkg-cmake-get-vars:x64-linux@2025-05-29
+  * vcpkg-get-python-packages:x64-linux@2025-04-05
+  * vcpkg-make:x64-linux@2026-07-09
+  * vcpkg-tool-meson:x64-linux@1.9.0#10
+    wxwidgets[core,debug-support]:x64-linux@3.3.1#1
+  * xcb-proto:x64-linux@1.17.0
+  * xcb-util-m4:x64-linux@2022-07-01
+  * xorg-macros:x64-linux@1.20.2#1
+  * xproto:x64-linux@2021.5
+  * xtrans:x64-linux@1.6.0#1
+  * zlib:x64-linux@1.3.2#1
+  * zstd:x64-linux@1.5.7
+Additional packages (*) will be modified to complete this operation.
+Installing 1/74 vcpkg-cmake-config:x64-linux@2026-07-21...
+vcpkg-cmake-config:x64-linux@2026-07-21 package ABI: 60e739ffcfe7456176ee5ce94b8d59293fb6c95edfcfb92365d1b2f7e3e57a75
+Building vcpkg-cmake-config:x64-linux@2026-07-21...
+-- Installing: /opt/vcpkg/packages/vcpkg-cmake-config_x64-linux/share/vcpkg-cmake-config/vcpkg_cmake_config_fixup.cmake
+-- Installing: /opt/vcpkg/packages/vcpkg-cmake-config_x64-linux/share/vcpkg-cmake-config/vcpkg-port-config.cmake
+-- Installing: /opt/vcpkg/packages/vcpkg-cmake-config_x64-linux/share/vcpkg-cmake-config/copyright
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle vcpkg-cmake-config:x64-linux: 21.3 ms
+Installing 2/74 vcpkg-cmake:x64-linux@2024-04-23...
+vcpkg-cmake:x64-linux@2024-04-23 package ABI: a44e1a169a18d9be512c6eb5c5dfeebf092fc20795dc7fe6a0230b365cb69064
+Building vcpkg-cmake:x64-linux@2024-04-23...
+-- Installing: /opt/vcpkg/packages/vcpkg-cmake_x64-linux/share/vcpkg-cmake/vcpkg_cmake_configure.cmake
+-- Installing: /opt/vcpkg/packages/vcpkg-cmake_x64-linux/share/vcpkg-cmake/vcpkg_cmake_build.cmake
+-- Installing: /opt/vcpkg/packages/vcpkg-cmake_x64-linux/share/vcpkg-cmake/vcpkg_cmake_install.cmake
+-- Installing: /opt/vcpkg/packages/vcpkg-cmake_x64-linux/share/vcpkg-cmake/vcpkg-port-config.cmake
+-- Installing: /opt/vcpkg/packages/vcpkg-cmake_x64-linux/share/vcpkg-cmake/copyright
+-- Performing post-build validation
+Elapsed time to handle vcpkg-cmake:x64-linux: 19.9 ms
+Installing 3/74 catch2:x64-linux@3.15.3...
+catch2:x64-linux@3.15.3 package ABI: 94f1804a027c9cb9b7709e8cc488f00c81a0f04a3019e543e484bfcfcb0d72ba
+Building catch2:x64-linux@3.15.3...
+Downloading https://github.com/catchorg/Catch2/archive/v3.15.3.tar.gz -> catchorg-Catch2-v3.15.3.tar.gz
+Successfully downloaded catchorg-Catch2-v3.15.3.tar.gz
+-- Extracting source /opt/vcpkg/downloads/catchorg-Catch2-v3.15.3.tar.gz
+-- Applying patch fix-install-path.patch
+-- Using source at /opt/vcpkg/buildtrees/catch2/src/v3.15.3-d5e112777e.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/catch2_x64-linux/lib/pkgconfig/catch2-with-main.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/catch2_x64-linux/lib/pkgconfig/catch2.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/catch2_x64-linux/debug/lib/pkgconfig/catch2-with-main.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/catch2_x64-linux/debug/lib/pkgconfig/catch2.pc
+-- Installing: /opt/vcpkg/packages/catch2_x64-linux/share/catch2/copyright
+Downloading https://github.com/NixOS/patchelf/releases/download/0.19.0/patchelf-0.19.0-x86_64.tar.gz -> patchelf-0.19.0-x86_64.tar.gz
+Successfully downloaded patchelf-0.19.0-x86_64.tar.gz
+-- Performing post-build validation
+Elapsed time to handle catch2:x64-linux: 50 s
+Installing 4/74 vcpkg-cmake-get-vars:x64-linux@2025-05-29...
+vcpkg-cmake-get-vars:x64-linux@2025-05-29 package ABI: e33f03b39501f7ac1e82d90a962f44c8bb6f8c971b261b5adadd65f8e60fb893
+Building vcpkg-cmake-get-vars:x64-linux@2025-05-29...
+-- Installing: /opt/vcpkg/packages/vcpkg-cmake-get-vars_x64-linux/share/vcpkg-cmake-get-vars/vcpkg_cmake_get_vars.cmake
+-- Installing: /opt/vcpkg/packages/vcpkg-cmake-get-vars_x64-linux/share/vcpkg-cmake-get-vars/cmake_get_vars
+-- Installing: /opt/vcpkg/packages/vcpkg-cmake-get-vars_x64-linux/share/vcpkg-cmake-get-vars/cmake_get_vars/CMakeLists.txt
+-- Installing: /opt/vcpkg/packages/vcpkg-cmake-get-vars_x64-linux/share/vcpkg-cmake-get-vars/cmake-get-vars.cmake.in
+-- Installing: /opt/vcpkg/packages/vcpkg-cmake-get-vars_x64-linux/share/vcpkg-cmake-get-vars/vcpkg-port-config.cmake
+-- Installing: /opt/vcpkg/packages/vcpkg-cmake-get-vars_x64-linux/share/vcpkg-cmake-get-vars/copyright
+-- Performing post-build validation
+Elapsed time to handle vcpkg-cmake-get-vars:x64-linux: 21.6 ms
+Installing 5/74 openssl:x64-linux@3.6.3...
+openssl:x64-linux@3.6.3 package ABI: 1350d91f02dfb90c797871d71fc8c28dbc59112a03c43d938e2749793d462e5d
+Building openssl:x64-linux@3.6.3...
+Downloading https://github.com/openssl/openssl/archive/openssl-3.6.3.tar.gz -> openssl-openssl-openssl-3.6.3.tar.gz
+Successfully downloaded openssl-openssl-openssl-3.6.3.tar.gz
+-- Extracting source /opt/vcpkg/downloads/openssl-openssl-openssl-3.6.3.tar.gz
+-- Applying patch cmake-config.patch
+-- Applying patch command-line-length.patch
+-- Applying patch script-prefix.patch
+-- Applying patch windows/install-layout.patch
+-- Applying patch windows/install-pdbs.patch
+-- Applying patch windows/install-programs.diff
+-- Applying patch unix/android-cc.patch
+-- Applying patch unix/move-openssldir.patch
+-- Applying patch unix/no-empty-dirs.patch
+-- Applying patch unix/no-static-libs-for-shared.patch
+-- Using source at /opt/vcpkg/buildtrees/openssl/src/nssl-3.6.3-28a9d34a24.clean
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/openssl/cmake-get-vars_C_CXX-x64-linux.cmake.log
+openssl requires Linux kernel headers from the system package manager.
+   They can be installed on Alpine systems via `apk add linux-headers`.
+   They can be installed on Ubuntu systems via `apt install linux-libc-dev`.
+
+-- Getting CMake variables for x64-linux-dbg
+-- Getting CMake variables for x64-linux-rel
+-- Configuring x64-linux-dbg
+-- Configuring x64-linux-rel
+-- Building x64-linux-dbg
+-- Installing x64-linux-dbg
+-- Building x64-linux-rel
+-- Installing x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/openssl_x64-linux/lib/pkgconfig/libcrypto.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/openssl_x64-linux/lib/pkgconfig/libssl.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/openssl_x64-linux/lib/pkgconfig/openssl.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/openssl_x64-linux/debug/lib/pkgconfig/libcrypto.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/openssl_x64-linux/debug/lib/pkgconfig/libssl.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/openssl_x64-linux/debug/lib/pkgconfig/openssl.pc
+-- Installing: /opt/vcpkg/packages/openssl_x64-linux/share/openssl/usage
+-- Installing: /opt/vcpkg/packages/openssl_x64-linux/share/openssl/copyright
+-- Performing post-build validation
+Elapsed time to handle openssl:x64-linux: 3 min
+Installing 6/74 zlib:x64-linux@1.3.2#1...
+zlib:x64-linux@1.3.2#1 package ABI: 6e176682eea18fa3bdc3bde3d3166e1ea5e502fd9c4c39f98e09dce3be8b4169
+Building zlib:x64-linux@1.3.2#1...
+Downloading https://github.com/madler/zlib/archive/v1.3.2.tar.gz -> madler-zlib-v1.3.2.tar.gz
+Successfully downloaded madler-zlib-v1.3.2.tar.gz
+-- Extracting source /opt/vcpkg/downloads/madler-zlib-v1.3.2.tar.gz
+-- Applying patch 0001-no-version-script-on-ohos.patch
+-- Using source at /opt/vcpkg/buildtrees/zlib/src/v1.3.2-c19a0bfd23.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/zlib_x64-linux/lib/pkgconfig/zlib.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/zlib_x64-linux/debug/lib/pkgconfig/zlib.pc
+-- Installing: /opt/vcpkg/packages/zlib_x64-linux/share/zlib/vcpkg-cmake-wrapper.cmake
+-- Installing: /opt/vcpkg/packages/zlib_x64-linux/share/zlib/copyright
+-- Performing post-build validation
+Elapsed time to handle zlib:x64-linux: 3.3 s
+Installing 7/74 bzip2[core,tool]:x64-linux@1.0.8#6...
+bzip2[core,tool]:x64-linux@1.0.8#6 package ABI: 2e88ef6dad638ba089760721686a3064b2ddf065326d66532d4176d20dc8fe5f
+Building bzip2[core,tool]:x64-linux@1.0.8#6...
+Downloading bzip2-1.0.8.tar.gz, trying https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
+Successfully downloaded bzip2-1.0.8.tar.gz
+-- Extracting source /opt/vcpkg/downloads/bzip2-1.0.8.tar.gz
+-- Applying patch fix-import-export-macros.patch
+-- Using source at /opt/vcpkg/buildtrees/bzip2/src/bzip2-1-336d4794a3.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/bzip2_x64-linux/lib/pkgconfig/bzip2.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/bzip2_x64-linux/debug/lib/pkgconfig/bzip2.pc
+-- Installing: /opt/vcpkg/packages/bzip2_x64-linux/share/bzip2/copyright
+-- Adjusted RPATH of '/opt/vcpkg/packages/bzip2_x64-linux/tools/bzip2/bzip2' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/bzip2_x64-linux/tools/bzip2/bzip2recover' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Performing post-build validation
+Elapsed time to handle bzip2:x64-linux: 6.7 s
+Installing 8/74 libzip[bzip2,core,default-aes,openssl]:x64-linux@1.11.4...
+libzip[bzip2,core,default-aes,openssl]:x64-linux@1.11.4 package ABI: 0c3e9f62587b636c586d64f2a6695ce0e9c7b6343a5a9269302c0966a3782ba3
+Building libzip[bzip2,core,default-aes,openssl]:x64-linux@1.11.4...
+Downloading https://github.com/nih-at/libzip/archive/v1.11.4.tar.gz -> nih-at-libzip-v1.11.4.tar.gz
+Successfully downloaded nih-at-libzip-v1.11.4.tar.gz
+-- Extracting source /opt/vcpkg/downloads/nih-at-libzip-v1.11.4.tar.gz
+-- Applying patch config-vars.diff
+-- Applying patch dependencies.diff
+-- Applying patch use-requires.patch
+-- Using source at /opt/vcpkg/buildtrees/libzip/src/v1.11.4-05742a9dee.clean
+-- Selecting the openssl AES backend.
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libzip_x64-linux/lib/pkgconfig/libzip.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libzip_x64-linux/debug/lib/pkgconfig/libzip.pc
+-- Installing: /opt/vcpkg/packages/libzip_x64-linux/share/libzip/copyright
+-- Performing post-build validation
+Elapsed time to handle libzip:x64-linux: 12 s
+Installing 9/74 nlohmann-json:x64-linux@3.12.0#2...
+nlohmann-json:x64-linux@3.12.0#2 package ABI: e37815dff464fe85156f551c59e5d0d002fdae15bfca89734eb6b1bbed5660db
+Building nlohmann-json:x64-linux@3.12.0#2...
+Downloading https://github.com/nlohmann/json/archive/v3.12.0.tar.gz -> nlohmann-json-v3.12.0.tar.gz
+Successfully downloaded nlohmann-json-v3.12.0.tar.gz
+-- Extracting source /opt/vcpkg/downloads/nlohmann-json-v3.12.0.tar.gz
+-- Applying patch fix-4736_char8_t.patch
+-- Applying patch fix-4742_std_optional.patch
+-- Using source at /opt/vcpkg/buildtrees/nlohmann-json/src/v3.12.0-89fed620e6.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/nlohmann-json_x64-linux/share/pkgconfig/nlohmann_json.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/nlohmann-json_x64-linux/debug/share/pkgconfig/nlohmann_json.pc
+-- Installing: /opt/vcpkg/packages/nlohmann-json_x64-linux/share/nlohmann-json/copyright
+-- Performing post-build validation
+Elapsed time to handle nlohmann-json:x64-linux: 2.4 s
+Installing 10/74 liblzma:x64-linux@5.8.3...
+liblzma:x64-linux@5.8.3 package ABI: 6537c3111712df10907d46b260b7094ed89f8f09c402f7e55d40ae3ebfa87ede
+Building liblzma:x64-linux@5.8.3...
+Downloading https://github.com/tukaani-project/xz/archive/v5.8.3.tar.gz -> tukaani-project-xz-v5.8.3.tar.gz
+Successfully downloaded tukaani-project-xz-v5.8.3.tar.gz
+-- Extracting source /opt/vcpkg/downloads/tukaani-project-xz-v5.8.3.tar.gz
+-- Applying patch build-tools.patch
+-- Using source at /opt/vcpkg/buildtrees/liblzma/src/v5.8.3-6de1f0384d.clean
+-- Configuring x64-linux
+CMake Warning at /workspace/installer.c/out/build/linux-x64/vcpkg_installed/x64-linux/share/vcpkg-cmake/vcpkg_cmake_configure.cmake:344 (message):
+  The following variables are not used in CMakeLists.txt:
+
+      XZ_SANDBOX
+
+  Please recheck them and remove the unnecessary options from the
+  `vcpkg_cmake_configure` call.
+
+  If these options should still be passed for whatever reason, please use the
+  `MAYBE_UNUSED_VARIABLES` argument.
+Call Stack (most recent call first):
+  ports/liblzma/portfile.cmake:26 (vcpkg_cmake_configure)
+  scripts/ports.cmake:209 (include)
+
+
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/liblzma_x64-linux/lib/pkgconfig/liblzma.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/liblzma_x64-linux/debug/lib/pkgconfig/liblzma.pc
+-- Installing: /opt/vcpkg/packages/liblzma_x64-linux/share/liblzma/copyright
+-- Performing post-build validation
+Elapsed time to handle liblzma:x64-linux: 13 s
+Installing 11/74 libjpeg-turbo:x64-linux@3.2.0...
+libjpeg-turbo:x64-linux@3.2.0 package ABI: 612583040e9fd3a4db758ffe955ca774cc9154a44ea566270de414a92362739d
+Building libjpeg-turbo:x64-linux@3.2.0...
+Downloading https://github.com/libjpeg-turbo/libjpeg-turbo/archive/3.2.0.tar.gz -> libjpeg-turbo-libjpeg-turbo-3.2.0.tar.gz
+Successfully downloaded libjpeg-turbo-libjpeg-turbo-3.2.0.tar.gz
+-- Extracting source /opt/vcpkg/downloads/libjpeg-turbo-libjpeg-turbo-3.2.0.tar.gz
+-- Applying patch add-options-for-docs-headers.patch
+-- Applying patch workaround_cmake_system_processor.patch
+-- Using source at /opt/vcpkg/buildtrees/libjpeg-turbo/src/3.2.0-3cdbbb0a83.clean
+-- Configuring x64-linux
+CMake Warning at /workspace/installer.c/out/build/linux-x64/vcpkg_installed/x64-linux/share/vcpkg-cmake/vcpkg_cmake_configure.cmake:344 (message):
+  The following variables are not used in CMakeLists.txt:
+
+      NEON_INTRINSICS
+
+  Please recheck them and remove the unnecessary options from the
+  `vcpkg_cmake_configure` call.
+
+  If these options should still be passed for whatever reason, please use the
+  `MAYBE_UNUSED_VARIABLES` argument.
+Call Stack (most recent call first):
+  ports/libjpeg-turbo/portfile.cmake:45 (vcpkg_cmake_configure)
+  scripts/ports.cmake:209 (include)
+
+
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libjpeg-turbo_x64-linux/lib/pkgconfig/libjpeg.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libjpeg-turbo_x64-linux/lib/pkgconfig/libturbojpeg.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libjpeg-turbo_x64-linux/debug/lib/pkgconfig/libjpeg.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libjpeg-turbo_x64-linux/debug/lib/pkgconfig/libturbojpeg.pc
+-- Installing: /opt/vcpkg/packages/libjpeg-turbo_x64-linux/share/libjpeg-turbo/copyright
+-- Performing post-build validation
+Elapsed time to handle libjpeg-turbo:x64-linux: 31 s
+Installing 12/74 tiff[core,jpeg,lzma,zip]:x64-linux@4.7.2...
+tiff[core,jpeg,lzma,zip]:x64-linux@4.7.2 package ABI: 9fdc5b0a27144fdb10109b7f3da7fc5b5246ff0542b8d21cdb9e071a3f86980c
+Building tiff[core,jpeg,lzma,zip]:x64-linux@4.7.2...
+Downloading https://gitlab.com/libtiff/libtiff/-/archive/v4.7.2/libtiff-v4.7.2.tar.gz -> libtiff-libtiff-v4.7.2.tar.gz
+Successfully downloaded libtiff-libtiff-v4.7.2.tar.gz
+-- Extracting source /opt/vcpkg/downloads/libtiff-libtiff-v4.7.2.tar.gz
+-- Applying patch FindCMath.patch
+-- Applying patch prefer-config.diff
+-- Applying patch jpeccodec.patch
+-- Using source at /opt/vcpkg/buildtrees/tiff/src/v4.7.2-910d586e47.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/tiff_x64-linux/lib/pkgconfig/libtiff-4.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/tiff_x64-linux/debug/lib/pkgconfig/libtiff-4.pc
+-- Installing: /opt/vcpkg/packages/tiff_x64-linux/share/tiff/copyright
+-- Performing post-build validation
+Elapsed time to handle tiff:x64-linux: 11 s
+Installing 13/74 pcre2[core,jit,platform-default-features]:x64-linux@10.47#1...
+pcre2[core,jit,platform-default-features]:x64-linux@10.47#1 package ABI: 789b3f11c4808a3b781a26f6aefe95a5d342614dcd884e4376b707888fc0297c
+Building pcre2[core,jit,platform-default-features]:x64-linux@10.47#1...
+Downloading https://github.com/PCRE2Project/pcre2/archive/pcre2-10.47.tar.gz -> PCRE2Project-pcre2-pcre2-10.47.tar.gz
+Successfully downloaded PCRE2Project-pcre2-pcre2-10.47.tar.gz
+-- Extracting source /opt/vcpkg/downloads/PCRE2Project-pcre2-pcre2-10.47.tar.gz
+-- Applying patch pcre2-10.35_fix-uwp.patch
+-- Applying patch no-static-suffix.patch
+-- Using source at /opt/vcpkg/buildtrees/pcre2/src/cre2-10.47-7b8426e64a.clean
+Downloading https://github.com/zherczeg/sljit/archive/45f910b78c6605ebf5b53d3ec7cb00f2312fe417.tar.gz -> zherczeg-sljit-45f910b78c6605ebf5b53d3ec7cb00f2312fe417.tar.gz
+Successfully downloaded zherczeg-sljit-45f910b78c6605ebf5b53d3ec7cb00f2312fe417.tar.gz
+-- Extracting source /opt/vcpkg/downloads/zherczeg-sljit-45f910b78c6605ebf5b53d3ec7cb00f2312fe417.tar.gz
+-- Using source at /opt/vcpkg/buildtrees/pcre2/src/f2312fe417-2bbc527107.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pcre2_x64-linux/lib/pkgconfig/libpcre2-16.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pcre2_x64-linux/lib/pkgconfig/libpcre2-32.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pcre2_x64-linux/lib/pkgconfig/libpcre2-8.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pcre2_x64-linux/lib/pkgconfig/libpcre2-posix.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pcre2_x64-linux/debug/lib/pkgconfig/libpcre2-16.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pcre2_x64-linux/debug/lib/pkgconfig/libpcre2-32.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pcre2_x64-linux/debug/lib/pkgconfig/libpcre2-8.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pcre2_x64-linux/debug/lib/pkgconfig/libpcre2-posix.pc
+-- Installing: /opt/vcpkg/packages/pcre2_x64-linux/share/pcre2/usage
+-- Installing: /opt/vcpkg/packages/pcre2_x64-linux/share/pcre2/copyright
+-- Performing post-build validation
+Elapsed time to handle pcre2:x64-linux: 38 s
+Installing 14/74 egl-registry:x64-linux@2025-05-27...
+egl-registry:x64-linux@2025-05-27 package ABI: b0b942421af86f650d568b6e5a4993e71c8c3148dd914c54eea79b913be793a2
+Building egl-registry:x64-linux@2025-05-27...
+Downloading https://github.com/KhronosGroup/EGL-Registry/archive/3ae2b7c48690d2ce13cc6db3db02dfc0572be65e.tar.gz -> KhronosGroup-EGL-Registry-3ae2b7c48690d2ce13cc6db3db02dfc0572be65e.tar.gz
+Successfully downloaded KhronosGroup-EGL-Registry-3ae2b7c48690d2ce13cc6db3db02dfc0572be65e.tar.gz
+-- Extracting source /opt/vcpkg/downloads/KhronosGroup-EGL-Registry-3ae2b7c48690d2ce13cc6db3db02dfc0572be65e.tar.gz
+-- Using source at /opt/vcpkg/buildtrees/egl-registry/src/c0572be65e-4257a9ad9b.clean
+-- Installing: /opt/vcpkg/packages/egl-registry_x64-linux/share/egl-registry/copyright
+-- Performing post-build validation
+Elapsed time to handle egl-registry:x64-linux: 1.1 s
+Installing 15/74 opengl-registry:x64-linux@2026-01-26...
+opengl-registry:x64-linux@2026-01-26 package ABI: af76d3ea729ed97cbf3b2a9e12302c451a188fba60d78f70bdf78b2fbabcda71
+Building opengl-registry:x64-linux@2026-01-26...
+Downloading https://github.com/KhronosGroup/OpenGL-Registry/archive/0b449b97cdf1043eef5e1f0e235cbbab6ec10c86.tar.gz -> KhronosGroup-OpenGL-Registry-0b449b97cdf1043eef5e1f0e235cbbab6ec10c86.tar.gz
+Successfully downloaded KhronosGroup-OpenGL-Registry-0b449b97cdf1043eef5e1f0e235cbbab6ec10c86.tar.gz
+-- Extracting source /opt/vcpkg/downloads/KhronosGroup-OpenGL-Registry-0b449b97cdf1043eef5e1f0e235cbbab6ec10c86.tar.gz
+-- Using source at /opt/vcpkg/buildtrees/opengl-registry/src/ab6ec10c86-88344330ab.clean
+-- Installing: /opt/vcpkg/packages/opengl-registry_x64-linux/share/opengl-registry/copyright
+-- Performing post-build validation
+Elapsed time to handle opengl-registry:x64-linux: 21 s
+Installing 16/74 opengl:x64-linux@2022-12-04#3...
+opengl:x64-linux@2022-12-04#3 package ABI: 13aca1033f3a1136147ac696c2c4f687016459ba1934916891cc20d15d7e5d19
+Building opengl:x64-linux@2022-12-04#3...
+-- Installing: /opt/vcpkg/packages/opengl_x64-linux/share/opengl/usage
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle opengl:x64-linux: 30.3 ms
+Installing 17/74 nanosvg:x64-linux@2023-12-29...
+nanosvg:x64-linux@2023-12-29 package ABI: a020aae1d0afb11a37090397dcd4daeaec605e613545cb401b8b635da0b2ade9
+Building nanosvg:x64-linux@2023-12-29...
+Downloading https://github.com/memononen/nanosvg/archive/93ce879dc4c04a3ef1758428ec80083c38610b1f.tar.gz -> memononen-nanosvg-93ce879dc4c04a3ef1758428ec80083c38610b1f.tar.gz
+Successfully downloaded memononen-nanosvg-93ce879dc4c04a3ef1758428ec80083c38610b1f.tar.gz
+-- Extracting source /opt/vcpkg/downloads/memononen-nanosvg-93ce879dc4c04a3ef1758428ec80083c38610b1f.tar.gz
+-- Applying patch fltk.patch
+-- Using source at /opt/vcpkg/buildtrees/nanosvg/src/3c38610b1f-dc4edc4939.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Installing: /opt/vcpkg/packages/nanosvg_x64-linux/share/nanosvg/copyright
+-- Performing post-build validation
+Elapsed time to handle nanosvg:x64-linux: 2.2 s
+Installing 18/74 libwebp[core,libwebpmux,nearlossless,simd]:x64-linux@1.6.0#2...
+libwebp[core,libwebpmux,nearlossless,simd]:x64-linux@1.6.0#2 package ABI: 96ff1523c09cb43a4ec9ab8822d2cbde9d3937c983cc76734419df005f156e55
+Building libwebp[core,libwebpmux,nearlossless,simd]:x64-linux@1.6.0#2...
+Downloading https://github.com/webmproject/libwebp/archive/v1.6.0.tar.gz -> webmproject-libwebp-v1.6.0.tar.gz
+Successfully downloaded webmproject-libwebp-v1.6.0.tar.gz
+-- Extracting source /opt/vcpkg/downloads/webmproject-libwebp-v1.6.0.tar.gz
+-- Applying patch 0002-cmake-config.patch
+-- Applying patch 0003-simd.patch
+-- Applying patch 0008-sdl.patch
+-- Applying patch 0009-cpufeatures-android.patch
+-- Using source at /opt/vcpkg/buildtrees/libwebp/src/v1.6.0-bbdfbfe91d.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libwebp_x64-linux/lib/pkgconfig/libsharpyuv.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libwebp_x64-linux/lib/pkgconfig/libwebp.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libwebp_x64-linux/lib/pkgconfig/libwebpdecoder.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libwebp_x64-linux/lib/pkgconfig/libwebpdemux.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libwebp_x64-linux/lib/pkgconfig/libwebpmux.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libwebp_x64-linux/debug/lib/pkgconfig/libsharpyuv.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libwebp_x64-linux/debug/lib/pkgconfig/libwebp.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libwebp_x64-linux/debug/lib/pkgconfig/libwebpdecoder.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libwebp_x64-linux/debug/lib/pkgconfig/libwebpdemux.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libwebp_x64-linux/debug/lib/pkgconfig/libwebpmux.pc
+-- Installing: /opt/vcpkg/packages/libwebp_x64-linux/share/libwebp/usage
+-- Performing post-build validation
+Elapsed time to handle libwebp:x64-linux: 19 s
+Installing 19/74 libpng:x64-linux@1.6.58...
+libpng:x64-linux@1.6.58 package ABI: 200e411f6de3306e1943c973b7a93612ddfd38e1d8f16fb145c4908c7383c211
+Building libpng:x64-linux@1.6.58...
+Downloading https://github.com/pnggroup/libpng/archive/v1.6.58.tar.gz -> pnggroup-libpng-v1.6.58.tar.gz
+Successfully downloaded pnggroup-libpng-v1.6.58.tar.gz
+-- Extracting source /opt/vcpkg/downloads/pnggroup-libpng-v1.6.58.tar.gz
+-- Applying patch cmake.patch
+-- Using source at /opt/vcpkg/buildtrees/libpng/src/v1.6.58-b91136795d.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Installing: /opt/vcpkg/packages/libpng_x64-linux/share/png/vcpkg-cmake-wrapper.cmake
+-- Installing: /opt/vcpkg/packages/libpng_x64-linux/share/libpng/libpng-config.cmake
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libpng_x64-linux/lib/pkgconfig/libpng16.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libpng_x64-linux/debug/lib/pkgconfig/libpng16.pc
+-- Installing: /opt/vcpkg/packages/libpng_x64-linux/debug/lib/pkgconfig/libpng.pc
+-- Installing: /opt/vcpkg/packages/libpng_x64-linux/lib/pkgconfig/libpng.pc
+-- Installing: /opt/vcpkg/packages/libpng_x64-linux/share/libpng/usage
+-- Installing: /opt/vcpkg/packages/libpng_x64-linux/share/libpng/copyright
+-- Performing post-build validation
+Elapsed time to handle libpng:x64-linux: 5.5 s
+Installing 20/74 vcpkg-make:x64-linux@2026-07-09...
+vcpkg-make:x64-linux@2026-07-09 package ABI: e531c61fe3dc2675769a10d09c0bebe078f21b404b329ca3ec197770040f52f2
+Building vcpkg-make:x64-linux@2026-07-09...
+Downloading automake-1.17.tar.gz, trying https://ftpmirror.gnu.org/gnu/automake/automake-1.17.tar.gz
+Successfully downloaded automake-1.17.tar.gz
+-- Extracting source /opt/vcpkg/downloads/automake-1.17.tar.gz
+-- Using source at /opt/vcpkg/buildtrees/vcpkg-make/src/automake-1-c362683103.clean
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/vcpkg-make/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- x64-linux autotools triplet: x86_64-pc-linux-gnu (from config.guess)
+-- Performing post-build validation
+Elapsed time to handle vcpkg-make:x64-linux: 1.7 s
+Installing 21/74 libiconv:x64-linux@1.19...
+libiconv:x64-linux@1.19 package ABI: 8adc73889401cdea8ea862e4d4a9ac3933e8d1ab8f386849e8f939472217c022
+Building libiconv:x64-linux@1.19...
+-- Not building GNU libiconv.
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle libiconv:x64-linux: 24.2 ms
+Installing 22/74 vcpkg-tool-meson:x64-linux@1.9.0#10...
+vcpkg-tool-meson:x64-linux@1.9.0#10 package ABI: b502f030aaa223ac653a178107b161e5c8b5a62c107df724970a2ce8b0a07b52
+Building vcpkg-tool-meson:x64-linux@1.9.0#10...
+-- Installing: /opt/vcpkg/packages/vcpkg-tool-meson_x64-linux/share/vcpkg-tool-meson/copyright
+Downloading https://github.com/mesonbuild/meson/archive/1.9.0.tar.gz -> meson-1.9.0.tar.gz
+Successfully downloaded meson-1.9.0.tar.gz
+-- Applying patch /opt/vcpkg/packages/vcpkg-tool-meson_x64-linux/share/vcpkg-tool-meson/meson-intl.patch
+-- Applying patch /opt/vcpkg/packages/vcpkg-tool-meson_x64-linux/share/vcpkg-tool-meson/adjust-python-dep.patch
+-- Applying patch /opt/vcpkg/packages/vcpkg-tool-meson_x64-linux/share/vcpkg-tool-meson/adjust-args.patch
+-- Applying patch /opt/vcpkg/packages/vcpkg-tool-meson_x64-linux/share/vcpkg-tool-meson/remove-pkgconfig-specialization.patch
+-- Applying patch /opt/vcpkg/packages/vcpkg-tool-meson_x64-linux/share/vcpkg-tool-meson/meson-56879d5.diff
+-- Found Python version '3.10.12 at /usr/bin/python3'
+-- Using meson: /opt/vcpkg/downloads/tools/meson-1.9.0-633807/meson.py
+-- Performing post-build validation
+Elapsed time to handle vcpkg-tool-meson:x64-linux: 1.5 s
+Installing 23/74 brotli:x64-linux@1.2.0...
+brotli:x64-linux@1.2.0 package ABI: 74c01a18529c953e50aba8ccd3776624be4b45a01f9393c1b3a61e9aa8520d25
+Building brotli:x64-linux@1.2.0...
+Downloading https://github.com/google/brotli/archive/v1.2.0.tar.gz -> google-brotli-v1.2.0.tar.gz
+Successfully downloaded google-brotli-v1.2.0.tar.gz
+-- Extracting source /opt/vcpkg/downloads/google-brotli-v1.2.0.tar.gz
+-- Applying patch install.patch
+-- Applying patch pkgconfig.patch
+-- Using source at /opt/vcpkg/buildtrees/brotli/src/v1.2.0-7af7ca71ad.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/brotli_x64-linux/lib/pkgconfig/libbrotlicommon.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/brotli_x64-linux/lib/pkgconfig/libbrotlidec.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/brotli_x64-linux/lib/pkgconfig/libbrotlienc.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/brotli_x64-linux/debug/lib/pkgconfig/libbrotlicommon.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/brotli_x64-linux/debug/lib/pkgconfig/libbrotlidec.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/brotli_x64-linux/debug/lib/pkgconfig/libbrotlienc.pc
+-- Installing: /opt/vcpkg/packages/brotli_x64-linux/share/brotli/usage
+-- Installing: /opt/vcpkg/packages/brotli_x64-linux/share/brotli/copyright
+-- Adjusted RPATH of '/opt/vcpkg/packages/brotli_x64-linux/tools/brotli/brotli' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Performing post-build validation
+Elapsed time to handle brotli:x64-linux: 12 s
+Installing 24/74 freetype[brotli,bzip2,core,png,zlib]:x64-linux@2.14.3...
+freetype[brotli,bzip2,core,png,zlib]:x64-linux@2.14.3 package ABI: 831ba3143d66212b2117c1559ae1005e65fb67ec9d7da872b2e6a8e65246bc11
+Building freetype[brotli,bzip2,core,png,zlib]:x64-linux@2.14.3...
+Downloading https://gitlab.freedesktop.org//freetype/freetype/-/archive/VER-2-14-3/freetype-VER-2-14-3.tar.gz -> freetype-freetype-VER-2-14-3.tar.gz
+Successfully downloaded freetype-freetype-VER-2-14-3.tar.gz
+-- Extracting source /opt/vcpkg/downloads/freetype-freetype-VER-2-14-3.tar.gz
+-- Applying patch 0003-Fix-UWP.patch
+-- Applying patch brotli-static.patch
+-- Applying patch bzip2.patch
+-- Applying patch fix-exports.patch
+-- Using source at /opt/vcpkg/buildtrees/freetype/src/VER-2-14-3-46d5ca34ec.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/freetype_x64-linux/lib/pkgconfig/freetype2.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/freetype_x64-linux/debug/lib/pkgconfig/freetype2.pc
+-- Installing: /opt/vcpkg/packages/freetype_x64-linux/share/freetype/usage
+-- Performing post-build validation
+Elapsed time to handle freetype:x64-linux: 14 s
+Installing 25/74 harfbuzz[core,freetype]:x64-linux@14.2.1#2...
+harfbuzz[core,freetype]:x64-linux@14.2.1#2 package ABI: 3008469ce016e6303305365efc8b8a1cacf613bb045706a6ea9da08d99865e29
+Building harfbuzz[core,freetype]:x64-linux@14.2.1#2...
+-- Found Python version '3.10.12 at /usr/bin/python3'
+-- Using meson: /opt/vcpkg/downloads/tools/meson-1.9.0-633807/meson.py
+Downloading https://github.com/harfbuzz/harfbuzz/archive/14.2.1.tar.gz -> harfbuzz-harfbuzz-14.2.1.tar.gz
+Successfully downloaded harfbuzz-harfbuzz-14.2.1.tar.gz
+-- Extracting source /opt/vcpkg/downloads/harfbuzz-harfbuzz-14.2.1.tar.gz
+-- Applying patch ignore-unused-template.patch
+-- Applying patch no-threads-on-emscripten.patch
+-- Using source at /opt/vcpkg/buildtrees/harfbuzz/src/14.2.1-ab08f0fe13.clean
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/harfbuzz/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Configuring x64-linux-dbg
+-- Configuring x64-linux-dbg done
+-- Configuring x64-linux-rel
+-- Configuring x64-linux-rel done
+-- Package x64-linux-dbg
+-- Package x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/harfbuzz_x64-linux/lib/pkgconfig/harfbuzz-gpu.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/harfbuzz_x64-linux/lib/pkgconfig/harfbuzz-raster.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/harfbuzz_x64-linux/lib/pkgconfig/harfbuzz-subset.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/harfbuzz_x64-linux/lib/pkgconfig/harfbuzz-vector.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/harfbuzz_x64-linux/lib/pkgconfig/harfbuzz.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/harfbuzz_x64-linux/debug/lib/pkgconfig/harfbuzz-gpu.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/harfbuzz_x64-linux/debug/lib/pkgconfig/harfbuzz-raster.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/harfbuzz_x64-linux/debug/lib/pkgconfig/harfbuzz-subset.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/harfbuzz_x64-linux/debug/lib/pkgconfig/harfbuzz-vector.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/harfbuzz_x64-linux/debug/lib/pkgconfig/harfbuzz.pc
+-- Performing post-build validation
+Elapsed time to handle harfbuzz:x64-linux: 4.3 min
+Installing 26/74 libffi:x64-linux@3.7.1...
+libffi:x64-linux@3.7.1 package ABI: 75ba264e5d3d585a8e5e5617c2aa1a877359d5804da6613ea04a0df42249da77
+Building libffi:x64-linux@3.7.1...
+Downloading https://github.com/libffi/libffi/releases/download/v3.7.1/libffi-3.7.1.tar.gz -> libffi-3.7.1.tar.gz
+Successfully downloaded libffi-3.7.1.tar.gz
+-- Extracting source /opt/vcpkg/downloads/libffi-3.7.1.tar.gz
+-- Applying patch dll-bindir.diff
+-- Using source at /opt/vcpkg/buildtrees/libffi/src/libffi-3-97981ff2d7.clean
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/libffi/cmake-get-vars_ASM_C_CXX-x64-linux.cmake.log
+-- Configuring x64-linux-dbg
+-- Configuring x64-linux-rel
+-- Building/Installing x64-linux-dbg
+-- Making target 'all' for x64-linux-dbg
+-- Making target 'install' for x64-linux-dbg
+-- Building/Installing x64-linux-rel
+-- Making target 'all' for x64-linux-rel
+-- Making target 'install' for x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libffi_x64-linux/lib/pkgconfig/libffi.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libffi_x64-linux/debug/lib/pkgconfig/libffi.pc
+-- Installing: /opt/vcpkg/packages/libffi_x64-linux/share/libffi/usage
+-- Installing: /opt/vcpkg/packages/libffi_x64-linux/share/unofficial-libffi/unofficial-libffi-config.cmake
+-- Installing: /opt/vcpkg/packages/libffi_x64-linux/share/libffi/libffiConfig.cmake
+-- Installing: /opt/vcpkg/packages/libffi_x64-linux/share/libffi/copyright
+-- Performing post-build validation
+Elapsed time to handle libffi:x64-linux: 11 s
+Installing 27/74 gettext-libintl:x64-linux@0.22.5#4...
+gettext-libintl:x64-linux@0.22.5#4 package ABI: 8d2d974bf1612b187064d40494fb56e3c25cc2b981e1a4585ebc1fefda7891d9
+Building gettext-libintl:x64-linux@0.22.5#4...
+-- Configuring x64-linux
+-- libintl header: /usr/include/libintl.h
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle gettext-libintl:x64-linux: 307 ms
+Installing 28/74 gettext[core,tools]:x64-linux@0.22.5#4...
+gettext[core,tools]:x64-linux@0.22.5#4 package ABI: a4a42d5d24507eecfd0f8080c3b3b749ef46b98af367df1dbc3354650f0c2dbe
+Building gettext[core,tools]:x64-linux@0.22.5#4...
+Downloading gettext-0.22.5.tar.gz, trying https://ftpmirror.gnu.org/gnu/gettext/gettext-0.22.5.tar.gz
+Successfully downloaded gettext-0.22.5.tar.gz
+-- Extracting source /opt/vcpkg/downloads/gettext-0.22.5.tar.gz
+-- Applying patch assume-modern-darwin.patch
+-- Applying patch uwp.patch
+-- Applying patch rel_path.patch
+-- Applying patch subdirs.patch
+-- Applying patch parallel-gettext-tools.patch
+-- Applying patch config-step-order.patch
+-- Applying patch 0001-xgettext-Fix-some-test-failures-on-MSVC.patch
+-- Applying patch env.patch
+-- Using source at /opt/vcpkg/buildtrees/gettext/src/gettext-0-8aeafea7a1.clean
+-- Getting CMake variables for x64-linux-rel
+-- Configuring x64-linux-rel
+-- Building x64-linux-rel
+-- Installing x64-linux-rel
+-- Installing: /opt/vcpkg/packages/gettext_x64-linux/share/gettext/aclocal/build-to-host.m4
+-- Installing: /opt/vcpkg/packages/gettext_x64-linux/share/gettext/aclocal/gettext.m4
+-- Installing: /opt/vcpkg/packages/gettext_x64-linux/share/gettext/aclocal/iconv.m4
+-- Installing: /opt/vcpkg/packages/gettext_x64-linux/share/gettext/aclocal/intlmacosx.m4
+-- Installing: /opt/vcpkg/packages/gettext_x64-linux/share/gettext/aclocal/nls.m4
+-- Installing: /opt/vcpkg/packages/gettext_x64-linux/share/gettext/aclocal/po.m4
+-- Installing: /opt/vcpkg/packages/gettext_x64-linux/share/gettext/aclocal/progtest.m4
+-- Installing: /opt/vcpkg/packages/gettext_x64-linux/share/gettext/aclocal/host-cpu-c-abi.m4
+-- Installing: /opt/vcpkg/packages/gettext_x64-linux/share/gettext/aclocal/lib-ld.m4
+-- Installing: /opt/vcpkg/packages/gettext_x64-linux/share/gettext/aclocal/lib-link.m4
+-- Installing: /opt/vcpkg/packages/gettext_x64-linux/share/gettext/aclocal/lib-prefix.m4
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/lib/gettext/cldr-plurals' (From '$ORIGIN/..' -> To '$ORIGIN:$ORIGIN/..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/lib/gettext/hostname' (From '$ORIGIN/..' -> To '$ORIGIN:$ORIGIN/..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/lib/gettext/urlget' (From '$ORIGIN/..' -> To '$ORIGIN:$ORIGIN/..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/tools/gettext/bin/msgattrib' (From '$ORIGIN/../../../lib' -> To '$ORIGIN:$ORIGIN/../../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/tools/gettext/bin/msgcat' (From '$ORIGIN/../../../lib' -> To '$ORIGIN:$ORIGIN/../../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/tools/gettext/bin/msgcmp' (From '$ORIGIN/../../../lib' -> To '$ORIGIN:$ORIGIN/../../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/tools/gettext/bin/msgcomm' (From '$ORIGIN/../../../lib' -> To '$ORIGIN:$ORIGIN/../../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/tools/gettext/bin/msgconv' (From '$ORIGIN/../../../lib' -> To '$ORIGIN:$ORIGIN/../../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/tools/gettext/bin/msgen' (From '$ORIGIN/../../../lib' -> To '$ORIGIN:$ORIGIN/../../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/tools/gettext/bin/msgexec' (From '$ORIGIN/../../../lib' -> To '$ORIGIN:$ORIGIN/../../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/tools/gettext/bin/msgfilter' (From '$ORIGIN/../../../lib' -> To '$ORIGIN:$ORIGIN/../../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/tools/gettext/bin/msgfmt' (From '$ORIGIN/../../../lib' -> To '$ORIGIN:$ORIGIN/../../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/tools/gettext/bin/msggrep' (From '$ORIGIN/../../../lib' -> To '$ORIGIN:$ORIGIN/../../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/tools/gettext/bin/msginit' (From '$ORIGIN/../../../lib' -> To '$ORIGIN:$ORIGIN/../../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/tools/gettext/bin/msgmerge' (From '$ORIGIN/../../../lib' -> To '$ORIGIN:$ORIGIN/../../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/tools/gettext/bin/msgunfmt' (From '$ORIGIN/../../../lib' -> To '$ORIGIN:$ORIGIN/../../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/tools/gettext/bin/msguniq' (From '$ORIGIN/../../../lib' -> To '$ORIGIN:$ORIGIN/../../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/tools/gettext/bin/recode-sr-latin' (From '$ORIGIN/../../../lib' -> To '$ORIGIN:$ORIGIN/../../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gettext_x64-linux/tools/gettext/bin/xgettext' (From '$ORIGIN/../../../lib' -> To '$ORIGIN:$ORIGIN/../../../lib')
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle gettext:x64-linux: 2.1 min
+Installing 29/74 dirent:x64-linux@1.26...
+dirent:x64-linux@1.26 package ABI: 1b452f380592272f77cad11a27af1b9ebf46a314e508f8c15d17334563c5add9
+Building dirent:x64-linux@1.26...
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle dirent:x64-linux: 25.1 ms
+Installing 30/74 glib:x64-linux@2.88.2...
+glib:x64-linux@2.88.2 package ABI: 7d968411786374528c08b799601f2bb2c628c6d254b9e046139111e1f02b5b00
+Building glib:x64-linux@2.88.2...
+-- Found Python version '3.10.12 at /usr/bin/python3'
+-- Using meson: /opt/vcpkg/downloads/tools/meson-1.9.0-633807/meson.py
+Downloading glib-2.88.2.tar.xz, trying https://download.gnome.org/sources/glib/2.88/glib-2.88.2.tar.xz
+Successfully downloaded glib-2.88.2.tar.xz
+-- Extracting source /opt/vcpkg/downloads/glib-2.88.2.tar.xz
+-- Applying patch use-libiconv-on-windows.patch
+-- Applying patch libintl.patch
+-- Using source at /opt/vcpkg/buildtrees/glib/src/glib-2-bc0e801cf4.clean
+-- Configuring x64-linux-dbg
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/glib/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Configuring x64-linux-dbg done
+-- Configuring x64-linux-rel
+-- Configuring x64-linux-rel done
+-- Package x64-linux-dbg
+-- Package x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/lib/pkgconfig/gio-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/lib/pkgconfig/gio-unix-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/lib/pkgconfig/girepository-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/lib/pkgconfig/glib-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/lib/pkgconfig/gmodule-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/lib/pkgconfig/gmodule-export-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/lib/pkgconfig/gmodule-no-export-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/lib/pkgconfig/gobject-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/lib/pkgconfig/gthread-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/debug/lib/pkgconfig/gio-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/debug/lib/pkgconfig/gio-unix-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/debug/lib/pkgconfig/girepository-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/debug/lib/pkgconfig/glib-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/debug/lib/pkgconfig/gmodule-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/debug/lib/pkgconfig/gmodule-export-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/debug/lib/pkgconfig/gmodule-no-export-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/debug/lib/pkgconfig/gobject-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/glib_x64-linux/debug/lib/pkgconfig/gthread-2.0.pc
+-- Adjusted RPATH of '/opt/vcpkg/packages/glib_x64-linux/debug/libexec/gio-launch-desktop' (From '' -> To '$ORIGIN:$ORIGIN/../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/glib_x64-linux/libexec/gio-launch-desktop' (From '' -> To '$ORIGIN:$ORIGIN/../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/glib_x64-linux/tools/glib/gapplication' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/glib_x64-linux/tools/glib/gdbus' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/glib_x64-linux/tools/glib/gi-compile-repository' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/glib_x64-linux/tools/glib/gi-decompile-typelib' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/glib_x64-linux/tools/glib/gi-inspect-typelib' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/glib_x64-linux/tools/glib/gio' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/glib_x64-linux/tools/glib/gio-querymodules' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/glib_x64-linux/tools/glib/glib-compile-resources' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/glib_x64-linux/tools/glib/glib-compile-schemas' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/glib_x64-linux/tools/glib/gobject-query' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/glib_x64-linux/tools/glib/gresource' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/glib_x64-linux/tools/glib/gsettings' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/glib_x64-linux/tools/glib/gtester' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Performing post-build validation
+Elapsed time to handle glib:x64-linux: 1.8 min
+Installing 31/74 fribidi:x64-linux@1.0.16...
+fribidi:x64-linux@1.0.16 package ABI: 5169a3ec75b767ce7ec557e303e9bb3097bb506349265eac62267f8299361451
+Building fribidi:x64-linux@1.0.16...
+-- Found Python version '3.10.12 at /usr/bin/python3'
+-- Using meson: /opt/vcpkg/downloads/tools/meson-1.9.0-633807/meson.py
+Downloading https://github.com/fribidi/fribidi/archive/v1.0.16.tar.gz -> fribidi-fribidi-v1.0.16.tar.gz
+Successfully downloaded fribidi-fribidi-v1.0.16.tar.gz
+-- Extracting source /opt/vcpkg/downloads/fribidi-fribidi-v1.0.16.tar.gz
+-- Applying patch meson-crosscompile.patch
+-- Using source at /opt/vcpkg/buildtrees/fribidi/src/v1.0.16-f8a9d8c141.clean
+-- Configuring x64-linux-dbg
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/fribidi/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Configuring x64-linux-dbg done
+-- Configuring x64-linux-rel
+-- Configuring x64-linux-rel done
+-- Package x64-linux-dbg
+-- Package x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/fribidi_x64-linux/lib/pkgconfig/fribidi.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/fribidi_x64-linux/debug/lib/pkgconfig/fribidi.pc
+-- Installing: /opt/vcpkg/packages/fribidi_x64-linux/share/fribidi/copyright
+-- Performing post-build validation
+Elapsed time to handle fribidi:x64-linux: 7.4 s
+Installing 32/74 pthreads:x64-linux@3.0.0#14...
+pthreads:x64-linux@3.0.0#14 package ABI: dc280e179d5efbf3a6563ddec9934aa2608d94fdd31e818c2c76e79f7be449f2
+Building pthreads:x64-linux@3.0.0#14...
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle pthreads:x64-linux: 24 ms
+Installing 33/74 pthread:x64-linux@3.0.0#2...
+pthread:x64-linux@3.0.0#2 package ABI: e53d3e710ec6bcc176648f18283fe1c98a00ecedae9a14c3aa2b7540a4c62f25
+Building pthread:x64-linux@3.0.0#2...
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle pthread:x64-linux: 20.2 ms
+Installing 34/74 libuuid:x64-linux@1.0.3#17...
+libuuid:x64-linux@1.0.3#17 package ABI: f824f8770b2d3a6fe1ec9249eddb5f7bb577d26df9e54f2b170c66e246754b12
+Building libuuid:x64-linux@1.0.3#17...
+Downloading libuuid-1.0.3.tar.gz, trying https://sourceforge.net/projects/libuuid/files/libuuid-1.0.3.tar.gz/download
+Successfully downloaded libuuid-1.0.3.tar.gz
+-- Extracting source /opt/vcpkg/downloads/libuuid-1.0.3.tar.gz
+-- Applying patch fix-usleep-with-nanosleep.patch
+-- Using source at /opt/vcpkg/buildtrees/libuuid/src/-815c475fa6.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Installing: /opt/vcpkg/packages/libuuid_x64-linux/lib/pkgconfig/uuid.pc
+-- Installing: /opt/vcpkg/packages/libuuid_x64-linux/debug/lib/pkgconfig/uuid.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libuuid_x64-linux/lib/pkgconfig/uuid.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libuuid_x64-linux/debug/lib/pkgconfig/uuid.pc
+-- Installing: /opt/vcpkg/packages/libuuid_x64-linux/share/libuuid/copyright
+-- Performing post-build validation
+Elapsed time to handle libuuid:x64-linux: 1.7 s
+Installing 35/74 gperf:x64-linux@3.3...
+gperf:x64-linux@3.3 package ABI: a9c1e22cc5d9b52ad00a0cef9c5f6920f54e9df6c37d383e49711389c96fd8af
+Building gperf:x64-linux@3.3...
+Downloading gperf-3.3.tar.gz, trying https://ftpmirror.gnu.org/gnu/gperf/gperf-3.3.tar.gz
+Successfully downloaded gperf-3.3.tar.gz
+-- Extracting source /opt/vcpkg/downloads/gperf-3.3.tar.gz
+-- Using source at /opt/vcpkg/buildtrees/gperf/src/gperf-3-b814f52c10.clean
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/gperf/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Generating configure for x64-linux
+-- Finished generating configure for x64-linux
+-- Configuring x64-linux-rel
+-- Building/Installing x64-linux-rel
+-- Making target 'all' for x64-linux-rel
+-- Making target 'install' for x64-linux-rel
+-- Installing: /opt/vcpkg/packages/gperf_x64-linux/share/gperf/copyright
+-- Adjusted RPATH of '/opt/vcpkg/packages/gperf_x64-linux/tools/gperf/gperf' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Performing post-build validation
+Elapsed time to handle gperf:x64-linux: 25 s
+Installing 36/74 expat:x64-linux@2.8.2...
+expat:x64-linux@2.8.2 package ABI: e40ba7ed7624d56278df4ff9ce89c97490146ec6a5219f03307ddb034d80203e
+Building expat:x64-linux@2.8.2...
+Downloading https://github.com/libexpat/libexpat/archive/R_2_8_2.tar.gz -> libexpat-libexpat-R_2_8_2.tar.gz
+Successfully downloaded libexpat-libexpat-R_2_8_2.tar.gz
+-- Extracting source /opt/vcpkg/downloads/libexpat-libexpat-R_2_8_2.tar.gz
+-- Using source at /opt/vcpkg/buildtrees/expat/src/R_2_8_2-303f035c99.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/expat_x64-linux/lib/pkgconfig/expat.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/expat_x64-linux/debug/lib/pkgconfig/expat.pc
+-- Installing: /opt/vcpkg/packages/expat_x64-linux/share/expat/copyright
+-- Performing post-build validation
+Elapsed time to handle expat:x64-linux: 7.2 s
+Installing 37/74 fontconfig[core,iconv]:x64-linux@2.17.1#2...
+fontconfig[core,iconv]:x64-linux@2.17.1#2 package ABI: 51c29d27d60db4b20b7ef7f5983231e85ba94518f1e9740840e324060e69fa0a
+Building fontconfig[core,iconv]:x64-linux@2.17.1#2...
+-- Found Python version '3.10.12 at /usr/bin/python3'
+-- Using meson: /opt/vcpkg/downloads/tools/meson-1.9.0-633807/meson.py
+Downloading https://gitlab.freedesktop.org/fontconfig/fontconfig/-/archive/2.17.1/fontconfig-2.17.1.tar.gz -> fontconfig-fontconfig-2.17.1.tar.gz
+Successfully downloaded fontconfig-fontconfig-2.17.1.tar.gz
+-- Extracting source /opt/vcpkg/downloads/fontconfig-fontconfig-2.17.1.tar.gz
+-- Applying patch dllexport.diff
+-- Applying patch no-etc-symlinks.patch
+-- Applying patch libgetopt.patch
+-- Applying patch libintl.diff
+-- Applying patch fix-wasm-shared-memory-atomics.patch
+-- Using source at /opt/vcpkg/buildtrees/fontconfig/src/2.17.1-6edd6fe145.clean
+-- Configuring x64-linux-dbg
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/fontconfig/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Configuring x64-linux-dbg done
+-- Configuring x64-linux-rel
+-- Configuring x64-linux-rel done
+-- Package x64-linux-dbg
+-- Package x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/fontconfig_x64-linux/lib/pkgconfig/fontconfig.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/fontconfig_x64-linux/debug/lib/pkgconfig/fontconfig.pc
+-- Installing: /opt/vcpkg/packages/fontconfig_x64-linux/share/fontconfig/usage
+-- Installing: /opt/vcpkg/packages/fontconfig_x64-linux/share/fontconfig/copyright
+-- Performing post-build validation
+Elapsed time to handle fontconfig:x64-linux: 15 s
+Installing 38/74 xorg-macros:x64-linux@1.20.2#1...
+xorg-macros:x64-linux@1.20.2#1 package ABI: 1bd646bd56cde12be46aaa1784a2a620f1560675482ed792cf32db34fc8b8f5a
+Building xorg-macros:x64-linux@1.20.2#1...
+-- Utils and libraries provided by 'xorg-macros' should be provided by your system! Install the required packages or force vcpkg libraries by setting X_VCPKG_FORCE_VCPKG_X_LIBRARIES in your triplet
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle xorg-macros:x64-linux: 26.3 ms
+Installing 39/74 xtrans:x64-linux@1.6.0#1...
+xtrans:x64-linux@1.6.0#1 package ABI: 06ff3d6a82e9b7c24a37b4ef9a85fda16144348eea2eeff38d02f02bdc5fec60
+Building xtrans:x64-linux@1.6.0#1...
+-- Utils and libraries provided by 'xtrans' should be provided by your system! Install the required packages or force vcpkg libraries by setting X_VCPKG_FORCE_VCPKG_X_LIBRARIES in your triplet
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle xtrans:x64-linux: 25.5 ms
+Installing 40/74 libxml2[core,iconv,tools,zlib]:x64-linux@2.15.3...
+libxml2[core,iconv,tools,zlib]:x64-linux@2.15.3 package ABI: f27c52470f61ba5b51d1751613245ab68fe7402cb49834c282b59be2cad90b67
+Building libxml2[core,iconv,tools,zlib]:x64-linux@2.15.3...
+Downloading https://github.com/GNOME/libxml2/archive/v2.15.3.tar.gz -> GNOME-libxml2-v2.15.3.tar.gz
+Successfully downloaded GNOME-libxml2-v2.15.3.tar.gz
+-- Extracting source /opt/vcpkg/downloads/GNOME-libxml2-v2.15.3.tar.gz
+-- Applying patch cxx-for-icu.diff
+-- Applying patch disable-xml2-config.diff
+-- Applying patch fix_cmakelist.patch
+-- Applying patch fix_ios_compilation.patch
+-- Using source at /opt/vcpkg/buildtrees/libxml2/src/v2.15.3-bfc57cf8fe.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libxml2_x64-linux/lib/pkgconfig/libxml-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libxml2_x64-linux/debug/lib/pkgconfig/libxml-2.0.pc
+-- Installing: /opt/vcpkg/packages/libxml2_x64-linux/share/libxml2/copyright
+-- Adjusted RPATH of '/opt/vcpkg/packages/libxml2_x64-linux/tools/libxml2/xmlcatalog' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/libxml2_x64-linux/tools/libxml2/xmllint' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Performing post-build validation
+Elapsed time to handle libxml2:x64-linux: 21 s
+Installing 41/74 libxslt[core,profiler,thread,tools]:x64-linux@1.1.45...
+libxslt[core,profiler,thread,tools]:x64-linux@1.1.45 package ABI: d1d88feeee0e24e23e0ec06e5c9996c2b7fefa3b6e9bf9d68959aad78c4e4ffa
+Building libxslt[core,profiler,thread,tools]:x64-linux@1.1.45...
+Downloading https://github.com/GNOME/libxslt/archive/v1.1.45.tar.gz -> GNOME-libxslt-v1.1.45.tar.gz
+Successfully downloaded GNOME-libxslt-v1.1.45.tar.gz
+-- Extracting source /opt/vcpkg/downloads/GNOME-libxslt-v1.1.45.tar.gz
+-- Applying patch cxx-for-libxml2-icu.diff
+-- Applying patch python3.patch
+-- Applying patch msvc-no-suffix.patch
+-- Applying patch libexslt-pkgconfig.patch
+-- Applying patch fix-gcrypt-deps.patch
+-- Applying patch skip-install-docs.patch
+-- Using source at /opt/vcpkg/buildtrees/libxslt/src/v1.1.45-4a0569cb22.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libxslt_x64-linux/lib/pkgconfig/libexslt.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libxslt_x64-linux/lib/pkgconfig/libxslt.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libxslt_x64-linux/debug/lib/pkgconfig/libexslt.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libxslt_x64-linux/debug/lib/pkgconfig/libxslt.pc
+-- Installing: /opt/vcpkg/packages/libxslt_x64-linux/share/libxslt/vcpkg-cmake-wrapper.cmake
+-- Installing: /opt/vcpkg/packages/libxslt_x64-linux/share/libxslt/usage
+-- Installing: /opt/vcpkg/packages/libxslt_x64-linux/share/libxslt/copyright
+-- Adjusted RPATH of '/opt/vcpkg/packages/libxslt_x64-linux/tools/libxslt/xsltproc' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Performing post-build validation
+Elapsed time to handle libxslt:x64-linux: 6.9 s
+Installing 42/74 xproto:x64-linux@2021.5...
+xproto:x64-linux@2021.5 package ABI: 24b65e75c19abc22ee808717cbf2dab08ec778c056c76c0f4c7f75690fd6ace2
+Building xproto:x64-linux@2021.5...
+-- Found Python version '3.10.12 at /usr/bin/python3'
+-- Using meson: /opt/vcpkg/downloads/tools/meson-1.9.0-633807/meson.py
+-- Utils and libraries provided by 'xproto' should be provided by your system! Install the required packages or force vcpkg libraries by setting X_VCPKG_FORCE_VCPKG_X_LIBRARIES in your triplet
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle xproto:x64-linux: 25.7 ms
+Installing 43/74 xcb-util-m4:x64-linux@2022-07-01...
+xcb-util-m4:x64-linux@2022-07-01 package ABI: c5201fc170bd06f286619200585269ef1ecc39b07c0a18b37302986b308851f2
+Building xcb-util-m4:x64-linux@2022-07-01...
+Downloading https://gitlab.freedesktop.org/xorg/util/xcb-util-m4/-/archive/c617eee22ae5c285e79e81ec39ce96862fd3262f/xcb-util-m4-c617eee22ae5c285e79e81ec39ce96862fd3262f.tar.gz -> util-xcb-util-m4-c617eee22ae5c285e79e81ec39ce96862fd3262f.tar.gz
+Successfully downloaded util-xcb-util-m4-c617eee22ae5c285e79e81ec39ce96862fd3262f.tar.gz
+-- Extracting source /opt/vcpkg/downloads/util-xcb-util-m4-c617eee22ae5c285e79e81ec39ce96862fd3262f.tar.gz
+-- Using source at /opt/vcpkg/buildtrees/xcb-util-m4/src/862fd3262f-087f99c157.clean
+-- Installing: /opt/vcpkg/packages/xcb-util-m4_x64-linux/share/xorg/aclocal/ax_compare_version.m4
+-- Installing: /opt/vcpkg/packages/xcb-util-m4_x64-linux/share/xorg/aclocal/xcb_util_common.m4
+-- Installing: /opt/vcpkg/packages/xcb-util-m4_x64-linux/share/xorg/aclocal/xcb_util_m4_with_include_path.m4
+-- Performing post-build validation
+Elapsed time to handle xcb-util-m4:x64-linux: 326 ms
+Installing 44/74 xcb-proto:x64-linux@1.17.0...
+xcb-proto:x64-linux@1.17.0 package ABI: 958576d7435d8dcb6bdcb9412daeb31a3de0256103d3b1eb3abb426d666e3360
+Building xcb-proto:x64-linux@1.17.0...
+-- Utils and libraries provided by 'xcb-proto' should be provided by your system! Install the required packages or force vcpkg libraries by setting X_VCPKG_FORCE_VCPKG_X_LIBRARIES in your triplet
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle xcb-proto:x64-linux: 27.7 ms
+Installing 45/74 pthread-stubs:x64-linux@0.5#1...
+pthread-stubs:x64-linux@0.5#1 package ABI: 6a83c90cf1854adb09187378721c49963c22a328eb2d54d496bdb5d6519ba8df
+Building pthread-stubs:x64-linux@0.5#1...
+Downloading https://gitlab.freedesktop.org/xorg/lib/pthread-stubs/-/archive/libpthread-stubs-0.5/pthread-stubs-libpthread-stubs-0.5.tar.gz -> lib-pthread-stubs-libpthread-stubs-0.5.tar.gz
+Successfully downloaded lib-pthread-stubs-libpthread-stubs-0.5.tar.gz
+-- Extracting source /opt/vcpkg/downloads/lib-pthread-stubs-libpthread-stubs-0.5.tar.gz
+-- Using source at /opt/vcpkg/buildtrees/pthread-stubs/src/-stubs-0.5-7e5f48aab9.clean
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/pthread-stubs/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Generating configure for x64-linux
+-- Finished generating configure for x64-linux
+-- Configuring x64-linux-dbg
+-- Configuring x64-linux-rel
+-- Building/Installing x64-linux-dbg
+-- Making target 'all' for x64-linux-dbg
+-- Making target 'install' for x64-linux-dbg
+-- Building/Installing x64-linux-rel
+-- Making target 'all' for x64-linux-rel
+-- Making target 'install' for x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pthread-stubs_x64-linux/lib/pkgconfig/pthread-stubs.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pthread-stubs_x64-linux/debug/lib/pkgconfig/pthread-stubs.pc
+-- Installing: /opt/vcpkg/packages/pthread-stubs_x64-linux/share/pthread-stubs/copyright
+-- Performing post-build validation
+Elapsed time to handle pthread-stubs:x64-linux: 6.6 s
+Installing 46/74 libxdmcp:x64-linux@1.1.5#1...
+libxdmcp:x64-linux@1.1.5#1 package ABI: f4635e9fa3760c8de8eba8235600adc874fb21180bf9e023d58e6cb09bb5b479
+Building libxdmcp:x64-linux@1.1.5#1...
+-- Utils and libraries provided by 'libxdmcp' should be provided by your system! Install the required packages or force vcpkg libraries by setting X_VCPKG_FORCE_VCPKG_X_LIBRARIES in your triplet
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle libxdmcp:x64-linux: 26.3 ms
+Installing 47/74 libxau:x64-linux@1.0.12#2...
+libxau:x64-linux@1.0.12#2 package ABI: 86648b5f535525d63e337fd3fd66e8c9e959a4d7f849f81c6390971e61cceb19
+Building libxau:x64-linux@1.0.12#2...
+-- Utils and libraries provided by 'libxau' should be provided by your system! Install the required packages or force vcpkg libraries by setting X_VCPKG_FORCE_VCPKG_X_LIBRARIES in your triplet
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle libxau:x64-linux: 24.9 ms
+Installing 48/74 libxcb:x64-linux@1.17.0...
+libxcb:x64-linux@1.17.0 package ABI: 5d7d1dead5ee2d4edc8a44592272995058320ee59ada663d288f0afc41158f75
+Building libxcb:x64-linux@1.17.0...
+-- Utils and libraries provided by 'libxcb' should be provided by your system! Install the required packages or force vcpkg libraries by setting X_VCPKG_FORCE_VCPKG_X_LIBRARIES in your triplet
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle libxcb:x64-linux: 28.2 ms
+Installing 49/74 libx11:x64-linux@1.8.1#6...
+libx11:x64-linux@1.8.1#6 package ABI: 414e89868b479d14c592fb7e7db398b7f7b7968a89e39a8805af8d4c3b8b9261
+Building libx11:x64-linux@1.8.1#6...
+-- Utils and libraries provided by 'libx11' should be provided by your system! Install the required packages or force vcpkg libraries by setting X_VCPKG_FORCE_VCPKG_X_LIBRARIES in your triplet
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle libx11:x64-linux: 25.3 ms
+Installing 50/74 libxrender:x64-linux@0.9.12#1...
+libxrender:x64-linux@0.9.12#1 package ABI: c9c30f1acdf32b8d22ecc6b9a4b7dc63aa4f75ea973c8e38fda9cd1e97cc2874
+Building libxrender:x64-linux@0.9.12#1...
+-- Utils and libraries provided by 'libxrender' should be provided by your system! Install the required packages or force vcpkg libraries by setting X_VCPKG_FORCE_VCPKG_X_LIBRARIES in your triplet!
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle libxrender:x64-linux: 24.9 ms
+Installing 51/74 libxext:x64-linux@1.3.7#1...
+libxext:x64-linux@1.3.7#1 package ABI: 2db1f2773cc85654ce49e07d71cc1a7597503a1ffdeafaa135deee30268728c3
+Building libxext:x64-linux@1.3.7#1...
+-- Utils and libraries provided by 'libxext' should be provided by your system! Install the required packages or force vcpkg libraries by setting X_VCPKG_FORCE_VCPKG_X_LIBRARIES in your triplet
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle libxext:x64-linux: 24.5 ms
+Installing 52/74 pixman:x64-linux@0.46.4#1...
+pixman:x64-linux@0.46.4#1 package ABI: 6c431b61ec4ccf9c061573bdef4396c85fc56bc61ddb86c045e98e84cc5d71f6
+Building pixman:x64-linux@0.46.4#1...
+-- Found Python version '3.10.12 at /usr/bin/python3'
+-- Using meson: /opt/vcpkg/downloads/tools/meson-1.9.0-633807/meson.py
+Downloading https://gitlab.freedesktop.org/pixman/pixman/-/archive/pixman-0.46.4/pixman-pixman-0.46.4.tar.gz -> pixman-pixman-pixman-0.46.4.tar.gz
+Successfully downloaded pixman-pixman-pixman-0.46.4.tar.gz
+-- Extracting source /opt/vcpkg/downloads/pixman-pixman-pixman-0.46.4.tar.gz
+-- Applying patch no-host-cpu-checks.patch
+-- Using source at /opt/vcpkg/buildtrees/pixman/src/man-0.46.4-4600eb3651.clean
+-- Configuring x64-linux-dbg
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/pixman/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Configuring x64-linux-dbg done
+-- Configuring x64-linux-rel
+-- Configuring x64-linux-rel done
+-- Package x64-linux-dbg
+-- Package x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pixman_x64-linux/lib/pkgconfig/pixman-1.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pixman_x64-linux/debug/lib/pkgconfig/pixman-1.pc
+-- Installing: /opt/vcpkg/packages/pixman_x64-linux/share/pixman/copyright
+-- Performing post-build validation
+Elapsed time to handle pixman:x64-linux: 21 s
+Installing 53/74 cairo[core,fontconfig,freetype,gobject,x11]:x64-linux@1.18.4#1...
+cairo[core,fontconfig,freetype,gobject,x11]:x64-linux@1.18.4#1 package ABI: 262a362904a6591069509eda484c0060f82f421133cc2d812937e9eb9c07b177
+Building cairo[core,fontconfig,freetype,gobject,x11]:x64-linux@1.18.4#1...
+-- Found Python version '3.10.12 at /usr/bin/python3'
+-- Using meson: /opt/vcpkg/downloads/tools/meson-1.9.0-633807/meson.py
+Downloading https://gitlab.freedesktop.org/cairo/cairo/-/archive/1.18.4/cairo-1.18.4.tar.gz -> cairo-cairo-1.18.4.tar.gz
+Successfully downloaded cairo-cairo-1.18.4.tar.gz
+-- Extracting source /opt/vcpkg/downloads/cairo-cairo-1.18.4.tar.gz
+-- Applying patch msvc-convenience.diff
+-- Using source at /opt/vcpkg/buildtrees/cairo/src/1.18.4-6aebacea82.clean
+CMake Warning at ports/cairo/portfile.cmake:30 (message):
+  You will need to install Xorg dependencies to use feature x11:
+
+  sudo apt install libx11-dev libxft-dev libxext-dev
+
+Call Stack (most recent call first):
+  scripts/ports.cmake:209 (include)
+
+
+-- Configuring x64-linux-dbg
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/cairo/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Configuring x64-linux-dbg done
+-- Configuring x64-linux-rel
+-- Configuring x64-linux-rel done
+-- Package x64-linux-dbg
+-- Package x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/lib/pkgconfig/cairo-fc.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/lib/pkgconfig/cairo-ft.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/lib/pkgconfig/cairo-gobject.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/lib/pkgconfig/cairo-pdf.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/lib/pkgconfig/cairo-png.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/lib/pkgconfig/cairo-ps.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/lib/pkgconfig/cairo-script-interpreter.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/lib/pkgconfig/cairo-script.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/lib/pkgconfig/cairo-svg.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/lib/pkgconfig/cairo-tee.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/lib/pkgconfig/cairo-xlib-xrender.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/lib/pkgconfig/cairo-xlib.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/lib/pkgconfig/cairo.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/debug/lib/pkgconfig/cairo-fc.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/debug/lib/pkgconfig/cairo-ft.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/debug/lib/pkgconfig/cairo-gobject.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/debug/lib/pkgconfig/cairo-pdf.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/debug/lib/pkgconfig/cairo-png.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/debug/lib/pkgconfig/cairo-ps.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/debug/lib/pkgconfig/cairo-script-interpreter.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/debug/lib/pkgconfig/cairo-script.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/debug/lib/pkgconfig/cairo-svg.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/debug/lib/pkgconfig/cairo-tee.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/debug/lib/pkgconfig/cairo-xlib-xrender.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/debug/lib/pkgconfig/cairo-xlib.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/cairo_x64-linux/debug/lib/pkgconfig/cairo.pc
+-- Performing post-build validation
+Elapsed time to handle cairo:x64-linux: 43 s
+Installing 54/74 pango:x64-linux@1.58.0...
+pango:x64-linux@1.58.0 package ABI: 70972e521e6db32459be8011d417f689d13cf56a47e8f2193edf5b0a54b48d27
+Building pango:x64-linux@1.58.0...
+-- Found Python version '3.10.12 at /usr/bin/python3'
+-- Using meson: /opt/vcpkg/downloads/tools/meson-1.9.0-633807/meson.py
+Downloading pango-1.58.0.tar.xz, trying https://download.gnome.org/sources/pango/1.58/pango-1.58.0.tar.xz
+Successfully downloaded pango-1.58.0.tar.xz
+-- Extracting source /opt/vcpkg/downloads/pango-1.58.0.tar.xz
+-- Applying patch relax-gi-requirement.diff
+-- Using source at /opt/vcpkg/buildtrees/pango/src/pango-1-5cb02b5781.clean
+-- Configuring x64-linux-dbg
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/pango/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Configuring x64-linux-dbg done
+-- Configuring x64-linux-rel
+-- Configuring x64-linux-rel done
+-- Package x64-linux-dbg
+-- Package x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pango_x64-linux/lib/pkgconfig/pango.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pango_x64-linux/lib/pkgconfig/pangocairo.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pango_x64-linux/lib/pkgconfig/pangofc.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pango_x64-linux/lib/pkgconfig/pangoft2.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pango_x64-linux/lib/pkgconfig/pangoot.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pango_x64-linux/debug/lib/pkgconfig/pango.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pango_x64-linux/debug/lib/pkgconfig/pangocairo.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pango_x64-linux/debug/lib/pkgconfig/pangofc.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pango_x64-linux/debug/lib/pkgconfig/pangoft2.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/pango_x64-linux/debug/lib/pkgconfig/pangoot.pc
+-- Installing: /opt/vcpkg/packages/pango_x64-linux/share/pango/copyright
+-- Adjusted RPATH of '/opt/vcpkg/packages/pango_x64-linux/tools/pango/pango-list' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/pango_x64-linux/tools/pango/pango-segmentation' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/pango_x64-linux/tools/pango/pango-view' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Performing post-build validation
+Elapsed time to handle pango:x64-linux: 23 s
+Installing 55/74 libxrandr:x64-linux@1.5.5#1...
+libxrandr:x64-linux@1.5.5#1 package ABI: 893f48db67c9c9b2628d7cd144209609ff89ae99252db3f257b65596ddba6942
+Building libxrandr:x64-linux@1.5.5#1...
+-- Utils and libraries provided by 'libxrandr' should be provided by your system! Install the required packages or force vcpkg libraries by setting X_VCPKG_FORCE_VCPKG_X_LIBRARIES in the triplet!
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle libxrandr:x64-linux: 24.6 ms
+Installing 56/74 libxfixes:x64-linux@6.0.2#1...
+libxfixes:x64-linux@6.0.2#1 package ABI: b9c1c6ac97ff7dffb64f2ac64b46cfee9c59c1584dd9da9aa9a049f46bbaffc4
+Building libxfixes:x64-linux@6.0.2#1...
+-- Utils and libraries provided by 'libxfixes' should be provided by your system! Install the required packages or force vcpkg libraries by setting X_VCPKG_FORCE_VCPKG_X_LIBRARIES in your triplet
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle libxfixes:x64-linux: 24.6 ms
+Installing 57/74 libxi:x64-linux@1.8.2#1...
+libxi:x64-linux@1.8.2#1 package ABI: 86690cc5c11576df8c8e83edc5f92ce0a6dbea0978e8cc7a1921273e266df7c1
+Building libxi:x64-linux@1.8.2#1...
+-- Utils and libraries provided by 'libxi' should be provided by your system! Install the required packages or force vcpkg libraries by setting X_VCPKG_FORCE_VCPKG_X_LIBRARIES in your triplet!
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle libxi:x64-linux: 29.1 ms
+Installing 58/74 libepoxy:x64-linux@1.5.10#2...
+libepoxy:x64-linux@1.5.10#2 package ABI: e86e9816e39eded9044edc30f00334b3f6aa6525714789238f2d80b031e97a3d
+Building libepoxy:x64-linux@1.5.10#2...
+-- Found Python version '3.10.12 at /usr/bin/python3'
+-- Using meson: /opt/vcpkg/downloads/tools/meson-1.9.0-633807/meson.py
+CMake Warning at ports/libepoxy/portfile.cmake:6 (message):
+  libepoxy currently requires the following libraries from the system package
+  manager:
+
+      libx11-dev
+      libgles2-mesa-dev
+
+
+
+  These can be installed on Ubuntu systems via apt-get install libx11-dev
+  libgles2-mesa-dev.
+Call Stack (most recent call first):
+  scripts/ports.cmake:209 (include)
+
+
+Downloading https://github.com/anholt/libepoxy/archive/1.5.10.tar.gz -> anholt-libepoxy-1.5.10.tar.gz
+Successfully downloaded anholt-libepoxy-1.5.10.tar.gz
+-- Extracting source /opt/vcpkg/downloads/anholt-libepoxy-1.5.10.tar.gz
+-- Using source at /opt/vcpkg/buildtrees/libepoxy/src/1.5.10-92989bd778.clean
+-- Configuring x64-linux-dbg
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/libepoxy/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Configuring x64-linux-dbg done
+-- Configuring x64-linux-rel
+-- Configuring x64-linux-rel done
+-- Package x64-linux-dbg
+-- Package x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libepoxy_x64-linux/lib/pkgconfig/epoxy.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libepoxy_x64-linux/debug/lib/pkgconfig/epoxy.pc
+-- Installing: /opt/vcpkg/packages/libepoxy_x64-linux/share/libepoxy/copyright
+-- Performing post-build validation
+Elapsed time to handle libepoxy:x64-linux: 17 s
+Installing 59/74 gdk-pixbuf[core,jpeg,png,tiff]:x64-linux@2.44.6#1...
+gdk-pixbuf[core,jpeg,png,tiff]:x64-linux@2.44.6#1 package ABI: c4f8a593436813ebb046c8358ec32a101bcbdf225f228ce0dfc2631754b73110
+Building gdk-pixbuf[core,jpeg,png,tiff]:x64-linux@2.44.6#1...
+-- Found Python version '3.10.12 at /usr/bin/python3'
+-- Using meson: /opt/vcpkg/downloads/tools/meson-1.9.0-633807/meson.py
+Downloading GNOME-gdk-pixbuf-2.44.6.tar.xz, trying https://download.gnome.org/sources/gdk-pixbuf/2.44/gdk-pixbuf-2.44.6.tar.xz
+Successfully downloaded GNOME-gdk-pixbuf-2.44.6.tar.xz
+-- Extracting source /opt/vcpkg/downloads/GNOME-gdk-pixbuf-2.44.6.tar.xz
+-- Applying patch fix_build_error_windows.patch
+-- Applying patch loaders-cache.patch
+-- Applying patch use-libtiff-4-pkgconfig.patch
+-- Applying patch fix-static-deps.patch
+-- Using source at /opt/vcpkg/buildtrees/gdk-pixbuf/src/k-pixbuf-2-923c377621.clean
+-- Configuring x64-linux-dbg
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/gdk-pixbuf/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Configuring x64-linux-dbg done
+-- Configuring x64-linux-rel
+-- Configuring x64-linux-rel done
+-- Package x64-linux-dbg
+-- Package x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/gdk-pixbuf_x64-linux/lib/pkgconfig/gdk-pixbuf-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/gdk-pixbuf_x64-linux/debug/lib/pkgconfig/gdk-pixbuf-2.0.pc
+-- Installing: /opt/vcpkg/packages/gdk-pixbuf_x64-linux/share/gdk-pixbuf/copyright
+-- Adjusted RPATH of '/opt/vcpkg/packages/gdk-pixbuf_x64-linux/tools/gdk-pixbuf/gdk-pixbuf-csource' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gdk-pixbuf_x64-linux/tools/gdk-pixbuf/gdk-pixbuf-pixdata' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gdk-pixbuf_x64-linux/tools/gdk-pixbuf/gdk-pixbuf-query-loaders' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gdk-pixbuf_x64-linux/tools/gdk-pixbuf/gdk-pixbuf-thumbnailer' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Performing post-build validation
+Elapsed time to handle gdk-pixbuf:x64-linux: 14 s
+Installing 60/74 atk:x64-linux@2.38.0#11...
+atk:x64-linux@2.38.0#11 package ABI: f2d2d80a898a09c4d834b6a6fddd5a22e9de3e3e2c54a06d20dfaa80d707cb9d
+Building atk:x64-linux@2.38.0#11...
+-- Found Python version '3.10.12 at /usr/bin/python3'
+-- Using meson: /opt/vcpkg/downloads/tools/meson-1.9.0-633807/meson.py
+Downloading GNOME-atk-2.38.0.tar.xz, trying https://download.gnome.org/sources/atk/2.38/atk-2.38.0.tar.xz
+Successfully downloaded GNOME-atk-2.38.0.tar.xz
+-- Extracting source /opt/vcpkg/downloads/GNOME-atk-2.38.0.tar.xz
+-- Using source at /opt/vcpkg/buildtrees/atk/src/NOME-atk-2-2f3346139b.clean
+-- Configuring x64-linux-dbg
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/atk/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Configuring x64-linux-dbg done
+-- Configuring x64-linux-rel
+-- Configuring x64-linux-rel done
+-- Package x64-linux-dbg
+-- Package x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/atk_x64-linux/lib/pkgconfig/atk.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/atk_x64-linux/debug/lib/pkgconfig/atk.pc
+-- Installing: /opt/vcpkg/packages/atk_x64-linux/share/atk/copyright
+-- Performing post-build validation
+Elapsed time to handle atk:x64-linux: 7.9 s
+Installing 61/74 zstd:x64-linux@1.5.7...
+zstd:x64-linux@1.5.7 package ABI: fa177c29c5a5ce1a81b0cef94b3720932ba6042f7fe0f5185b34bf88bf332536
+Building zstd:x64-linux@1.5.7...
+Downloading https://github.com/facebook/zstd/archive/v1.5.7.tar.gz -> facebook-zstd-v1.5.7.tar.gz
+Successfully downloaded facebook-zstd-v1.5.7.tar.gz
+-- Extracting source /opt/vcpkg/downloads/facebook-zstd-v1.5.7.tar.gz
+-- Applying patch no-static-suffix.patch
+-- Applying patch fix-emscripten-and-clang-cl.patch
+-- Applying patch fix-windows-rc-compile.patch
+-- Using source at /opt/vcpkg/buildtrees/zstd/src/v1.5.7-bb6cae2b2e.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/zstd_x64-linux/lib/pkgconfig/libzstd.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/zstd_x64-linux/debug/lib/pkgconfig/libzstd.pc
+-- Installing: /opt/vcpkg/packages/zstd_x64-linux/share/zstd/usage
+-- Performing post-build validation
+Elapsed time to handle zstd:x64-linux: 21 s
+Installing 62/74 vcpkg-get-python-packages:x64-linux@2025-04-05...
+vcpkg-get-python-packages:x64-linux@2025-04-05 package ABI: 29947fc6c57af6ef3f220e941a8e608d3bc8964cc044005daf16f9b5733b76e8
+Building vcpkg-get-python-packages:x64-linux@2025-04-05...
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle vcpkg-get-python-packages:x64-linux: 23.2 ms
+Installing 63/74 lz4:x64-linux@1.10.0...
+lz4:x64-linux@1.10.0 package ABI: 04a69cb57a6300b73dde8a0a6934e213802134120f8da90f53010f4611c6d0b7
+Building lz4:x64-linux@1.10.0...
+Downloading https://github.com/lz4/lz4/archive/v1.10.0.tar.gz -> lz4-lz4-v1.10.0.tar.gz
+Successfully downloaded lz4-lz4-v1.10.0.tar.gz
+-- Extracting source /opt/vcpkg/downloads/lz4-lz4-v1.10.0.tar.gz
+-- Applying patch target-lz4-lz4.diff
+-- Using source at /opt/vcpkg/buildtrees/lz4/src/v1.10.0-61bd08d80e.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/lz4_x64-linux/lib/pkgconfig/liblz4.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/lz4_x64-linux/debug/lib/pkgconfig/liblz4.pc
+-- Installing: /opt/vcpkg/packages/lz4_x64-linux/share/lz4/usage
+-- Installing: /opt/vcpkg/packages/lz4_x64-linux/share/lz4/copyright
+-- Performing post-build validation
+Elapsed time to handle lz4:x64-linux: 6.8 s
+Installing 64/74 libxcrypt:x64-linux@4.5.2...
+libxcrypt:x64-linux@4.5.2 package ABI: 621820c13ac3c167ab1cce8f2fcdeee8a682a9adef36d3313243c38d7ed29c4b
+Building libxcrypt:x64-linux@4.5.2...
+Downloading https://github.com/besser82/libxcrypt/archive/v4.5.2.tar.gz -> besser82-libxcrypt-v4.5.2.tar.gz
+Successfully downloaded besser82-libxcrypt-v4.5.2.tar.gz
+-- Extracting source /opt/vcpkg/downloads/besser82-libxcrypt-v4.5.2.tar.gz
+-- Using source at /opt/vcpkg/buildtrees/libxcrypt/src/v4.5.2-7ca15a2a8e.clean
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/libxcrypt/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Generating configure for x64-linux
+-- Finished generating configure for x64-linux
+-- Configuring x64-linux-dbg
+-- Configuring x64-linux-rel
+-- Building/Installing x64-linux-dbg
+-- Making target 'all' for x64-linux-dbg
+-- Making target 'install' for x64-linux-dbg
+-- Building/Installing x64-linux-rel
+-- Making target 'all' for x64-linux-rel
+-- Making target 'install' for x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libxcrypt_x64-linux/lib/pkgconfig/libcrypt.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libxcrypt_x64-linux/lib/pkgconfig/libxcrypt.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libxcrypt_x64-linux/debug/lib/pkgconfig/libcrypt.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libxcrypt_x64-linux/debug/lib/pkgconfig/libxcrypt.pc
+-- Performing post-build validation
+Elapsed time to handle libxcrypt:x64-linux: 25 s
+Installing 65/74 libmount:x64-linux@2.41.3#1...
+libmount:x64-linux@2.41.3#1 package ABI: 20e39cb740d591671a96ef666ae73667f65cdbf8de96799734190f001129109b
+Building libmount:x64-linux@2.41.3#1...
+Downloading https://mirrors.edge.kernel.org/pub/linux/utils/util-linux/v2.41/util-linux-2.41.3.tar.xz -> util-linux-2.41.3.tar.xz
+Successfully downloaded util-linux-2.41.3.tar.xz
+-- Extracting source /opt/vcpkg/downloads/util-linux-2.41.3.tar.xz
+-- Applying patch hide-private-symbols.diff
+-- Using source at /opt/vcpkg/buildtrees/libmount/src/2.41.3-53757992c3.clean
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/libmount/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Generating configure for x64-linux
+-- Finished generating configure for x64-linux
+-- Configuring x64-linux-dbg
+-- Configuring x64-linux-rel
+-- Building/Installing x64-linux-dbg
+-- Making target 'all' for x64-linux-dbg
+-- Making target 'install' for x64-linux-dbg
+-- Building/Installing x64-linux-rel
+-- Making target 'all' for x64-linux-rel
+-- Making target 'install' for x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libmount_x64-linux/lib/pkgconfig/blkid.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libmount_x64-linux/lib/pkgconfig/mount.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libmount_x64-linux/debug/lib/pkgconfig/blkid.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libmount_x64-linux/debug/lib/pkgconfig/mount.pc
+-- Performing post-build validation
+Elapsed time to handle libmount:x64-linux: 1.2 min
+Installing 66/74 libcap:x64-linux@2.78...
+libcap:x64-linux@2.78 package ABI: 07a21a37a2866149c11d05da1daa3e65047e7753e85823cd894df98c82830c5e
+Building libcap:x64-linux@2.78...
+Downloading libcap-2.78.tar.xz, trying https://www.kernel.org/pub/linux/libs/security/linux-privs/libcap2/libcap-2.78.tar.xz
+Successfully downloaded libcap-2.78.tar.xz
+-- Extracting source /opt/vcpkg/downloads/libcap-2.78.tar.xz
+-- Using source at /opt/vcpkg/buildtrees/libcap/src/libcap-2-a77fee36a9.clean
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/libcap/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Configuring x64-linux-dbg
+-- Configuring x64-linux-rel
+-- Building/Installing x64-linux-dbg
+-- Making target 'all' for x64-linux-dbg
+-- Making target 'install' for x64-linux-dbg
+-- Building/Installing x64-linux-rel
+-- Making target 'all' for x64-linux-rel
+-- Making target 'install' for x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libcap_x64-linux/lib/pkgconfig/libcap.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libcap_x64-linux/lib/pkgconfig/libpsx.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libcap_x64-linux/debug/lib/pkgconfig/libcap.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libcap_x64-linux/debug/lib/pkgconfig/libpsx.pc
+-- Installing: /opt/vcpkg/packages/libcap_x64-linux/share/libcap/copyright
+-- Performing post-build validation
+Elapsed time to handle libcap:x64-linux: 2.4 s
+Installing 67/74 libsystemd:x64-linux@260.2...
+libsystemd:x64-linux@260.2 package ABI: 76789a7a539426d9c75a3a475b28510100b80caf8d3592fe01d6b31fbabd7b25
+Building libsystemd:x64-linux@260.2...
+-- Found Python version '3.10.12 at /usr/bin/python3'
+-- Using meson: /opt/vcpkg/downloads/tools/meson-1.9.0-633807/meson.py
+Downloading https://github.com/systemd/systemd/archive/v260.2.tar.gz -> systemd-systemd-v260.2.tar.gz
+Successfully downloaded systemd-systemd-v260.2.tar.gz
+-- Extracting source /opt/vcpkg/downloads/systemd-systemd-v260.2.tar.gz
+-- Applying patch disable-warning-nonnull.patch
+-- Applying patch only-libsystemd.patch
+-- Applying patch pkgconfig.patch
+-- Applying patch fix-2604-build.patch
+-- Using source at /opt/vcpkg/buildtrees/libsystemd/src/v260.2-1a875e5b45.clean
+-- Setting up python virtual environment...
+-- Installing python packages: jinja2
+-- Setting up python virtual environment... finished.
+-- Configuring x64-linux-dbg
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/libsystemd/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Configuring x64-linux-dbg done
+-- Configuring x64-linux-rel
+-- Configuring x64-linux-rel done
+-- Package x64-linux-dbg
+-- Package x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libsystemd_x64-linux/lib/pkgconfig/libsystemd.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/libsystemd_x64-linux/debug/lib/pkgconfig/libsystemd.pc
+-- Performing post-build validation
+Elapsed time to handle libsystemd:x64-linux: 45 s
+Installing 68/74 dbus[core,systemd]:x64-linux@1.16.2#5...
+dbus[core,systemd]:x64-linux@1.16.2#5 package ABI: 97959d4f833b18b2c351b76e546b7de47e2c69cdc9b76fa93a07e479fbec272f
+Building dbus[core,systemd]:x64-linux@1.16.2#5...
+-- Note: dbus only supports dynamic library linkage. Building dynamic library.
+Downloading https://gitlab.freedesktop.org//dbus/dbus/-/archive/dbus-1.16.2/dbus-dbus-1.16.2.tar.gz -> dbus-dbus-dbus-1.16.2.tar.gz
+Successfully downloaded dbus-dbus-dbus-1.16.2.tar.gz
+-- Extracting source /opt/vcpkg/downloads/dbus-dbus-dbus-1.16.2.tar.gz
+-- Applying patch cmake.dep.patch
+-- Applying patch pkgconfig.patch
+-- Applying patch getpeereid.patch
+-- Applying patch libsystemd.patch
+-- Applying patch remove-path.patch
+-- Applying patch remove-var-lib-dbus-creation.patch
+-- Applying patch session-socket-dir.diff
+-- Using source at /opt/vcpkg/buildtrees/dbus/src/bus-1.16.2-1cbfa372b6.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/dbus_x64-linux/lib/pkgconfig/dbus-1.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/dbus_x64-linux/debug/lib/pkgconfig/dbus-1.pc
+-- Installing: /opt/vcpkg/packages/dbus_x64-linux/share/dbus/copyright
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/debug/lib/libdbus-1.so.3.38.3' (From '' -> To '$ORIGIN')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/debug/libexec/dbus-daemon-launch-helper' (From '' -> To '$ORIGIN:$ORIGIN/../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/debug/tools/dbus/dbus-cleanup-sockets' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/debug/tools/dbus/dbus-daemon' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/debug/tools/dbus/dbus-launch' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/debug/tools/dbus/dbus-monitor' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/debug/tools/dbus/dbus-run-session' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/debug/tools/dbus/dbus-send' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/debug/tools/dbus/dbus-test-tool' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/debug/tools/dbus/dbus-update-activation-environment' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/debug/tools/dbus/dbus-uuidgen' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/lib/libdbus-1.so.3.38.3' (From '' -> To '$ORIGIN')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/libexec/dbus-daemon-launch-helper' (From '' -> To '$ORIGIN:$ORIGIN/../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/tools/dbus/dbus-cleanup-sockets' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/tools/dbus/dbus-daemon' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/tools/dbus/dbus-launch' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/tools/dbus/dbus-monitor' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/tools/dbus/dbus-run-session' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/tools/dbus/dbus-send' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/tools/dbus/dbus-test-tool' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/tools/dbus/dbus-update-activation-environment' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/dbus_x64-linux/tools/dbus/dbus-uuidgen' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Performing post-build validation
+Elapsed time to handle dbus:x64-linux: 26 s
+Installing 69/74 libxtst:x64-linux@1.2.5#1...
+libxtst:x64-linux@1.2.5#1 package ABI: b9387ca6d9d476fb3536887e8aeaf8c2f535d1c91d2d4c85a4c839d2d39e2f12
+Building libxtst:x64-linux@1.2.5#1...
+-- Utils and libraries provided by 'libxtst' should be provided by your system! Install the required packages or force vcpkg libraries by setting X_VCPKG_FORCE_VCPKG_X_LIBRARIES in your triplet!
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Elapsed time to handle libxtst:x64-linux: 25.1 ms
+Installing 70/74 at-spi2-core:x64-linux@2.44.1#5...
+at-spi2-core:x64-linux@2.44.1#5 package ABI: 44ccf12673b4d78c687652ee6354431fd53e665c4a5892663ef0b383dca0d1c9
+Building at-spi2-core:x64-linux@2.44.1#5...
+-- Found Python version '3.10.12 at /usr/bin/python3'
+-- Using meson: /opt/vcpkg/downloads/tools/meson-1.9.0-633807/meson.py
+-- at-spi2-core currently requires the following libraries from the system package manager:
+    libxi-dev
+    libxtst-dev
+
+These can be installed on Ubuntu systems via apt-get install libxi-dev libxtst-dev
+Downloading GNOME-at-spi2-core-2.44.1.tar.xz, trying https://download.gnome.org/sources/at-spi2-core/2.44/at-spi2-core-2.44.1.tar.xz
+Successfully downloaded GNOME-at-spi2-core-2.44.1.tar.xz
+-- Extracting source /opt/vcpkg/downloads/GNOME-at-spi2-core-2.44.1.tar.xz
+-- Using source at /opt/vcpkg/buildtrees/at-spi2-core/src/pi2-core-2-7b5884b21f.clean
+-- Configuring x64-linux-dbg
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/at-spi2-core/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Configuring x64-linux-dbg done
+-- Configuring x64-linux-rel
+-- Configuring x64-linux-rel done
+-- Package x64-linux-dbg
+-- Package x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/at-spi2-core_x64-linux/lib/pkgconfig/atspi-2.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/at-spi2-core_x64-linux/debug/lib/pkgconfig/atspi-2.pc
+-- Installing: /opt/vcpkg/packages/at-spi2-core_x64-linux/share/at-spi2-core/copyright
+-- Adjusted RPATH of '/opt/vcpkg/packages/at-spi2-core_x64-linux/debug/libexec/at-spi-bus-launcher' (From '' -> To '$ORIGIN:$ORIGIN/../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/at-spi2-core_x64-linux/debug/libexec/at-spi2-registryd' (From '' -> To '$ORIGIN:$ORIGIN/../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/at-spi2-core_x64-linux/libexec/at-spi-bus-launcher' (From '' -> To '$ORIGIN:$ORIGIN/../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/at-spi2-core_x64-linux/libexec/at-spi2-registryd' (From '' -> To '$ORIGIN:$ORIGIN/../lib')
+-- Performing post-build validation
+Elapsed time to handle at-spi2-core:x64-linux: 12 s
+Installing 71/74 at-spi2-atk:x64-linux@2.38.0#2...
+at-spi2-atk:x64-linux@2.38.0#2 package ABI: bdd1ecc888af4f698a3e278295286b194d75831ab10c0462bb0bd5517490e5d4
+Building at-spi2-atk:x64-linux@2.38.0#2...
+-- Found Python version '3.10.12 at /usr/bin/python3'
+-- Using meson: /opt/vcpkg/downloads/tools/meson-1.9.0-633807/meson.py
+Downloading GNOME-at-spi2-atk-2.38.0.tar.xz, trying https://download.gnome.org/sources/at-spi2-atk/2.38/at-spi2-atk-2.38.0.tar.xz
+Successfully downloaded GNOME-at-spi2-atk-2.38.0.tar.xz
+-- Extracting source /opt/vcpkg/downloads/GNOME-at-spi2-atk-2.38.0.tar.xz
+-- Using source at /opt/vcpkg/buildtrees/at-spi2-atk/src/spi2-atk-2-9be9ed6362.clean
+-- Configuring x64-linux-dbg
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/at-spi2-atk/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Configuring x64-linux-dbg done
+-- Configuring x64-linux-rel
+-- Configuring x64-linux-rel done
+-- Package x64-linux-dbg
+-- Package x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/at-spi2-atk_x64-linux/lib/pkgconfig/atk-bridge-2.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/at-spi2-atk_x64-linux/debug/lib/pkgconfig/atk-bridge-2.0.pc
+-- Installing: /opt/vcpkg/packages/at-spi2-atk_x64-linux/share/at-spi2-atk/copyright
+-- Adjusted RPATH of '/opt/vcpkg/packages/at-spi2-atk_x64-linux/debug/lib/gtk-2.0/modules/libatk-bridge.so' (From '' -> To '$ORIGIN:$ORIGIN/../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/at-spi2-atk_x64-linux/lib/gtk-2.0/modules/libatk-bridge.so' (From '' -> To '$ORIGIN:$ORIGIN/../..')
+-- Performing post-build validation
+Elapsed time to handle at-spi2-atk:x64-linux: 6.4 s
+Installing 72/74 gtk3:x64-linux@3.24.52#2...
+gtk3:x64-linux@3.24.52#2 package ABI: 293a1427e6b454dedd04a0815e91811fe74779030270592b78bf8c0036c83b3b
+Building gtk3:x64-linux@3.24.52#2...
+-- Found Python version '3.10.12 at /usr/bin/python3'
+-- Using meson: /opt/vcpkg/downloads/tools/meson-1.9.0-633807/meson.py
+Downloading GNOME-gtk-3.24.52.tar.xz, trying https://download.gnome.org/sources/gtk/3.24/gtk-3.24.52.tar.xz
+Successfully downloaded GNOME-gtk-3.24.52.tar.xz
+-- Extracting source /opt/vcpkg/downloads/GNOME-gtk-3.24.52.tar.xz
+-- Applying patch 0001-build.patch
+-- Applying patch cairo-cpp-linkage.patch
+-- Applying patch avoid-multiple-definition.diff
+-- Using source at /opt/vcpkg/buildtrees/gtk3/src/NOME-gtk-3-871c39794f.clean
+-- Configuring x64-linux-dbg
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /opt/vcpkg/buildtrees/gtk3/cmake-get-vars_C_CXX-x64-linux.cmake.log
+-- Configuring x64-linux-dbg done
+-- Configuring x64-linux-rel
+-- Configuring x64-linux-rel done
+-- Package x64-linux-dbg
+-- Package x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/gtk3_x64-linux/lib/pkgconfig/gail-3.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/gtk3_x64-linux/lib/pkgconfig/gdk-3.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/gtk3_x64-linux/lib/pkgconfig/gdk-x11-3.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/gtk3_x64-linux/lib/pkgconfig/gtk+-3.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/gtk3_x64-linux/lib/pkgconfig/gtk+-unix-print-3.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/gtk3_x64-linux/lib/pkgconfig/gtk+-x11-3.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/gtk3_x64-linux/debug/lib/pkgconfig/gail-3.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/gtk3_x64-linux/debug/lib/pkgconfig/gdk-3.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/gtk3_x64-linux/debug/lib/pkgconfig/gdk-x11-3.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/gtk3_x64-linux/debug/lib/pkgconfig/gtk+-3.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/gtk3_x64-linux/debug/lib/pkgconfig/gtk+-unix-print-3.0.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/gtk3_x64-linux/debug/lib/pkgconfig/gtk+-x11-3.0.pc
+-- Installing: /opt/vcpkg/packages/gtk3_x64-linux/share/gtk3/copyright
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/debug/lib/gtk-3.0/3.0.0/immodules/im-am-et.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/debug/lib/gtk-3.0/3.0.0/immodules/im-cedilla.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/debug/lib/gtk-3.0/3.0.0/immodules/im-cyrillic-translit.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/debug/lib/gtk-3.0/3.0.0/immodules/im-inuktitut.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/debug/lib/gtk-3.0/3.0.0/immodules/im-ipa.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/debug/lib/gtk-3.0/3.0.0/immodules/im-multipress.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/debug/lib/gtk-3.0/3.0.0/immodules/im-thai.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/debug/lib/gtk-3.0/3.0.0/immodules/im-ti-er.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/debug/lib/gtk-3.0/3.0.0/immodules/im-ti-et.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/debug/lib/gtk-3.0/3.0.0/immodules/im-viqr.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/debug/lib/gtk-3.0/3.0.0/immodules/im-xim.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/debug/lib/gtk-3.0/3.0.0/printbackends/libprintbackend-file.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/debug/lib/gtk-3.0/3.0.0/printbackends/libprintbackend-lpr.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/lib/gtk-3.0/3.0.0/immodules/im-am-et.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/lib/gtk-3.0/3.0.0/immodules/im-cedilla.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/lib/gtk-3.0/3.0.0/immodules/im-cyrillic-translit.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/lib/gtk-3.0/3.0.0/immodules/im-inuktitut.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/lib/gtk-3.0/3.0.0/immodules/im-ipa.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/lib/gtk-3.0/3.0.0/immodules/im-multipress.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/lib/gtk-3.0/3.0.0/immodules/im-thai.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/lib/gtk-3.0/3.0.0/immodules/im-ti-er.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/lib/gtk-3.0/3.0.0/immodules/im-ti-et.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/lib/gtk-3.0/3.0.0/immodules/im-viqr.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/lib/gtk-3.0/3.0.0/immodules/im-xim.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/lib/gtk-3.0/3.0.0/printbackends/libprintbackend-file.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/lib/gtk-3.0/3.0.0/printbackends/libprintbackend-lpr.so' (From '' -> To '$ORIGIN:$ORIGIN/../../..')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/tools/gtk3/gtk-builder-tool' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/tools/gtk3/gtk-encode-symbolic-svg' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/tools/gtk3/gtk-launch' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/tools/gtk3/gtk-query-immodules-3.0' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/tools/gtk3/gtk-query-settings' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/gtk3_x64-linux/tools/gtk3/gtk-update-icon-cache' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Performing post-build validation
+Elapsed time to handle gtk3:x64-linux: 4.5 min
+Installing 73/74 curl[core,non-http,openssl,ssl]:x64-linux@8.21.0#1...
+curl[core,non-http,openssl,ssl]:x64-linux@8.21.0#1 package ABI: 230860207b5500a9ea9d088e6b37147c2417d23044df741dfb08c94e6efbe409
+Building curl[core,non-http,openssl,ssl]:x64-linux@8.21.0#1...
+Downloading https://github.com/curl/curl/archive/curl-8_21_0.tar.gz -> curl-curl-curl-8_21_0.tar.gz
+Successfully downloaded curl-curl-curl-8_21_0.tar.gz
+-- Extracting source /opt/vcpkg/downloads/curl-curl-curl-8_21_0.tar.gz
+-- Applying patch dependencies.patch
+-- Using source at /opt/vcpkg/buildtrees/curl/src/url-8_21_0-3ffa9f46b7.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /opt/vcpkg/packages/curl_x64-linux/lib/pkgconfig/libcurl.pc
+-- Fixing pkgconfig file: /opt/vcpkg/packages/curl_x64-linux/debug/lib/pkgconfig/libcurl.pc
+-- Installing: /opt/vcpkg/packages/curl_x64-linux/share/curl/vcpkg-cmake-wrapper.cmake
+-- Installing: /opt/vcpkg/packages/curl_x64-linux/share/curl/usage
+-- Performing post-build validation
+Elapsed time to handle curl:x64-linux: 33 s
+Installing 74/74 wxwidgets[core,debug-support]:x64-linux@3.3.1#1...
+wxwidgets[core,debug-support]:x64-linux@3.3.1#1 package ABI: e0224d21d9364a4be4f3ddd2f466e35d00dcc748f34671e21485365731e269c0
+Building wxwidgets[core,debug-support]:x64-linux@3.3.1#1...
+Downloading https://github.com/wxWidgets/wxWidgets/archive/v3.3.1.tar.gz -> wxWidgets-wxWidgets-v3.3.1.tar.gz
+Successfully downloaded wxWidgets-wxWidgets-v3.3.1.tar.gz
+-- Extracting source /opt/vcpkg/downloads/wxWidgets-wxWidgets-v3.3.1.tar.gz
+-- Applying patch install-layout.patch
+-- Applying patch relocatable-wx-config.patch
+-- Applying patch nanosvg-ext-depend.patch
+-- Applying patch fix-libs-export.patch
+-- Applying patch fix-pcre2.patch
+-- Applying patch gtk3-link-libraries.patch
+-- Applying patch sdl2.patch
+-- Using source at /opt/vcpkg/buildtrees/wxwidgets/src/v3.3.1-bda38eaf74.clean
+Downloading https://github.com/wxWidgets/lexilla/archive/27c20a6ae5eebf418debeac0166052ed6fb653bc.tar.gz -> wxWidgets-lexilla-27c20a6ae5eebf418debeac0166052ed6fb653bc.tar.gz
+Successfully downloaded wxWidgets-lexilla-27c20a6ae5eebf418debeac0166052ed6fb653bc.tar.gz
+-- Extracting source /opt/vcpkg/downloads/wxWidgets-lexilla-27c20a6ae5eebf418debeac0166052ed6fb653bc.tar.gz
+-- Using source at /opt/vcpkg/buildtrees/wxwidgets/src/ed6fb653bc-91797803e0.clean
+Downloading https://github.com/wxWidgets/scintilla/archive/0b90f31ced23241054e8088abb50babe9a44ae67.tar.gz -> wxWidgets-scintilla-0b90f31ced23241054e8088abb50babe9a44ae67.tar.gz
+Successfully downloaded wxWidgets-scintilla-0b90f31ced23241054e8088abb50babe9a44ae67.tar.gz
+-- Extracting source /opt/vcpkg/downloads/wxWidgets-scintilla-0b90f31ced23241054e8088abb50babe9a44ae67.tar.gz
+-- Using source at /opt/vcpkg/buildtrees/wxwidgets/src/be9a44ae67-1cb980c526.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Installing: /opt/vcpkg/packages/wxwidgets_x64-linux/share/wxwidgets/usage
+-- Installing: /opt/vcpkg/packages/wxwidgets_x64-linux/share/wxwidgets/copyright
+-- Adjusted RPATH of '/opt/vcpkg/packages/wxwidgets_x64-linux/tools/wxwidgets/wxrc' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Adjusted RPATH of '/opt/vcpkg/packages/wxwidgets_x64-linux/tools/wxwidgets/wxrc-3.3' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Performing post-build validation
+Elapsed time to handle wxwidgets:x64-linux: 14 min
+Installed contents are licensed to you by owners. Microsoft is not responsible for, nor does it grant any licenses to, third-party packages.
+Some packages did not declare an SPDX license. Check the `copyright` file for each package for more information about their licensing.
+Packages installed in this vcpkg installation declare the following licenses:
+(AFL-2.1 OR GPL-2.0-or-later)
+(BSD-3-Clause OR GPL-2.0-only)
+(FTL OR GPL-2.0-or-later)
+(LGPL-2.1-only OR MPL-1.1)
+Apache-2.0
+BSD-2-Clause
+BSD-3-Clause
+BSL-1.0
+GPL-3.0-only
+GPL-3.0-or-later
+ISC
+LGPL-2.0-or-later
+LGPL-2.0-or-later WITH WxWindows-exception-3.1
+LGPL-2.1-or-later
+MIT
+MIT-Modern-Variant
+MIT-open-group
+X11-distribute-modifications-variant
+Zlib
+bzip2-1.0.6
+curl
+libpng-2.0
+libtiff
+catch2 provides CMake targets:
+
+  # this is heuristically generated, and may not be correct
+  find_package(Catch2 CONFIG REQUIRED)
+  target_link_libraries(main PRIVATE Catch2::Catch2 Catch2::Catch2WithMain)
+
+catch2 provides pkg-config modules:
+
+  # A modern, C++-native test framework for C++14 and above (links in default main)
+  catch2-with-main
+
+  # A modern, C++-native, test framework for C++14 and above
+  catch2
+
+libzip provides CMake targets:
+
+  # this is heuristically generated, and may not be correct
+  find_package(libzip CONFIG REQUIRED)
+  target_link_libraries(main PRIVATE libzip::zip)
+
+libzip provides pkg-config modules:
+
+  # library for handling zip archives
+  libzip
+
+The package nlohmann-json provides CMake targets:
+
+    find_package(nlohmann_json CONFIG REQUIRED)
+    target_link_libraries(main PRIVATE nlohmann_json::nlohmann_json)
+
+The package nlohmann-json can be configured to not provide implicit conversions via a custom triplet file:
+
+    set(nlohmann-json_IMPLICIT_CONVERSIONS OFF)
+
+For more information, see the docs here:
+
+    https://json.nlohmann.me/api/macros/json_use_implicit_conversions/
+
+The package wxwidgets provides CMake targets:
+
+    find_package(wxWidgets CONFIG REQUIRED)
+    target_link_libraries(main PRIVATE wx::core wx::base)
+
+All requested installations completed successfully in: 41 min
+-- Running vcpkg install - done
+-- The CXX compiler identification is GNU 11.4.0
+-- The C compiler identification is GNU 11.4.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Found nlohmann_json: /workspace/installer.c/out/build/linux-x64/vcpkg_installed/x64-linux/share/nlohmann_json/nlohmann_jsonConfig.cmake (found version "3.12.0")
+-- Found ZLIB: optimized;/workspace/installer.c/out/build/linux-x64/vcpkg_installed/x64-linux/lib/libz.a;debug;/workspace/installer.c/out/build/linux-x64/vcpkg_installed/x64-linux/debug/lib/libz.a (found suitable version "1.3.2", minimum required is "1.1.2")
+-- Found BZip2: optimized;/workspace/installer.c/out/build/linux-x64/vcpkg_installed/x64-linux/lib/libbz2.a;debug;/workspace/installer.c/out/build/linux-x64/vcpkg_installed/x64-linux/debug/lib/libbz2d.a (found version "1.0.8")
+-- Looking for BZ2_bzCompressInit
+-- Looking for BZ2_bzCompressInit - found
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Found OpenSSL: /workspace/installer.c/out/build/linux-x64/vcpkg_installed/x64-linux/lib/libcrypto.a (found version "3.6.3")
+-- Configuring done (2501.1s)
+-- Generating done (0.0s)
+-- Build files have been written to: /workspace/installer.c/out/build/linux-x64
+[1/9] Building CXX object CMakeFiles/cmdiqo-agent-setup.dir/src/main.cpp.o
+[2/9] Building CXX object CMakeFiles/cmdiqo-installer-tests.dir/tests/core_tests.cpp.o
+[3/9] Building CXX object CMakeFiles/cmdiqo_installer_core.dir/src/platform.cpp.o
+[4/9] Building CXX object CMakeFiles/cmdiqo-agent-setup.dir/src/gui.cpp.o
+[5/9] Building CXX object CMakeFiles/cmdiqo_installer_core.dir/src/installer.cpp.o
+[6/9] Building CXX object CMakeFiles/cmdiqo_installer_core.dir/src/core.cpp.o
+[7/9] Linking CXX static library libcmdiqo_installer_core.a
+[8/9] Linking CXX executable cmdiqo-installer-tests
+[9/9] Linking CXX executable cmdiqo-agent-setup
+Test project /workspace/installer.c/out/build/linux-x64
+    Start 1: cmdiqo-installer-tests
+1/1 Test #1: cmdiqo-installer-tests ...........   Passed    0.00 sec
+
+100% tests passed, 0 tests failed out of 1
+
+Total Test time (real) =   0.01 sec
+[INFO] Native installer: /home/jarda/WORKING/cmdiqo/dist/cmdiqo-agent-linux-x64-setup
+[INFO]
+[INFO] === Distribution Agent Artifacts (dist/) ===
+[INFO]   • cmdiqo-agent: /home/jarda/WORKING/cmdiqo/dist/cmdiqo-agent (9.3M)
+[INFO]     SHA256: 5c99d27a09d5a157e0f8d213121cbc666c5e272b6c392de617e28aa8849d170e
+[INFO]   • cmdiqo-agent-linux-x64.zip: /home/jarda/WORKING/cmdiqo/dist/cmdiqo-agent-linux-x64.zip (9.2M)
+[INFO]     SHA256: 77fcc78484bada0ed98683ceecbedb490ff07af13751a96dc28003561091d88d
+[INFO]   • cmdiqo-agent-linux-x64-setup: /home/jarda/WORKING/cmdiqo/dist/cmdiqo-agent-linux-x64-setup (34M)
+[INFO]     SHA256: 9f42f8eff991d6e7c9f5ecd1fbf1abef9e94fd6ed025c166e18033ad8586646e
+[INFO] [+] Build complete successfully for version 0.9.devel+6ABAD7A4!
+jarda@home:~/WORKING/cmdiqo$
