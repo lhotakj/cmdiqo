@@ -6,6 +6,9 @@
     "catch2",
     "libzip",
     "nlohmann-json",
-    "wxwidgets"
+    {
+      "name": "wxwidgets",
+      "default-features": false
+    }
   ]
 }

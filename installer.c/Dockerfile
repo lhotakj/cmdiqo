@@ -47,9 +47,12 @@ RUN apt-get update \
         wget \
         xz-utils \
         zip \
-    && python3 -m pip install --no-cache-dir "cmake>=3.24,<4" \
+    # Install CMake 4.4.0 from Kitware releases to satisfy vcpkg (avoids vcpkg downloading it)
+    && curl -fsSL -o /tmp/cmake-4.4.0-linux-x86_64.tar.gz "https://github.com/Kitware/CMake/releases/download/v4.4.0/cmake-4.4.0-linux-x86_64.tar.gz" \
+    && tar -xzf /tmp/cmake-4.4.0-linux-x86_64.tar.gz -C /opt \
+    && ln -sf /opt/cmake-4.4.0-linux-x86_64/bin/cmake /usr/local/bin/cmake \
     && cmake --version \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /tmp/cmake-4.4.0-linux-x86_64.tar.gz
 
 RUN git clone https://github.com/microsoft/vcpkg.git /opt/vcpkg \
     && git -C /opt/vcpkg checkout "${VCPKG_TAG}" \
