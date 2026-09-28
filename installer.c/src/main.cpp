@@ -52,7 +52,12 @@ void print_usage(std::ostream& output) {
         << "  --config PATH             Read JSON configuration instead of placing a token on the command line\n"
         << "  --payload PATH            Must be the exact platform payload filename\n\n"
         << "System-changing actions require Administrator/root privileges. The GUI requests Windows UAC\n"
-        << "or Linux pkexec. For a headless Linux host use: sudo ./cmdiqo-agent-setup --cli --install --config config.json\n";
+        << "or Linux pkexec. For a headless Linux host use: sudo ./cmdiqo-agent-setup --cli --install --config config.json\n\n"
+        << "GUI tips (short):\n"
+        << "  Local desktop: run ./cmdiqo-agent-linux-x64-setup --gui\n"
+        << "  As root on desktop: xhost +SI:localuser:root && sudo --preserve-env=DISPLAY,XAUTHORITY ./cmdiqo-agent-linux-x64-setup --gui\n"
+        << "  SSH with X11 forwarding: ssh -Y -C user@host && ./cmdiqo-agent-linux-x64-setup --gui\n"
+        << "  Headless (Xvfb): sudo apt-get install -y xvfb && Xvfb :99 -screen 0 1280x720x24 & export DISPLAY=:99 && ./cmdiqo-agent-linux-x64-setup --gui\n";
 }
 
 bool needs_value(int index, int argc, const char* option, std::string& error) {
