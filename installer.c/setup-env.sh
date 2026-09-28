@@ -89,35 +89,55 @@ build_docker_image() {
 
   if [[ "${REBUILD_IMAGE}" -eq 1 || "${image_build_input_hash}" != "${build_input_hash}" ]]; then
     echo "=== Building ${label} Docker builder image (target: ${target_stage}) ==="
+    # Use 'docker buildx build' so the active BuildKit driver (docker-container or
+    # otherwise) is honoured correctly.  With the docker-container driver, a plain
+    # 'docker build' without --push or --load discards the result entirely.
+    # --push  → image is written directly to the registry (CI / push path)
+    # --load  → image is exported into the local Docker daemon (local dev path)
     local build_args=(
-      build
-      --tag "${local_tag}"
-      --tag "${remote_tag}"
+      buildx build
       --file "${DOCKERFILE}"
       --target "${target_stage}"
       --build-arg "BUILDER_INPUT_SHA=${build_input_hash}"
     )
-    if [[ -n "${alt_remote_tag}" ]]; then
-      build_args+=(--tag "${alt_remote_tag}")
-    fi
     if [[ "${REBUILD_IMAGE}" -eq 1 ]]; then
       build_args+=(--pull)
     fi
+    if [[ "${PUSH}" -eq 1 ]]; then
+      # Direct registry push: no intermediate local image required.
+      build_args+=(--tag "${remote_tag}")
+      if [[ -n "${alt_remote_tag}" ]]; then
+        build_args+=(--tag "${alt_remote_tag}")
+      fi
+      build_args+=(--push)
+    else
+      # Load into local daemon for immediate use / testing.
+      # Note: --load supports only a single platform and a single tag.
+      build_args+=(--tag "${local_tag}" --load)
+    fi
     docker "${build_args[@]}" "${ROOT}"
   else
-    docker tag "${local_tag}" "${remote_tag}" 2>/dev/null || docker tag "${remote_tag}" "${local_tag}" 2>/dev/null || true
-    if [[ -n "${alt_remote_tag}" ]]; then
-      docker tag "${remote_tag}" "${alt_remote_tag}" 2>/dev/null || true
+    # Image is already up-to-date; just re-tag and optionally push.
+    if [[ "${PUSH}" -eq 1 ]]; then
+      echo "=== Pushing existing ${label} builder image to Docker Hub (${remote_tag}) ==="
+      docker tag "${local_tag}" "${remote_tag}" 2>/dev/null \
+        || docker tag "${remote_tag}" "${local_tag}" 2>/dev/null \
+        || true
+      docker push "${remote_tag}"
+      if [[ -n "${alt_remote_tag}" ]]; then
+        docker tag "${remote_tag}" "${alt_remote_tag}" 2>/dev/null || true
+        docker push "${alt_remote_tag}"
+      fi
+    else
+      docker tag "${local_tag}" "${remote_tag}" 2>/dev/null \
+        || docker tag "${remote_tag}" "${local_tag}" 2>/dev/null \
+        || true
+      if [[ -n "${alt_remote_tag}" ]]; then
+        docker tag "${remote_tag}" "${alt_remote_tag}" 2>/dev/null || true
+      fi
     fi
   fi
 
-  if [[ "${PUSH}" -eq 1 ]]; then
-    echo "=== Pushing ${label} Docker builder image to Docker Hub (${remote_tag}) ==="
-    docker push "${remote_tag}"
-    if [[ -n "${alt_remote_tag}" ]]; then
-      docker push "${alt_remote_tag}"
-    fi
-  fi
   echo "[+] ${label} Docker builder is ready: ${remote_tag}"
 }
 
