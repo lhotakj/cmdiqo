@@ -78,6 +78,9 @@ jobs:
 
           ./installer.c/setup-env.sh --platform "$PLATFORM" --docker-user "$DOCKER_USER" "${EXTRA_ARGS[@]}"
 
+      - name: Release BuildKit cache before verification
+        run: docker buildx prune --all --force
+
       - name: Verify native installer toolchains
         shell: bash
         env:

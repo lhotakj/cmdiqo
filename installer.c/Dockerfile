@@ -41,9 +41,6 @@ RUN apt-get update \
         perl \
         pkg-config \
         python3 \
-        python3-pip \
-        python3-venv \
-        rsync \
         tar \
         unzip \
         wget \
@@ -61,11 +58,12 @@ RUN git clone https://github.com/microsoft/vcpkg.git /opt/vcpkg \
     && git -C /opt/vcpkg checkout "${VCPKG_TAG}" \
     && sed -i '/if(NOT "debug-support" IN_LIST FEATURES)/,/^endif()$/ { s|if(VCPKG_TARGET_IS_WINDOWS)|if(VCPKG_TARGET_IS_WINDOWS AND EXISTS "${CURRENT_PACKAGES_DIR}/include/wx/debug.h")|; }' /opt/vcpkg/ports/wxwidgets/portfile.cmake \
     && /opt/vcpkg/bootstrap-vcpkg.sh -disableMetrics \
-    && chmod -R a+rwx /opt/vcpkg
+    && rm -rf /opt/vcpkg/.git
 
 ENV VCPKG_ROOT=/opt/vcpkg \
     VCPKG_INSTALLED_DIR=/opt/cmdiqo-vcpkg-installed \
     VCPKG_OVERLAY_TRIPLETS=/opt/cmdiqo-triplets \
+    VCPKG_DEFAULT_BINARY_CACHE=/tmp/vcpkg-binary-cache \
     VCPKG_DISABLE_METRICS=1 \
     PATH=/opt/vcpkg:/usr/local/bin:${PATH}
 
@@ -82,7 +80,6 @@ LABEL org.opencontainers.image.title="Cmdiqo native-installer Linux builder" \
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
-        gdb \
         libasound2-dev \
         libbz2-dev \
         libcairo2-dev \
@@ -123,17 +120,16 @@ RUN apt-get update \
         libxkbcommon-dev \
         libxkbcommon-x11-dev \
         libxrandr-dev \
-        lldb \
-        ltrace \
-        strace \
-        valgrind \
     && rm -rf /var/lib/apt/lists/*
 
 RUN /opt/vcpkg/vcpkg install \
         --x-manifest-root=/tmp/cmdiqo-manifest \
         --triplet=x64-linux-release \
         --x-install-root="${VCPKG_INSTALLED_DIR}" \
-    && chmod -R a+rwx "${VCPKG_INSTALLED_DIR}" /opt/vcpkg
+        --x-buildtrees-root=/tmp/vcpkg-buildtrees \
+        --x-packages-root=/tmp/vcpkg-packages \
+        --downloads-root=/tmp/vcpkg-downloads \
+    && rm -rf /tmp/vcpkg-binary-cache /tmp/vcpkg-buildtrees /tmp/vcpkg-downloads /tmp/vcpkg-packages
 
 WORKDIR /workspace
 
@@ -164,7 +160,10 @@ RUN /opt/vcpkg/vcpkg install \
         --x-manifest-root=/tmp/cmdiqo-manifest \
         --triplet=x64-mingw-static-release \
         --x-install-root="${VCPKG_INSTALLED_DIR}" \
-    && chmod -R a+rwx "${VCPKG_INSTALLED_DIR}" /opt/vcpkg
+        --x-buildtrees-root=/tmp/vcpkg-buildtrees \
+        --x-packages-root=/tmp/vcpkg-packages \
+        --downloads-root=/tmp/vcpkg-downloads \
+    && rm -rf /tmp/vcpkg-binary-cache /tmp/vcpkg-buildtrees /tmp/vcpkg-downloads /tmp/vcpkg-packages
 
 WORKDIR /workspace
 
@@ -195,6 +194,9 @@ RUN /opt/vcpkg/vcpkg install \
         --x-manifest-root=/tmp/cmdiqo-manifest \
         --triplet=x64-mingw-static-release \
         --x-install-root="${VCPKG_INSTALLED_DIR}" \
-    && chmod -R a+rwx "${VCPKG_INSTALLED_DIR}" /opt/vcpkg
+        --x-buildtrees-root=/tmp/vcpkg-buildtrees \
+        --x-packages-root=/tmp/vcpkg-packages \
+        --downloads-root=/tmp/vcpkg-downloads \
+    && rm -rf /tmp/vcpkg-binary-cache /tmp/vcpkg-buildtrees /tmp/vcpkg-downloads /tmp/vcpkg-packages
 
 WORKDIR /workspace
