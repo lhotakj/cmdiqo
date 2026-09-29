@@ -387,11 +387,12 @@ OperationResult PlatformOperations::unregister_service(const InstallerPaths& pat
         return OperationResult::success("Removed Windows service " + paths.service_name + ".");
     }
     if (current_platform() == Platform::linux) {
+        const bool service_file_exists = std::filesystem::exists(paths.service_file);
         const CommandResult disable = run({"systemctl", "disable", paths.service_name});
         std::error_code error;
         std::filesystem::remove(paths.service_file, error);
         const CommandResult reload = run({"systemctl", "daemon-reload"});
-        if ((disable.exit_code != 0 && std::filesystem::exists(paths.service_file))
+        if ((disable.exit_code != 0 && service_file_exists)
             || reload.exit_code != 0 || error) {
             return OperationResult::failure("Could not remove systemd service.");
         }

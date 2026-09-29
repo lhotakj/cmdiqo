@@ -293,12 +293,12 @@ function Invoke-NativeWindowsInstaller {
         Ensure-InstallerBuilderImage -TargetStage "windows" -LocalImage $localImage -RemoteImage $remoteImage -InstallerRoot $installerRoot
 
         Write-Info "=== Building native Windows installer (MinGW-w64 in Docker, Release) ==="
-        $command = @"
+        $command = @'
 set -euo pipefail
-cmake --fresh --preset windows-x64-mingw "-DCMDIQO_BUILD_VERSION=\${CMDIQO_BUILD_VERSION}"
+cmake --fresh --preset windows-x64-mingw "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR}" "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}"
 cmake --build --preset build-windows-x64-mingw --config Release
 ctest --preset test-windows-x64-mingw -C Release || true
-"@
+'@
         & docker run --rm `
             --workdir /workspace/installer.c `
             --volume "${rootDir}:/workspace" `
@@ -337,12 +337,12 @@ function Invoke-NativeLinuxInstaller {
     Ensure-InstallerBuilderImage -TargetStage "linux" -LocalImage $localImage -RemoteImage $remoteImage -InstallerRoot $installerRoot
 
     Write-Info "=== Building native Linux installer (Release) ==="
-    $command = @"
+    $command = @'
 set -euo pipefail
-cmake --fresh --preset linux-x64 "-DCMDIQO_BUILD_VERSION=\${CMDIQO_BUILD_VERSION}"
+cmake --fresh --preset linux-x64 "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR}" "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}"
 cmake --build --preset build-linux-x64 --config Release
 ctest --preset test-linux-x64 -C Release
-"@
+'@
     & docker run --rm `
         --workdir /workspace/installer.c `
         --volume "${rootDir}:/workspace" `

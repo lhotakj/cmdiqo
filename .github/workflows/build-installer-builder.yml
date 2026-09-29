@@ -102,7 +102,7 @@ jobs:
               --env HOME=/tmp \
               --env CMDIQO_BUILD_VERSION=0.9.ci \
               "$IMAGE" bash -euxo pipefail -c "
-                cmake --fresh --preset ${PRESET}
+                cmake --fresh --preset ${PRESET} \"-DVCPKG_INSTALLED_DIR=\${VCPKG_INSTALLED_DIR}\"
                 cmake --build --preset build-${PRESET} --config Release
                 ctest --preset test-${PRESET} -C Release --output-on-failure
               "
