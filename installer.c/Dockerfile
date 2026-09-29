@@ -122,7 +122,8 @@ RUN apt-get update \
         libxrandr-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN /opt/vcpkg/vcpkg install \
+RUN mkdir -p /tmp/vcpkg-binary-cache \
+    && /opt/vcpkg/vcpkg install \
         --x-manifest-root=/tmp/cmdiqo-manifest \
         --triplet=x64-linux-release \
         --x-install-root="${VCPKG_INSTALLED_DIR}" \
@@ -156,7 +157,8 @@ RUN apt-get update \
 
 ENV WINEDEBUG=-all
 
-RUN /opt/vcpkg/vcpkg install \
+RUN mkdir -p /tmp/vcpkg-binary-cache \
+    && /opt/vcpkg/vcpkg install \
         --x-manifest-root=/tmp/cmdiqo-manifest \
         --triplet=x64-mingw-static-release \
         --x-install-root="${VCPKG_INSTALLED_DIR}" \
@@ -190,7 +192,8 @@ RUN apt-get update \
 
 ENV WINEDEBUG=-all
 
-RUN /opt/vcpkg/vcpkg install \
+RUN mkdir -p /tmp/vcpkg-binary-cache \
+    && /opt/vcpkg/vcpkg install \
         --x-manifest-root=/tmp/cmdiqo-manifest \
         --triplet=x64-mingw-static-release \
         --x-install-root="${VCPKG_INSTALLED_DIR}" \
