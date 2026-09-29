@@ -43,3 +43,6 @@ Thumbs.db
 *.key
 *.cer
 certs/
+.cache/
+
+installer.c/cache/

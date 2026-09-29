@@ -41,6 +41,7 @@ RUN apt-get update \
         perl \
         pkg-config \
         python3 \
+        python3-venv \
         tar \
         unzip \
         wget \
@@ -58,12 +59,12 @@ RUN git clone https://github.com/microsoft/vcpkg.git /opt/vcpkg \
     && git -C /opt/vcpkg checkout "${VCPKG_TAG}" \
     && sed -i '/if(NOT "debug-support" IN_LIST FEATURES)/,/^endif()$/ { s|if(VCPKG_TARGET_IS_WINDOWS)|if(VCPKG_TARGET_IS_WINDOWS AND EXISTS "${CURRENT_PACKAGES_DIR}/include/wx/debug.h")|; }' /opt/vcpkg/ports/wxwidgets/portfile.cmake \
     && /opt/vcpkg/bootstrap-vcpkg.sh -disableMetrics \
-    && rm -rf /opt/vcpkg/.git
+    && rm -rf /opt/vcpkg/.git \
+    && install --directory --mode=1777 /opt/vcpkg/buildtrees
 
 ENV VCPKG_ROOT=/opt/vcpkg \
     VCPKG_INSTALLED_DIR=/opt/cmdiqo-vcpkg-installed \
     VCPKG_OVERLAY_TRIPLETS=/opt/cmdiqo-triplets \
-    VCPKG_DEFAULT_BINARY_CACHE=/tmp/vcpkg-binary-cache \
     VCPKG_DISABLE_METRICS=1 \
     PATH=/opt/vcpkg:/usr/local/bin:${PATH}
 
@@ -123,7 +124,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /tmp/vcpkg-binary-cache \
-    && /opt/vcpkg/vcpkg install \
+    && VCPKG_DEFAULT_BINARY_CACHE=/tmp/vcpkg-binary-cache /opt/vcpkg/vcpkg install \
         --x-manifest-root=/tmp/cmdiqo-manifest \
         --triplet=x64-linux-release \
         --x-install-root="${VCPKG_INSTALLED_DIR}" \
@@ -158,7 +159,7 @@ RUN apt-get update \
 ENV WINEDEBUG=-all
 
 RUN mkdir -p /tmp/vcpkg-binary-cache \
-    && /opt/vcpkg/vcpkg install \
+    && VCPKG_DEFAULT_BINARY_CACHE=/tmp/vcpkg-binary-cache /opt/vcpkg/vcpkg install \
         --x-manifest-root=/tmp/cmdiqo-manifest \
         --triplet=x64-mingw-static-release \
         --x-install-root="${VCPKG_INSTALLED_DIR}" \
@@ -193,7 +194,7 @@ RUN apt-get update \
 ENV WINEDEBUG=-all
 
 RUN mkdir -p /tmp/vcpkg-binary-cache \
-    && /opt/vcpkg/vcpkg install \
+    && VCPKG_DEFAULT_BINARY_CACHE=/tmp/vcpkg-binary-cache /opt/vcpkg/vcpkg install \
         --x-manifest-root=/tmp/cmdiqo-manifest \
         --triplet=x64-mingw-static-release \
         --x-install-root="${VCPKG_INSTALLED_DIR}" \

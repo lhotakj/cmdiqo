@@ -66,6 +66,7 @@ jobs:
         shell: bash
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME || inputs.docker_user || 'lhotakj' }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           chmod +x installer.c/setup-env.sh
           PLATFORM="${{ inputs.platform || 'all' }}"
@@ -95,8 +96,10 @@ jobs:
 
           for PRESET in "${PRESETS[@]}"; do
             docker run --rm \
+              --user "$(id -u):$(id -g)" \
               --workdir /workspace/installer.c \
               --volume "${GITHUB_WORKSPACE}:/workspace" \
+              --env HOME=/tmp \
               --env CMDIQO_BUILD_VERSION=0.9.ci \
               "$IMAGE" bash -euxo pipefail -c "
                 cmake --fresh --preset ${PRESET}
