@@ -4,10 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "installer.c/Dockerfile"
-      - "installer.c/vcpkg.json"
-      - "installer.c/setup-env.sh"
-      - "installer.c/setup-env.ps1"
+      - "installer.c/**"
       - ".github/workflows/build-installer-builder.yml"
   workflow_dispatch:
     inputs:
@@ -80,3 +77,27 @@ jobs:
           fi
 
           ./installer.c/setup-env.sh --platform "$PLATFORM" --docker-user "$DOCKER_USER" "${EXTRA_ARGS[@]}"
+
+      - name: Verify native installer toolchains
+        shell: bash
+        env:
+          DOCKER_USER: ${{ inputs.docker_user || 'lhotakj' }}
+          PLATFORM: ${{ inputs.platform || 'all' }}
+        run: |
+          case "$PLATFORM" in
+            linux) IMAGE="${DOCKER_USER}/cmdiqo-installer-builder:ubuntu-22.04"; PRESETS=(linux-x64) ;;
+            windows) IMAGE="${DOCKER_USER}/cmdiqo-installer-builder:windows-mingw"; PRESETS=(windows-x64-mingw) ;;
+            all) IMAGE="${DOCKER_USER}/cmdiqo-installer-builder:all"; PRESETS=(linux-x64 windows-x64-mingw) ;;
+          esac
+
+          for PRESET in "${PRESETS[@]}"; do
+            docker run --rm \
+              --workdir /workspace/installer.c \
+              --volume "${GITHUB_WORKSPACE}:/workspace" \
+              --env CMDIQO_BUILD_VERSION=0.9.ci \
+              "$IMAGE" bash -euxo pipefail -c "
+                cmake --fresh --preset ${PRESET}
+                cmake --build --preset build-${PRESET} --config Release
+                ctest --preset test-${PRESET} -C Release --output-on-failure
+              "
+          done

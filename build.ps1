@@ -36,8 +36,6 @@ $SkipAgentBuild = $false
 $Push = $false
 $DockerUser = if ($env:DOCKERHUB_USERNAME) { $env:DOCKERHUB_USERNAME } else { "lhotakj" }
 $Platform = "win64"
-$Config = "Release"
-$Debug = $false
 $Help = $false
 
 for ($index = 0; $index -lt $CliArgs.Count; $index++) {
@@ -55,10 +53,6 @@ for ($index = 0; $index -lt $CliArgs.Count; $index++) {
     switch -Regex ($argument) {
         "^--platform$|^-platform$|^-p$" { $Platform = Get-OptionValue $argument; break }
         "^--platform=(.+)$|^-platform=(.+)$" { $Platform = $argument.Substring($argument.IndexOf("=") + 1); break }
-        "^--config$|^-config$|^--configuration$|^-configuration$" { $Config = Get-OptionValue $argument; break }
-        "^--config=(.+)$|^-config=(.+)$|^--configuration=(.+)$|^-configuration=(.+)$" { $Config = $argument.Substring($argument.IndexOf("=") + 1); break }
-        "^--debug$|^-debug$|^-d$" { $Debug = $true; $Config = "Debug"; break }
-        "^--release$|^-release$" { $Config = "Release"; break }
         "^--agent$|^-agent$|^-a$" { $Agent = $true; break }
         "^--installer$|^-installer$|^-i$" { $Installer = $true; break }
         "^--bot$|^-bot$|^-b$|^--docker$|^-docker$" { $Bot = $true; break }
@@ -84,13 +78,6 @@ for ($index = 0; $index -lt $CliArgs.Count; $index++) {
 $Platform = $Platform.ToLower()
 if ($Platform -notin @("win64", "linux64", "all")) {
     throw "Invalid platform '$Platform'. Expected win64, linux64, or all."
-}
-switch ($Config.ToLowerInvariant()) {
-    "debug" { $Config = "Debug"; break }
-    "release" { $Config = "Release"; break }
-    "relwithdebinfo" { $Config = "RelWithDebInfo"; break }
-    "minsizerel" { $Config = "MinSizeRel"; break }
-    default { throw "Invalid build configuration '$Config'. Expected Release or Debug." }
 }
 if ($Target) {
     $Target = $Target.ToLower()
@@ -130,9 +117,6 @@ Versioning:
   -Dev, --dev                  Tag version as development build (<major>.<minor>.dev<HEX>)
 
 Compilation & Packaging:
-  -Config, --config <str>      Build configuration for native setup: 'Release' (default) or 'Debug'
-  -Debug, --debug, -d          Shortcut for -Config Debug (unstripped, debug symbols)
-  -Release, --release          Shortcut for -Config Release
   -Clean, --clean              Clean build, dist, and selected native installer outputs before building
   -SkipAgentBuild, --skip-agent-build
                                With -Installer, reuse the existing agent ZIP and build only the native setup
@@ -146,7 +130,6 @@ Docker Options:
 Examples:
   .\build.ps1 -Agent
   .\build.ps1 -Installer                  # Windows agent ZIP and native setup (Release)
-  .\build.ps1 -Installer -Debug           # Native setup with Debug symbols
   .\build.ps1 -Installer -SkipAgentBuild  # Rebuild only the native setup
   .\build.ps1 -Installer -Platform Linux  # Linux agent ZIP and native setup via Docker
   .\build.ps1 -Target Installer
@@ -212,7 +195,10 @@ function Ensure-InstallerBuilderImage {
     $manifest = Join-Path $InstallerRoot "vcpkg.json"
     $sha256 = [System.Security.Cryptography.SHA256]::Create()
     try {
-        foreach ($path in @($dockerfile, $manifest)) {
+        $triplets = Get-ChildItem -Path (Join-Path $InstallerRoot "triplets") -File -Recurse |
+            Sort-Object FullName |
+            Select-Object -ExpandProperty FullName
+        foreach ($path in @($dockerfile, $manifest) + @($triplets)) {
             $bytes = [System.IO.File]::ReadAllBytes($path)
             [void]$sha256.TransformBlock($bytes, 0, $bytes.Length, $bytes, 0)
         }
@@ -273,17 +259,17 @@ function Invoke-NativeWindowsInstaller {
             Remove-Item -Recurse -Force $buildDirectory
         }
 
-        Write-Info "=== Building native Windows installer (MSVC, $Config) ==="
+        Write-Info "=== Building native Windows installer (MSVC, Release) ==="
         $previousVcpkgRoot = $env:VCPKG_ROOT
         $env:VCPKG_ROOT = Join-Path $installerRoot ".vcpkg"
         Push-Location $installerRoot
         try {
-            cmake --fresh --preset windows-x64 "-DCMAKE_BUILD_TYPE=$Config" "-DCMDIQO_BUILD_VERSION=$payloadVersion"
-            cmake --build --preset build-windows-x64 --config $Config
-            ctest --preset test-windows-x64 -C $Config
+            cmake --fresh --preset windows-x64 "-DCMDIQO_BUILD_VERSION=$payloadVersion"
+            cmake --build --preset build-windows-x64 --config Release
+            ctest --preset test-windows-x64 -C Release
             $sourceExe = Join-Path $buildDirectory "cmdiqo-agent-setup.exe"
             if (-not (Test-Path $sourceExe)) {
-                $sourceExe = Join-Path $buildDirectory "$Config\cmdiqo-agent-setup.exe"
+                $sourceExe = Join-Path $buildDirectory "Release\cmdiqo-agent-setup.exe"
             }
             Copy-Item -LiteralPath $sourceExe -Destination (Join-Path $rootDir "dist\cmdiqo-agent-windows-x64-setup.exe") -Force
         }
@@ -306,12 +292,12 @@ function Invoke-NativeWindowsInstaller {
 
         Ensure-InstallerBuilderImage -TargetStage "windows" -LocalImage $localImage -RemoteImage $remoteImage -InstallerRoot $installerRoot
 
-        Write-Info "=== Building native Windows installer (MinGW-w64 in Docker, $Config) ==="
+        Write-Info "=== Building native Windows installer (MinGW-w64 in Docker, Release) ==="
         $command = @"
 set -euo pipefail
-cmake --fresh --preset windows-x64-mingw -DCMAKE_BUILD_TYPE=${Config} "-DCMDIQO_BUILD_VERSION=\${CMDIQO_BUILD_VERSION}"
-cmake --build --preset build-windows-x64-mingw --config ${Config}
-ctest --preset test-windows-x64-mingw -C ${Config} || true
+cmake --fresh --preset windows-x64-mingw "-DCMDIQO_BUILD_VERSION=\${CMDIQO_BUILD_VERSION}"
+cmake --build --preset build-windows-x64-mingw --config Release
+ctest --preset test-windows-x64-mingw -C Release || true
 "@
         & docker run --rm `
             --workdir /workspace/installer.c `
@@ -350,12 +336,12 @@ function Invoke-NativeLinuxInstaller {
 
     Ensure-InstallerBuilderImage -TargetStage "linux" -LocalImage $localImage -RemoteImage $remoteImage -InstallerRoot $installerRoot
 
-    Write-Info "=== Building native Linux installer ($Config) ==="
+    Write-Info "=== Building native Linux installer (Release) ==="
     $command = @"
 set -euo pipefail
-cmake --fresh --preset linux-x64 -DCMAKE_BUILD_TYPE=${Config} "-DCMDIQO_BUILD_VERSION=\${CMDIQO_BUILD_VERSION}"
-cmake --build --preset build-linux-x64 --config ${Config}
-ctest --preset test-linux-x64 -C ${Config}
+cmake --fresh --preset linux-x64 "-DCMDIQO_BUILD_VERSION=\${CMDIQO_BUILD_VERSION}"
+cmake --build --preset build-linux-x64 --config Release
+ctest --preset test-linux-x64 -C Release
 "@
     & docker run --rm `
         --workdir /workspace/installer.c `

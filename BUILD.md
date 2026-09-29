@@ -193,9 +193,6 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1 --target agent --platform w
 - `-Agent`: Switch to build the standalone Windows agent executable and ZIP package (default).
 - `-Installer`: Build the standalone Windows agent executable and ZIP package,
   then build the native C++ setup executable with that exact ZIP beside it.
-- `-Config, --config <Release|Debug>`: Build configuration for the native setup (default: `Release`).
-- `-Debug, -d`: Shortcut for `-Config Debug` (unstripped binary with debug symbols).
-- `-Release`: Shortcut for `-Config Release` (optimized, stripped binary).
 - `-Bot`: Switch to build `cmdiqo-bot` Docker container image.
 - `-All`: Switch to build the agent package, native setup executable, and bot container.
 - `-Target <Agent|Installer|Bot|All>`: Explicit target selection parameter.
@@ -234,16 +231,13 @@ Run `./build.sh`:
 # 6. Rebuild only the native setup using the existing agent ZIP:
 ./build.sh --installer --skip-agent-build
 
-# 7. Build with Debug symbols:
-./build.sh --installer --debug
-
-# 8. Build Docker container for cmdiqo-bot:
+# 7. Build Docker container for cmdiqo-bot:
 ./build.sh --bot
 
-# 9. Build agent, native setup, and Docker bot:
+# 8. Build agent, native setup, and Docker bot:
 ./build.sh --all
 
-# 10. Build and push multi-arch Docker container:
+# 9. Build and push multi-arch Docker container:
 ./build.sh --bot --push
 ```
 
@@ -251,9 +245,6 @@ Run `./build.sh`:
 - `--agent, -a`: Build standalone agent binary and ZIP package (default).
 - `--installer, -i`: Build the standalone agent binary and ZIP package, then
   build the native C++ setup executable with that exact ZIP beside it.
-- `--config, --configuration <Release|Debug>`: Build configuration for native setup (default: `Release`).
-- `--debug, -d`: Shortcut for `--config Debug` (unstripped binary with full debug symbols).
-- `--release`: Shortcut for `--config Release` (optimized, stripped binary).
 - `--bot, -b, --docker`: Build Docker container for `cmdiqo-bot`.
 - `--all`: Build the Linux agent package, native setup executable, and bot container.
 - `--target <agent|installer|bot|all>`: Explicit target selection parameter.

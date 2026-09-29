@@ -12,6 +12,8 @@ FROM ubuntu:22.04 AS base
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG VCPKG_TAG=2026.07.29
+ARG CMAKE_VERSION=4.4.0
+ARG CMAKE_SHA256=3864eb649b4466ae126a64bbde1657adad78efbbaa068bf38201de5cf1b5349f
 ARG BUILDER_INPUT_SHA=unknown
 
 LABEL io.cmdiqo.installer-builder.build-input-sha256="${BUILDER_INPUT_SHA}"
@@ -47,24 +49,28 @@ RUN apt-get update \
         wget \
         xz-utils \
         zip \
-    # Install CMake 4.4.0 from Kitware releases to satisfy vcpkg (avoids vcpkg downloading it)
-    && curl -fsSL -o /tmp/cmake-4.4.0-linux-x86_64.tar.gz "https://github.com/Kitware/CMake/releases/download/v4.4.0/cmake-4.4.0-linux-x86_64.tar.gz" \
-    && tar -xzf /tmp/cmake-4.4.0-linux-x86_64.tar.gz -C /opt \
-    && ln -sf /opt/cmake-4.4.0-linux-x86_64/bin/cmake /usr/local/bin/cmake \
+    # Install a checksum-verified CMake release so vcpkg does not download its own copy.
+    && curl -fsSL -o /tmp/cmake-linux-x86_64.tar.gz "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz" \
+    && echo "${CMAKE_SHA256}  /tmp/cmake-linux-x86_64.tar.gz" | sha256sum --check --strict \
+    && tar -xzf /tmp/cmake-linux-x86_64.tar.gz -C /opt \
+    && ln -sf "/opt/cmake-${CMAKE_VERSION}-linux-x86_64/bin/cmake" /usr/local/bin/cmake \
     && cmake --version \
-    && rm -rf /var/lib/apt/lists/* /tmp/cmake-4.4.0-linux-x86_64.tar.gz
+    && rm -rf /var/lib/apt/lists/* /tmp/cmake-linux-x86_64.tar.gz
 
 RUN git clone https://github.com/microsoft/vcpkg.git /opt/vcpkg \
     && git -C /opt/vcpkg checkout "${VCPKG_TAG}" \
+    && sed -i '/if(NOT "debug-support" IN_LIST FEATURES)/,/^endif()$/ { s|if(VCPKG_TARGET_IS_WINDOWS)|if(VCPKG_TARGET_IS_WINDOWS AND EXISTS "${CURRENT_PACKAGES_DIR}/include/wx/debug.h")|; }' /opt/vcpkg/ports/wxwidgets/portfile.cmake \
     && /opt/vcpkg/bootstrap-vcpkg.sh -disableMetrics \
     && chmod -R a+rwx /opt/vcpkg
 
 ENV VCPKG_ROOT=/opt/vcpkg \
     VCPKG_INSTALLED_DIR=/opt/cmdiqo-vcpkg-installed \
+    VCPKG_OVERLAY_TRIPLETS=/opt/cmdiqo-triplets \
     VCPKG_DISABLE_METRICS=1 \
     PATH=/opt/vcpkg:/usr/local/bin:${PATH}
 
 COPY vcpkg.json /tmp/cmdiqo-manifest/vcpkg.json
+COPY triplets /opt/cmdiqo-triplets
 
 # -----------------------------------------------------------------------------
 # Linux stage: GTK3/X11 stack and pre-built x64-linux vcpkg ports
@@ -125,7 +131,7 @@ RUN apt-get update \
 
 RUN /opt/vcpkg/vcpkg install \
         --x-manifest-root=/tmp/cmdiqo-manifest \
-        --triplet=x64-linux \
+        --triplet=x64-linux-release \
         --x-install-root="${VCPKG_INSTALLED_DIR}" \
     && chmod -R a+rwx "${VCPKG_INSTALLED_DIR}" /opt/vcpkg
 
@@ -156,7 +162,7 @@ ENV WINEDEBUG=-all
 
 RUN /opt/vcpkg/vcpkg install \
         --x-manifest-root=/tmp/cmdiqo-manifest \
-        --triplet=x64-mingw-static \
+        --triplet=x64-mingw-static-release \
         --x-install-root="${VCPKG_INSTALLED_DIR}" \
     && chmod -R a+rwx "${VCPKG_INSTALLED_DIR}" /opt/vcpkg
 
@@ -187,7 +193,7 @@ ENV WINEDEBUG=-all
 
 RUN /opt/vcpkg/vcpkg install \
         --x-manifest-root=/tmp/cmdiqo-manifest \
-        --triplet=x64-mingw-static \
+        --triplet=x64-mingw-static-release \
         --x-install-root="${VCPKG_INSTALLED_DIR}" \
     && chmod -R a+rwx "${VCPKG_INSTALLED_DIR}" /opt/vcpkg
 

@@ -55,7 +55,10 @@ function Get-BuilderInputHash {
     $manifest = Join-Path $Root "vcpkg.json"
     $sha256 = [System.Security.Cryptography.SHA256]::Create()
     try {
-        foreach ($Path in @($TargetFile, $manifest)) {
+        $triplets = Get-ChildItem -Path (Join-Path $Root "triplets") -File -Recurse |
+            Sort-Object FullName |
+            Select-Object -ExpandProperty FullName
+        foreach ($Path in @($TargetFile, $manifest) + @($triplets)) {
             $bytes = [System.IO.File]::ReadAllBytes($Path)
             [void]$sha256.TransformBlock($bytes, 0, $bytes.Length, $bytes, 0)
         }

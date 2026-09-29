@@ -34,9 +34,6 @@ Platform Selection:
   --platform, -p <str> Target platform: 'linux64', 'win64', or 'all' (default: linux64)
 
 Compilation & Packaging:
-  --config <cfg>       Build configuration for native C++ installer: 'Release' (default) or 'Debug'
-  --debug, -d          Shortcut for --config Debug
-  --release            Shortcut for --config Release
   --clean              Clean build outputs, agent artifacts, and native installer artifacts
   --skip-agent-build   With --installer, reuse existing agent ZIP package
                        and build only the native C++ setup executable
@@ -74,7 +71,6 @@ COPY_TO=""
 VERSION_OVERRIDE=""
 DOCKER_USERNAME="${DOCKERHUB_USERNAME:-lhotakj}"
 PLATFORM="linux64"
-BUILD_CONFIG="Release"
 DIST_DIR="$ROOT_DIR/dist"
 
 while [[ $# -gt 0 ]]; do
@@ -97,22 +93,6 @@ while [[ $# -gt 0 ]]; do
                 all) PLATFORM="all" ;;
                 *) error "Invalid platform '${1#*=} '. Expected 'linux64', 'win64', or 'all'."; exit 1 ;;
             esac
-            shift
-            ;;
-        --config|--configuration)
-            BUILD_CONFIG="$2"
-            shift 2
-            ;;
-        --config=*|--configuration=*)
-            BUILD_CONFIG="${1#*=}"
-            shift
-            ;;
-        --debug|-d)
-            BUILD_CONFIG="Debug"
-            shift
-            ;;
-        --release)
-            BUILD_CONFIG="Release"
             shift
             ;;
         --agent|-a)
@@ -170,14 +150,6 @@ while [[ $# -gt 0 ]]; do
         *) error "Unknown argument '$1'. Run with --help for available options."; exit 1 ;;
     esac
 done
-
-case "$(echo "$BUILD_CONFIG" | tr '[:upper:]' '[:lower:]')" in
-    debug) BUILD_CONFIG="Debug" ;;
-    release) BUILD_CONFIG="Release" ;;
-    relwithdebinfo) BUILD_CONFIG="RelWithDebInfo" ;;
-    minsizerel) BUILD_CONFIG="MinSizeRel" ;;
-    *) error "Invalid build configuration '$BUILD_CONFIG'. Expected 'Release' or 'Debug'."; exit 1 ;;
-esac
 
 if [[ "$BUILD_AGENT" = false && "$BUILD_BOT" = false && "$BUILD_INSTALLER" = false ]]; then
     BUILD_AGENT=true
@@ -284,7 +256,12 @@ ensure_installer_builder_image() {
     local dockerfile="$installer_root/Dockerfile"
 
     local build_input_hash
-    build_input_hash="$(cat "$dockerfile" "$installer_root/vcpkg.json" | sha256sum | awk '{print $1}')"
+    build_input_hash="$(
+        {
+            cat "$dockerfile" "$installer_root/vcpkg.json"
+            find "$installer_root/triplets" -type f -print0 | sort -z | xargs -0 cat
+        } | sha256sum | awk '{print $1}'
+    )"
 
     # 1. Check if local image exists and matches input hash
     if docker image inspect "$local_image" >/dev/null 2>&1; then
@@ -356,13 +333,12 @@ build_native_linux_installer() {
 
     ensure_installer_builder_image "linux" "$local_image" "$remote_image" "$installer_root"
 
-    info "=== Building native Linux installer (${BUILD_CONFIG}) ==="
+    info "=== Building native Linux installer (Release) ==="
     local docker_args=(
         run --rm
         --workdir /workspace/installer.c
         --volume "$ROOT_DIR:/workspace"
         --env "CMDIQO_BUILD_VERSION=$payload_version"
-        --env "BUILD_CONFIG=$BUILD_CONFIG"
     )
     if command -v id >/dev/null 2>&1; then
         docker_args+=(--user "$(id -u):$(id -g)")
@@ -370,10 +346,9 @@ build_native_linux_installer() {
     docker "${docker_args[@]}" "$local_image" bash -c '
         set -euo pipefail
         cmake --fresh --preset linux-x64 \
-            "-DCMAKE_BUILD_TYPE=${BUILD_CONFIG}" \
             "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}"
-        cmake --build --preset build-linux-x64 --config "${BUILD_CONFIG}"
-        ctest --preset test-linux-x64 -C "${BUILD_CONFIG}"
+        cmake --build --preset build-linux-x64 --config Release
+        ctest --preset test-linux-x64 -C Release
     '
     cp -f "$installer_root/out/build/linux-x64/cmdiqo-agent-setup" \
         "$DIST_DIR/cmdiqo-agent-linux-x64-setup"
@@ -412,13 +387,12 @@ build_native_windows_installer() {
 
     ensure_installer_builder_image "windows" "$local_image" "$remote_image" "$installer_root"
 
-    info "=== Building native Windows installer (MinGW-w64, ${BUILD_CONFIG}) ==="
+    info "=== Building native Windows installer (MinGW-w64, Release) ==="
     local docker_args=(
         run --rm
         --workdir /workspace/installer.c
         --volume "$ROOT_DIR:/workspace"
         --env "CMDIQO_BUILD_VERSION=$payload_version"
-        --env "BUILD_CONFIG=$BUILD_CONFIG"
     )
     if command -v id >/dev/null 2>&1; then
         docker_args+=(--user "$(id -u):$(id -g)")
@@ -426,10 +400,9 @@ build_native_windows_installer() {
     docker "${docker_args[@]}" "$local_image" bash -c '
         set -euo pipefail
         cmake --fresh --preset windows-x64-mingw \
-            "-DCMAKE_BUILD_TYPE=${BUILD_CONFIG}" \
             "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}"
-        cmake --build --preset build-windows-x64-mingw --config "${BUILD_CONFIG}"
-        ctest --preset test-windows-x64-mingw -C "${BUILD_CONFIG}" || true
+        cmake --build --preset build-windows-x64-mingw --config Release
+        ctest --preset test-windows-x64-mingw -C Release || true
     '
     cp -f "$installer_root/out/build/windows-x64-mingw/cmdiqo-agent-setup.exe" \
         "$DIST_DIR/cmdiqo-agent-windows-x64-setup.exe"

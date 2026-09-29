@@ -5,14 +5,14 @@ named `cmdiqo-agent-setup`. Its release build is invoked only by the
 repository-root build scripts; `installer.c` deliberately has no `build.sh` or
 `build.ps1`.
 
-## Release and Debug builds
+## Release builds
 
-From the repository root, `--installer` / `-Installer` builds the platform
+From the repository root, `--installer` / `-Installer` builds the Release platform
 agent, creates its ZIP, verifies the ZIP's `version.txt`, then compiles,
 tests, and packages the native installer. The matching ZIP and setup executable are published together in `dist/` so
 payload discovery works without extra arguments.
 
-By default, all native C++ installer binaries are built in **`Release`** configuration with compiler optimizations and stripped symbols. **`Debug`** configuration (with full debug symbols and unstripped binaries) can be selected using `--debug` (or `--config Debug`).
+All native C++ installer binaries are built in **`Release`** configuration with compiler optimizations and stripped symbols.
 
 ### Building on Linux / macOS (Bash)
 
@@ -20,14 +20,8 @@ By default, all native C++ installer binaries are built in **`Release`** configu
 # Build Linux agent package and native Linux setup (Release by default):
 ./build.sh --installer
 
-# Build with Debug configuration (unstripped, debug symbols):
-./build.sh --installer --debug
-
 # Build Windows agent package and native Windows setup in Docker via MinGW-w64:
 ./build.sh --installer --platform win64
-
-# Build Windows native setup in Debug configuration:
-./build.sh --installer --platform win64 --debug
 
 # Reuse existing ZIP package and rebuild only the native setup:
 ./build.sh --installer --skip-agent-build
@@ -39,17 +33,12 @@ By default, all native C++ installer binaries are built in **`Release`** configu
 # Build Windows agent ZIP and native Windows setup (Release by default):
 .\build.ps1 -Installer
 
-# Build with Debug configuration (unstripped, debug symbols):
-.\build.ps1 -Installer -Debug
-
 # Reuse existing Windows agent ZIP and rebuild only the native setup:
 .\build.ps1 -Installer -SkipAgentBuild
 
 # Build Linux agent ZIP and native Linux setup using Docker Desktop:
 .\build.ps1 -Installer -Platform Linux
 
-# Build Linux native setup in Debug configuration:
-.\build.ps1 -Installer -Platform Linux -Debug
 ```
 
 ### Produced Artifacts in `dist/`
@@ -162,10 +151,6 @@ cmake --preset windows-x64
 cmake --build --preset build-windows-x64
 ctest --preset test-windows-x64
 
-# Debug:
-cmake --preset windows-x64-debug
-cmake --build --preset build-windows-x64-debug
-ctest --preset test-windows-x64-debug
 ```
 
 ### Windows (MinGW-w64 Cross-compilation in Docker or Linux host):
@@ -177,10 +162,6 @@ cmake --preset windows-x64-mingw
 cmake --build --preset build-windows-x64-mingw
 ctest --preset test-windows-x64-mingw
 
-# Debug:
-cmake --preset windows-x64-mingw-debug
-cmake --build --preset build-windows-x64-mingw-debug
-ctest --preset test-windows-x64-mingw-debug
 ```
 
 ### Linux (Native):
@@ -192,10 +173,6 @@ cmake --preset linux-x64
 cmake --build --preset build-linux-x64
 ctest --preset test-linux-x64
 
-# Debug:
-cmake --preset linux-x64-debug
-cmake --build --preset build-linux-x64-debug
-ctest --preset test-linux-x64-debug
 ```
 
 ## Application behavior

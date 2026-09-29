@@ -79,7 +79,12 @@ build_docker_image() {
   local alt_remote_tag="${5:-}"
 
   local build_input_hash
-  build_input_hash="$(cat "${DOCKERFILE}" "${ROOT}/vcpkg.json" | sha256sum | awk '{print $1}')"
+  build_input_hash="$(
+    {
+      cat "${DOCKERFILE}" "${ROOT}/vcpkg.json"
+      find "${ROOT}/triplets" -type f -print0 | sort -z | xargs -0 cat
+    } | sha256sum | awk '{print $1}'
+  )"
   local image_build_input_hash=""
   if docker image inspect "${local_tag}" >/dev/null 2>&1; then
     image_build_input_hash="$(docker image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' "${local_tag}")"
