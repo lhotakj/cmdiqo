@@ -309,8 +309,15 @@ build_native_linux_installer() {
     local installer_root="$ROOT_DIR/installer.c"
     local local_image="cmdiqo-installer-builder:ubuntu-22.04"
     local remote_image="${DOCKER_USERNAME}/cmdiqo-installer-builder:ubuntu-22.04"
+    local target_stage="linux"
     local payload="$DIST_DIR/cmdiqo-agent-linux-x64.zip"
     local payload_version
+
+    if [[ "$PLATFORM" == "all" ]]; then
+        local_image="cmdiqo-installer-builder:all"
+        remote_image="${DOCKER_USERNAME}/cmdiqo-installer-builder:all"
+        target_stage="all"
+    fi
 
     if [[ "$DOCKER_RUNNING" != true ]]; then
         error "Docker is required to build the native Linux installer."
@@ -331,7 +338,7 @@ build_native_linux_installer() {
         exit 1
     fi
 
-    ensure_installer_builder_image "linux" "$local_image" "$remote_image" "$installer_root"
+    ensure_installer_builder_image "$target_stage" "$local_image" "$remote_image" "$installer_root"
 
     info "=== Building native Linux installer (Release) ==="
     local docker_args=(
@@ -363,8 +370,15 @@ build_native_windows_installer() {
     local installer_root="$ROOT_DIR/installer.c"
     local local_image="cmdiqo-installer-builder:windows-mingw"
     local remote_image="${DOCKER_USERNAME}/cmdiqo-installer-builder:windows-mingw"
+    local target_stage="windows"
     local payload="$DIST_DIR/cmdiqo-agent-windows-x64.zip"
     local payload_version
+
+    if [[ "$PLATFORM" == "all" ]]; then
+        local_image="cmdiqo-installer-builder:all"
+        remote_image="${DOCKER_USERNAME}/cmdiqo-installer-builder:all"
+        target_stage="all"
+    fi
 
     if [[ "$DOCKER_RUNNING" != true ]]; then
         error "Docker is required to build the native Windows installer with MinGW-w64."
@@ -385,7 +399,7 @@ build_native_windows_installer() {
         exit 1
     fi
 
-    ensure_installer_builder_image "windows" "$local_image" "$remote_image" "$installer_root"
+    ensure_installer_builder_image "$target_stage" "$local_image" "$remote_image" "$installer_root"
 
     info "=== Building native Windows installer (MinGW-w64, Release) ==="
     local docker_args=(

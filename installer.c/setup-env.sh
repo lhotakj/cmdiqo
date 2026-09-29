@@ -228,8 +228,6 @@ case "${PLATFORM}" in
     info "Build from repository root with: ./build.sh --installer --platform win64"
     ;;
   all)
-#    build_docker_image "linux" "Linux" "cmdiqo-installer-builder:ubuntu-22.04" "${DOCKER_USER}/cmdiqo-installer-builder:ubuntu-22.04" "${DOCKER_USER}/cmdiqo-installer-builder:linux"
-#    build_docker_image "windows" "Windows (MinGW-w64)" "cmdiqo-installer-builder:windows-mingw" "${DOCKER_USER}/cmdiqo-installer-builder:windows-mingw" "${DOCKER_USER}/cmdiqo-installer-builder:windows"
     build_docker_image "all" "Unified Multi-Toolchain" "cmdiqo-installer-builder:all" "${DOCKER_USER}/cmdiqo-installer-builder:all" "${DOCKER_USER}/cmdiqo-installer-builder:ubuntu-22.04-all"
     info "Build from repository root with: ./build.sh --installer --platform all"
     ;;

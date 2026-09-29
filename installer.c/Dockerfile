@@ -60,7 +60,10 @@ RUN git clone https://github.com/microsoft/vcpkg.git /opt/vcpkg \
     && sed -i '/if(NOT "debug-support" IN_LIST FEATURES)/,/^endif()$/ { s|if(VCPKG_TARGET_IS_WINDOWS)|if(VCPKG_TARGET_IS_WINDOWS AND EXISTS "${CURRENT_PACKAGES_DIR}/include/wx/debug.h")|; }' /opt/vcpkg/ports/wxwidgets/portfile.cmake \
     && /opt/vcpkg/bootstrap-vcpkg.sh -disableMetrics \
     && rm -rf /opt/vcpkg/.git \
-    && install --directory --mode=1777 /opt/vcpkg/buildtrees
+    && install --directory --mode=1777 \
+        /opt/vcpkg/buildtrees \
+        /opt/vcpkg/packages \
+        /opt/vcpkg/downloads
 
 ENV VCPKG_ROOT=/opt/vcpkg \
     VCPKG_INSTALLED_DIR=/opt/cmdiqo-vcpkg-installed \
