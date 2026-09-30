@@ -82,28 +82,49 @@ jobs:
       - name: Release BuildKit cache before verification
         run: docker buildx prune --all --force
 
-      - name: Verify native installer toolchains
+      - name: Verify builder image can compile the installer GUI
         shell: bash
         env:
           DOCKER_USER: ${{ inputs.docker_user || 'lhotakj' }}
           PLATFORM: ${{ inputs.platform || 'all' }}
         run: |
+          set -euo pipefail
+
           case "$PLATFORM" in
-            linux) IMAGE="${DOCKER_USER}/cmdiqo-installer-builder:ubuntu-22.04"; PRESETS=(linux-x64) ;;
-            windows) IMAGE="${DOCKER_USER}/cmdiqo-installer-builder:windows-mingw"; PRESETS=(windows-x64-mingw) ;;
-            all) IMAGE="${DOCKER_USER}/cmdiqo-installer-builder:all"; PRESETS=(linux-x64 windows-x64-mingw) ;;
+            linux) IMAGE="${DOCKER_USER}/cmdiqo-installer-builder:ubuntu-22.04"; TARGETS=(linux-x64) ;;
+            windows) IMAGE="${DOCKER_USER}/cmdiqo-installer-builder:windows-mingw"; TARGETS=(windows-x64-mingw) ;;
+            all) IMAGE="${DOCKER_USER}/cmdiqo-installer-builder:all"; TARGETS=(linux-x64 windows-x64-mingw) ;;
           esac
 
-          for PRESET in "${PRESETS[@]}"; do
+          for PRESET in "${TARGETS[@]}"; do
+            case "$PRESET" in
+              linux-x64) INSTALLED_DIR_VAR=VCPKG_INSTALLED_DIR_LINUX; ARTIFACT=cmdiqo-agent-setup ;;
+              windows-x64-mingw) INSTALLED_DIR_VAR=VCPKG_INSTALLED_DIR_WINDOWS; ARTIFACT=cmdiqo-agent-setup.exe ;;
+            esac
+
+            # Smoke test only: the image must already contain every vcpkg dependency,
+            # so manifest installation is disabled (-DVCPKG_MANIFEST_INSTALL=OFF).
+            # A missing pre-built dependency fails the configure step within seconds
+            # instead of silently recompiling the whole vcpkg tree from source.
             docker run --rm \
               --user "$(id -u):$(id -g)" \
               --workdir /workspace/installer.c \
               --volume "${GITHUB_WORKSPACE}:/workspace" \
               --env HOME=/tmp \
               --env CMDIQO_BUILD_VERSION=0.9.ci \
-              "$IMAGE" bash -euxo pipefail -c "
-                cmake --fresh --preset ${PRESET} \"-DVCPKG_INSTALLED_DIR=\${VCPKG_INSTALLED_DIR}\"
-                cmake --build --preset build-${PRESET} --config Release
-                ctest --preset test-${PRESET} -C Release --output-on-failure
-              "
+              --env "INSTALLED_DIR_VAR=${INSTALLED_DIR_VAR}" \
+              --env "PRESET=${PRESET}" \
+              --env "ARTIFACT=${ARTIFACT}" \
+              "$IMAGE" bash -euxo pipefail -c '
+                INSTALLED_DIR="${!INSTALLED_DIR_VAR}"
+                test -d "${INSTALLED_DIR}"
+                cmake --fresh --preset "${PRESET}" \
+                  "-DVCPKG_INSTALLED_DIR=${INSTALLED_DIR}" \
+                  -DVCPKG_MANIFEST_INSTALL=OFF
+                cmake --build --preset "build-${PRESET}" --config Release
+                file "out/build/${PRESET}/${ARTIFACT}"
+                if [ "${PRESET}" = "linux-x64" ]; then
+                  ctest --preset "test-${PRESET}" -C Release --output-on-failure
+                fi
+              '
           done
