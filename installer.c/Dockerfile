@@ -135,7 +135,9 @@ RUN mkdir -p /tmp/vcpkg-binary-cache \
         --x-packages-root=/tmp/vcpkg-packages \
         --downloads-root=/tmp/vcpkg-downloads \
     && rm -rf /tmp/vcpkg-binary-cache /tmp/vcpkg-buildtrees /tmp/vcpkg-downloads /tmp/vcpkg-packages \
-    && chmod -R a+rwX "${VCPKG_INSTALLED_DIR}"
+    && install --directory --mode=0777 "${VCPKG_INSTALLED_DIR}/vcpkg" \
+    && find "${VCPKG_INSTALLED_DIR}" -type d -exec chmod a+rwx {} + \
+    && chmod -R a+rwX "${VCPKG_INSTALLED_DIR}/vcpkg"
 
 WORKDIR /workspace
 
@@ -171,7 +173,9 @@ RUN mkdir -p /tmp/vcpkg-binary-cache \
         --x-packages-root=/tmp/vcpkg-packages \
         --downloads-root=/tmp/vcpkg-downloads \
     && rm -rf /tmp/vcpkg-binary-cache /tmp/vcpkg-buildtrees /tmp/vcpkg-downloads /tmp/vcpkg-packages \
-    && chmod -R a+rwX "${VCPKG_INSTALLED_DIR}"
+    && install --directory --mode=0777 "${VCPKG_INSTALLED_DIR}/vcpkg" \
+    && find "${VCPKG_INSTALLED_DIR}" -type d -exec chmod a+rwx {} + \
+    && chmod -R a+rwX "${VCPKG_INSTALLED_DIR}/vcpkg"
 
 WORKDIR /workspace
 
@@ -207,6 +211,8 @@ RUN mkdir -p /tmp/vcpkg-binary-cache \
         --x-packages-root=/tmp/vcpkg-packages \
         --downloads-root=/tmp/vcpkg-downloads \
     && rm -rf /tmp/vcpkg-binary-cache /tmp/vcpkg-buildtrees /tmp/vcpkg-downloads /tmp/vcpkg-packages \
-    && chmod -R a+rwX "${VCPKG_INSTALLED_DIR}"
+    && install --directory --mode=0777 "${VCPKG_INSTALLED_DIR}/vcpkg" \
+    && find "${VCPKG_INSTALLED_DIR}" -type d -exec chmod a+rwx {} + \
+    && chmod -R a+rwX "${VCPKG_INSTALLED_DIR}/vcpkg"
 
 WORKDIR /workspace
