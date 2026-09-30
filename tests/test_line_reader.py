@@ -9,6 +9,13 @@ import pytest
 from slacksim.line_reader import ConsoleLineReader
 
 
+@pytest.fixture
+def mock_msvcrt(monkeypatch):
+    msvcrt = MagicMock()
+    monkeypatch.setitem(sys.modules, "msvcrt", msvcrt)
+    return msvcrt
+
+
 def test_line_reader_initial_state():
     reader = ConsoleLineReader(["/help", "/lan devices list"])
     assert len(reader.history) == 2
@@ -238,14 +245,14 @@ def test_line_reader_non_tty_eof():
         reader.readline("prompt> ")
 
 
-def test_line_reader_windows_esc_and_typing():
+def test_line_reader_windows_esc_and_typing(mock_msvcrt):
     reader = ConsoleLineReader()
     mock_keys = ["m", "i", "s", "t", "a", "k", "e", "\x1b", "c", "o", "r", "r", "e", "c", "t", "\r"]
+    mock_msvcrt.getwch.side_effect = mock_keys
 
     with (
         patch("sys.stdin.isatty", return_value=True),
         patch("os.name", "nt"),
-        patch("msvcrt.getwch", side_effect=mock_keys),
         patch("sys.stdout.write"),
         patch("sys.stdout.flush"),
     ):
@@ -253,15 +260,15 @@ def test_line_reader_windows_esc_and_typing():
         assert line == "correct"
 
 
-def test_line_reader_windows_arrows_and_history():
+def test_line_reader_windows_arrows_and_history(mock_msvcrt):
     reader = ConsoleLineReader(["/help", "/lan version"])
     # Extended prefix \xe0 followed by 'H' (UP), then Enter '\r'
     mock_keys = ["\xe0", "H", "\r"]
+    mock_msvcrt.getwch.side_effect = mock_keys
 
     with (
         patch("sys.stdin.isatty", return_value=True),
         patch("os.name", "nt"),
-        patch("msvcrt.getwch", side_effect=mock_keys),
         patch("sys.stdout.write"),
         patch("sys.stdout.flush"),
     ):
@@ -269,12 +276,12 @@ def test_line_reader_windows_arrows_and_history():
         assert line == "/lan version"
 
 
-def test_line_reader_windows_ctrl_c():
+def test_line_reader_windows_ctrl_c(mock_msvcrt):
     reader = ConsoleLineReader()
+    mock_msvcrt.getwch.return_value = "\x03"
     with (
         patch("sys.stdin.isatty", return_value=True),
         patch("os.name", "nt"),
-        patch("msvcrt.getwch", return_value="\x03"),
         patch("sys.stdout.write"),
         patch("sys.stdout.flush"),
         pytest.raises(KeyboardInterrupt),
@@ -282,12 +289,12 @@ def test_line_reader_windows_ctrl_c():
         reader.readline("prompt> ")
 
 
-def test_line_reader_windows_eof():
+def test_line_reader_windows_eof(mock_msvcrt):
     reader = ConsoleLineReader()
+    mock_msvcrt.getwch.return_value = "\x04"
     with (
         patch("sys.stdin.isatty", return_value=True),
         patch("os.name", "nt"),
-        patch("msvcrt.getwch", return_value="\x04"),
         patch("sys.stdout.write"),
         patch("sys.stdout.flush"),
         pytest.raises(EOFError),
@@ -295,14 +302,14 @@ def test_line_reader_windows_eof():
         reader.readline("prompt> ")
 
 
-def test_line_reader_windows_backspace():
+def test_line_reader_windows_backspace(mock_msvcrt):
     reader = ConsoleLineReader()
     mock_keys = ["a", "b", "\x08", "c", "\r"]
+    mock_msvcrt.getwch.side_effect = mock_keys
 
     with (
         patch("sys.stdin.isatty", return_value=True),
         patch("os.name", "nt"),
-        patch("msvcrt.getwch", side_effect=mock_keys),
         patch("sys.stdout.write"),
         patch("sys.stdout.flush"),
     ):
@@ -310,7 +317,7 @@ def test_line_reader_windows_backspace():
         assert line == "ac"
 
 
-def test_line_reader_windows_extended_navigation():
+def test_line_reader_windows_extended_navigation(mock_msvcrt):
     reader = ConsoleLineReader(["/help", "/lan version"])
     # UP, DOWN, LEFT, RIGHT, HOME, END, DELETE
     mock_keys = [
@@ -325,11 +332,11 @@ def test_line_reader_windows_extended_navigation():
         "!",
         "\r",
     ]
+    mock_msvcrt.getwch.side_effect = mock_keys
 
     with (
         patch("sys.stdin.isatty", return_value=True),
         patch("os.name", "nt"),
-        patch("msvcrt.getwch", side_effect=mock_keys),
         patch("sys.stdout.write"),
         patch("sys.stdout.flush"),
     ):

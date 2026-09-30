@@ -353,7 +353,7 @@ build_native_linux_installer() {
     docker "${docker_args[@]}" "$local_image" bash -c '
         set -euo pipefail
         cmake --fresh --preset linux-x64 \
-            "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR}" \
+            "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR_LINUX:-$VCPKG_INSTALLED_DIR}" \
             "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}"
         cmake --build --preset build-linux-x64 --config Release
         ctest --preset test-linux-x64 -C Release
@@ -415,7 +415,7 @@ build_native_windows_installer() {
     docker "${docker_args[@]}" "$local_image" bash -c '
         set -euo pipefail
         cmake --fresh --preset windows-x64-mingw \
-            "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR}" \
+            "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR_WINDOWS:-$VCPKG_INSTALLED_DIR}" \
             "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}"
         cmake --build --preset build-windows-x64-mingw --config Release
         ctest --preset test-windows-x64-mingw -C Release || true

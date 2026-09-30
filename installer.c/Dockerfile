@@ -52,6 +52,7 @@ RUN apt-get update \
     && echo "${CMAKE_SHA256}  /tmp/cmake-linux-x86_64.tar.gz" | sha256sum --check --strict \
     && tar -xzf /tmp/cmake-linux-x86_64.tar.gz -C /opt \
     && ln -sf "/opt/cmake-${CMAKE_VERSION}-linux-x86_64/bin/cmake" /usr/local/bin/cmake \
+    && ln -sf "/opt/cmake-${CMAKE_VERSION}-linux-x86_64/bin/ctest" /usr/local/bin/ctest \
     && cmake --version \
     && rm -rf /var/lib/apt/lists/* /tmp/cmake-linux-x86_64.tar.gz
 
@@ -65,8 +66,15 @@ RUN git clone https://github.com/microsoft/vcpkg.git /opt/vcpkg \
         /opt/vcpkg/packages \
         /opt/vcpkg/downloads
 
-ENV VCPKG_ROOT=/opt/vcpkg \
-    VCPKG_INSTALLED_DIR=/opt/cmdiqo-vcpkg-installed \
+# vcpkg manifest-mode installs behave like "x-set-installed": every run makes the
+# install root match the requested plan exactly and removes everything else from it.
+# Each triplet therefore needs its own install root, otherwise the MinGW install in
+# the windows/all stages deletes the pre-built Linux packages again.
+ENV HOME=/tmp \
+    VCPKG_ROOT=/opt/vcpkg \
+    VCPKG_INSTALLED_DIR_LINUX=/opt/cmdiqo-vcpkg-installed/linux \
+    VCPKG_INSTALLED_DIR_WINDOWS=/opt/cmdiqo-vcpkg-installed/windows-mingw \
+    VCPKG_INSTALLED_DIR=/opt/cmdiqo-vcpkg-installed/linux \
     VCPKG_OVERLAY_TRIPLETS=/opt/cmdiqo-triplets \
     VCPKG_DISABLE_METRICS=1 \
     PATH=/opt/vcpkg:/usr/local/bin:${PATH}
@@ -130,12 +138,14 @@ RUN mkdir -p /tmp/vcpkg-binary-cache \
     && VCPKG_DEFAULT_BINARY_CACHE=/tmp/vcpkg-binary-cache /opt/vcpkg/vcpkg install \
         --x-manifest-root=/tmp/cmdiqo-manifest \
         --triplet=x64-linux-release \
-        --x-install-root="${VCPKG_INSTALLED_DIR}" \
+        --x-install-root="${VCPKG_INSTALLED_DIR_LINUX}" \
         --x-buildtrees-root=/tmp/vcpkg-buildtrees \
         --x-packages-root=/tmp/vcpkg-packages \
         --downloads-root=/tmp/vcpkg-downloads \
     && rm -rf /tmp/vcpkg-binary-cache /tmp/vcpkg-buildtrees /tmp/vcpkg-downloads /tmp/vcpkg-packages \
-    && install --directory --mode=1777 "${VCPKG_INSTALLED_DIR}/vcpkg"
+    && install --directory --mode=0777 "${VCPKG_INSTALLED_DIR_LINUX}/vcpkg" \
+    && find "${VCPKG_INSTALLED_DIR_LINUX}" -type d -exec chmod a+rwx {} + \
+    && chmod -R a+rwX "${VCPKG_INSTALLED_DIR_LINUX}/vcpkg"
 
 WORKDIR /workspace
 
@@ -160,18 +170,21 @@ RUN apt-get update \
     && update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix \
     && rm -rf /var/lib/apt/lists/*
 
-ENV WINEDEBUG=-all
+ENV WINEDEBUG=-all \
+    VCPKG_INSTALLED_DIR=/opt/cmdiqo-vcpkg-installed/windows-mingw
 
 RUN mkdir -p /tmp/vcpkg-binary-cache \
     && VCPKG_DEFAULT_BINARY_CACHE=/tmp/vcpkg-binary-cache /opt/vcpkg/vcpkg install \
         --x-manifest-root=/tmp/cmdiqo-manifest \
         --triplet=x64-mingw-static-release \
-        --x-install-root="${VCPKG_INSTALLED_DIR}" \
+        --x-install-root="${VCPKG_INSTALLED_DIR_WINDOWS}" \
         --x-buildtrees-root=/tmp/vcpkg-buildtrees \
         --x-packages-root=/tmp/vcpkg-packages \
         --downloads-root=/tmp/vcpkg-downloads \
     && rm -rf /tmp/vcpkg-binary-cache /tmp/vcpkg-buildtrees /tmp/vcpkg-downloads /tmp/vcpkg-packages \
-    && install --directory --mode=1777 "${VCPKG_INSTALLED_DIR}/vcpkg"
+    && install --directory --mode=0777 "${VCPKG_INSTALLED_DIR_WINDOWS}/vcpkg" \
+    && find "${VCPKG_INSTALLED_DIR_WINDOWS}" -type d -exec chmod a+rwx {} + \
+    && chmod -R a+rwX "${VCPKG_INSTALLED_DIR_WINDOWS}/vcpkg"
 
 WORKDIR /workspace
 
@@ -202,11 +215,13 @@ RUN mkdir -p /tmp/vcpkg-binary-cache \
     && VCPKG_DEFAULT_BINARY_CACHE=/tmp/vcpkg-binary-cache /opt/vcpkg/vcpkg install \
         --x-manifest-root=/tmp/cmdiqo-manifest \
         --triplet=x64-mingw-static-release \
-        --x-install-root="${VCPKG_INSTALLED_DIR}" \
+        --x-install-root="${VCPKG_INSTALLED_DIR_WINDOWS}" \
         --x-buildtrees-root=/tmp/vcpkg-buildtrees \
         --x-packages-root=/tmp/vcpkg-packages \
         --downloads-root=/tmp/vcpkg-downloads \
     && rm -rf /tmp/vcpkg-binary-cache /tmp/vcpkg-buildtrees /tmp/vcpkg-downloads /tmp/vcpkg-packages \
-    && install --directory --mode=1777 "${VCPKG_INSTALLED_DIR}/vcpkg"
+    && install --directory --mode=0777 "${VCPKG_INSTALLED_DIR_WINDOWS}/vcpkg" \
+    && find "${VCPKG_INSTALLED_DIR_WINDOWS}" -type d -exec chmod a+rwx {} + \
+    && chmod -R a+rwX "${VCPKG_INSTALLED_DIR_WINDOWS}/vcpkg"
 
 WORKDIR /workspace
