@@ -75,7 +75,20 @@ triplet so the output binary runs on any 64-bit Windows host without external Mi
 ## Docker build architecture & Pre-built Docker Hub Images
 
 The Docker build environment is 100% self-contained within a single multi-stage
-[Dockerfile](file:///h:/WORKING/cmdiqo/installer.c/Dockerfile). All vcpkg dependencies are pinned to tag `2026.07.29` and pre-compiled into `/opt/cmdiqo-vcpkg-installed`. No external host caches or directory mounts are required.
+[Dockerfile](file:///h:/WORKING/cmdiqo/installer.c/Dockerfile). All vcpkg dependencies are pinned to tag `2026.07.29` and pre-compiled into one install root per triplet:
+
+| Environment variable | Install root | Triplet |
+|---|---|---|
+| `VCPKG_INSTALLED_DIR_LINUX` | `/opt/cmdiqo-vcpkg-installed/linux` | `x64-linux-release` |
+| `VCPKG_INSTALLED_DIR_WINDOWS` | `/opt/cmdiqo-vcpkg-installed/windows-mingw` | `x64-mingw-static-release` |
+
+Separate roots are mandatory: a vcpkg manifest-mode install behaves like
+`x-set-installed` and deletes everything from the install root that is not part of the
+requested plan, so a shared root would lose the Linux packages when the MinGW packages
+are installed in the `windows`/`all` stages. `VCPKG_INSTALLED_DIR` still points at the
+default root of the stage (Linux for `linux`/`all`, MinGW for `windows`), and the build
+scripts pass the matching platform-specific root to CMake. No external host caches or
+directory mounts are required.
 
 Pre-built builder images are published to Docker Hub under `lhotakj/cmdiqo-installer-builder:*`:
 
