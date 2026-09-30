@@ -65,7 +65,8 @@ RUN git clone https://github.com/microsoft/vcpkg.git /opt/vcpkg \
         /opt/vcpkg/packages \
         /opt/vcpkg/downloads
 
-ENV VCPKG_ROOT=/opt/vcpkg \
+ENV HOME=/tmp \
+    VCPKG_ROOT=/opt/vcpkg \
     VCPKG_INSTALLED_DIR=/opt/cmdiqo-vcpkg-installed \
     VCPKG_OVERLAY_TRIPLETS=/opt/cmdiqo-triplets \
     VCPKG_DISABLE_METRICS=1 \
