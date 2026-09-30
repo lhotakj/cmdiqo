@@ -20,6 +20,7 @@
 #include <wx/dcmemory.h>
 #include <wx/frame.h>
 #include <wx/image.h>
+#include <wx/imagpng.h>
 #include <wx/mstream.h>
 #include <wx/msgdlg.h>
 #include <wx/panel.h>
@@ -93,7 +94,9 @@ public:
         auto* panel = new wxPanel(this);
         auto* layout = new wxBoxSizer(wxVERTICAL);
 
-        wxInitAllImageHandlers();
+        if (wxImage::FindHandler(wxBITMAP_TYPE_PNG) == nullptr) {
+            wxImage::AddHandler(new wxPNGHandler);
+        }
         auto* header = new wxBoxSizer(wxHORIZONTAL);
         auto* title = new wxStaticText(panel, wxID_ANY, "Cmdiqo Agent native installer");
         header->Add(title, 1, wxALL | wxALIGN_CENTER_VERTICAL, 12);
