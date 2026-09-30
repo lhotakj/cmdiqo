@@ -1,5 +1,6 @@
 #include "cmdiqo/gui.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -11,14 +12,19 @@
 #include <vector>
 
 #include <wx/app.h>
+#include <wx/bitmap.h>
 #include <wx/button.h>
 #include <wx/checkbox.h>
+#include <wx/dcmemory.h>
 #include <wx/frame.h>
 #include <wx/msgdlg.h>
 #include <wx/panel.h>
 #include <wx/sizer.h>
+#include <wx/statbmp.h>
+#include <wx/statusbr.h>
 #include <wx/stattext.h>
 #include <wx/textctrl.h>
+#include <wx/timer.h>
 #include <wx/utils.h>
 
 namespace cmdiqo::installer {
@@ -78,18 +84,14 @@ public:
         : wxFrame(nullptr, wxID_ANY, "Cmdiqo Agent Setup", wxDefaultPosition, wxSize(720, 680)),
           service_(),
           payload_(std::move(payload)),
-          initial_config_(std::move(initial_config)) {
+          initial_config_(std::move(initial_config)),
+          service_status_timer_(this) {
         auto* panel = new wxPanel(this);
         auto* layout = new wxBoxSizer(wxVERTICAL);
 
         auto* title = new wxStaticText(panel, wxID_ANY, "Cmdiqo Agent native installer");
-        wxFont title_font = title->GetFont();
-        title_font.SetPointSize(title_font.GetPointSize() + 4);
-        title_font.MakeBold();
-        title->SetFont(title_font);
         layout->Add(title, 0, wxALL, 12);
         state_ = new wxStaticText(panel, wxID_ANY, "");
-        state_->Wrap(650);
         layout->Add(state_, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 12);
 
         auto* form = new wxFlexGridSizer(2, 8, 10);
@@ -119,8 +121,24 @@ public:
         layout->Add(new wxStaticText(panel, wxID_ANY, "Progress and log"), 0, wxLEFT | wxRIGHT | wxBOTTOM, 12);
         log_ = new wxTextCtrl(panel, wxID_ANY, "", wxDefaultPosition, wxDefaultSize,
                               wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH2);
+        log_->SetBackgroundColour(wxColour(0, 0, 0));
+        log_->SetForegroundColour(wxColour(144, 238, 144));
         layout->Add(log_, 1, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 12);
         panel->SetSizer(layout);
+        status_bar_ = CreateStatusBar(2);
+        const int status_widths[] = {FromDIP(20), -1};
+        status_bar_->SetStatusWidths(2, status_widths);
+        status_icon_ = new wxStaticBitmap(status_bar_, wxID_ANY, make_status_icon(wxColour(128, 128, 128)));
+        position_status_icon();
+        status_bar_->Bind(wxEVT_SIZE, [this](wxSizeEvent& event) {
+            position_status_icon();
+            event.Skip();
+        });
+        Bind(wxEVT_SIZE, [this](wxSizeEvent& event) {
+            layout_state_summary();
+            event.Skip();
+        });
+        Bind(wxEVT_TIMER, &InstallerFrame::on_service_status_timer, this);
 
         Centre();
         Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& event) {
@@ -147,9 +165,100 @@ private:
         container->Add(button, 0, wxRIGHT, 8);
     }
 
+    void append_log_segment(const wxString& text, const wxColour& color, bool bold) {
+        wxTextAttr style(color, wxColour(0, 0, 0));
+        wxFont font = log_->GetFont();
+        font.SetWeight(bold ? wxFONTWEIGHT_BOLD : wxFONTWEIGHT_NORMAL);
+        style.SetFont(font);
+        log_->SetDefaultStyle(style);
+        log_->AppendText(text);
+    }
+
     void append_log(const std::string& message) {
-        log_->AppendText(wxString::FromUTF8(message) + "\n");
+        constexpr std::string_view ok_prefix = "[OK] ";
+        constexpr std::string_view error_prefix = "[ERROR] ";
+        if (message.starts_with(ok_prefix)) {
+            append_log_segment("[OK]", wxColour(144, 238, 144), true);
+            append_log_segment(wxString::FromUTF8(message.substr(ok_prefix.size())), wxColour(144, 238, 144), false);
+        } else if (message.starts_with(error_prefix)) {
+            append_log_segment("[ERROR]", wxColour(255, 99, 71), true);
+            append_log_segment(wxString::FromUTF8(message.substr(error_prefix.size())), wxColour(144, 238, 144), false);
+        } else {
+            append_log_segment(wxString::FromUTF8(message), wxColour(144, 238, 144), false);
+        }
+        append_log_segment("\n", wxColour(144, 238, 144), false);
         append_gui_log(message);
+    }
+
+    void layout_state_summary() {
+        wxWindow* parent = state_->GetParent();
+        const int available_width = parent->GetClientSize().GetWidth() - FromDIP(24);
+        state_->Wrap(std::max(FromDIP(250), available_width));
+        parent->Layout();
+    }
+
+    wxBitmap make_status_icon(const wxColour& color) const {
+        const int size = FromDIP(12);
+        wxBitmap bitmap(size, size);
+        wxMemoryDC context(bitmap);
+        context.SetBackground(wxBrush(status_bar_->GetBackgroundColour()));
+        context.Clear();
+        context.SetBrush(wxBrush(color));
+        context.SetPen(wxPen(color));
+        context.DrawCircle(size / 2, size / 2, size / 2 - 1);
+        context.SelectObject(wxNullBitmap);
+        return bitmap;
+    }
+
+    void position_status_icon() {
+        if (status_bar_ == nullptr || status_icon_ == nullptr) {
+            return;
+        }
+        wxRect field;
+        status_bar_->GetFieldRect(0, field);
+        const int icon_size = FromDIP(12);
+        status_icon_->SetSize(
+            field.x + (field.width - icon_size) / 2,
+            field.y + (field.height - icon_size) / 2,
+            icon_size,
+            icon_size);
+    }
+
+    void set_service_status_text(const std::string& text, const wxColour& color) {
+        status_icon_->SetBitmap(make_status_icon(color));
+        status_icon_->Show();
+        status_bar_->SetStatusText(wxString::FromUTF8(text), 1);
+    }
+
+    void show_starting_service_status() {
+        service_starting_ = true;
+        starting_icon_visible_ = true;
+        service_status_timer_.Start(500);
+        set_service_status_text("service is being started ...", wxColour(255, 140, 0));
+    }
+
+    void update_service_status(ServiceStatus status, const std::optional<std::string>& version) {
+        service_starting_ = false;
+        service_status_timer_.Stop();
+        if (status == ServiceStatus::running) {
+            set_service_status_text("service running version " + version.value_or("unknown"), wxColour(50, 205, 50));
+        } else if (status == ServiceStatus::stopped) {
+            set_service_status_text("service stopped version " + version.value_or("unknown"), wxColour(30, 144, 255));
+        } else {
+            set_service_status_text("service not installed ...", wxColour(192, 192, 192));
+        }
+    }
+
+    void on_service_status_timer(wxTimerEvent&) {
+        if (!service_starting_) {
+            return;
+        }
+        starting_icon_visible_ = !starting_icon_visible_;
+        if (starting_icon_visible_) {
+            set_service_status_text("service is being started ...", wxColour(255, 140, 0));
+        } else {
+            status_icon_->Hide();
+        }
     }
 
     Config current_config() const {
@@ -235,11 +344,9 @@ private:
             summary += "Version comparison is unavailable until the expected platform payload is beside this installer.\n";
         }
 
-        const ServiceStatus service_status = PlatformOperations::service_status(service_.paths());
-        const char* status = service_status == ServiceStatus::running
-            ? "running" : service_status == ServiceStatus::stopped ? "stopped" : "not installed";
-        summary += "Service " + service_.paths().service_name + ": " + status;
         state_->SetLabel(wxString::FromUTF8(summary));
+        layout_state_summary();
+        update_service_status(PlatformOperations::service_status(service_.paths()), installed);
         append_log("State refreshed.");
     }
 
@@ -326,6 +433,7 @@ private:
                 missing_payload, "Cmdiqo Agent Setup", wxOK | wxICON_ERROR, this);
             return;
         }
+        show_starting_service_status();
         run_background([this, config, payload] {
             return service_.install_or_upgrade(config, *payload, [this](std::string_view message) {
                 const std::string copy(message);
@@ -342,6 +450,9 @@ private:
     void service_action(const std::string& action) {
         if (!require_elevation()) {
             return;
+        }
+        if (action == "start" || action == "restart") {
+            show_starting_service_status();
         }
         run_background([this, action] {
             if (action == "start") {
@@ -381,8 +492,13 @@ private:
     wxTextCtrl* agent_name_{};
     wxCheckBox* notify_{};
     wxTextCtrl* log_{};
+    wxStatusBar* status_bar_{};
+    wxStaticBitmap* status_icon_{};
+    wxTimer service_status_timer_;
     std::vector<wxButton*> buttons_;
     bool operation_in_progress_{false};
+    bool service_starting_{false};
+    bool starting_icon_visible_{false};
 };
 
 class InstallerApp final : public wxApp {
