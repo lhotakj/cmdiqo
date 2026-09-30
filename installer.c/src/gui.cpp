@@ -1,6 +1,8 @@
 #include "cmdiqo/gui.hpp"
+#include "embedded_logos.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -17,6 +19,8 @@
 #include <wx/checkbox.h>
 #include <wx/dcmemory.h>
 #include <wx/frame.h>
+#include <wx/image.h>
+#include <wx/mstream.h>
 #include <wx/msgdlg.h>
 #include <wx/panel.h>
 #include <wx/sizer.h>
@@ -89,8 +93,14 @@ public:
         auto* panel = new wxPanel(this);
         auto* layout = new wxBoxSizer(wxVERTICAL);
 
+        wxInitAllImageHandlers();
+        auto* header = new wxBoxSizer(wxHORIZONTAL);
         auto* title = new wxStaticText(panel, wxID_ANY, "Cmdiqo Agent native installer");
-        layout->Add(title, 0, wxALL, 12);
+        header->Add(title, 1, wxALL | wxALIGN_CENTER_VERTICAL, 12);
+        auto* logo = new wxStaticBitmap(panel, wxID_ANY, platform_logo());
+        logo->SetToolTip(wxGetOsDescription());
+        header->Add(logo, 0, wxTOP | wxRIGHT | wxBOTTOM, 12);
+        layout->Add(header, 0, wxEXPAND);
         state_ = new wxStaticText(panel, wxID_ANY, "");
         layout->Add(state_, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 12);
 
@@ -153,6 +163,23 @@ public:
     }
 
 private:
+    wxBitmap platform_logo() const {
+        const unsigned char* data = resources::linux_logo.data();
+        std::size_t size = resources::linux_logo.size();
+        if (current_platform() == Platform::windows) {
+            data = resources::win_logo.data();
+            size = resources::win_logo.size();
+        }
+        wxMemoryInputStream stream(data, size);
+        wxImage image(stream, wxBITMAP_TYPE_PNG);
+        if (!image.IsOk()) {
+            return {};
+        }
+        const int logo_size = FromDIP(48);
+        image.Rescale(logo_size, logo_size, wxIMAGE_QUALITY_HIGH);
+        return wxBitmap(image);
+    }
+
     static void add_field(wxWindow* parent, wxFlexGridSizer* form, const wxString& label, wxTextCtrl* control) {
         form->Add(new wxStaticText(parent, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL);
         form->Add(control, 1, wxEXPAND);

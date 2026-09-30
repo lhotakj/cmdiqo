@@ -14,6 +14,26 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(libzip CONFIG REQUIRED)
 find_package(wxWidgets CONFIG REQUIRED)
 
+set(CMDIQO_EMBEDDED_RESOURCES_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(CMDIQO_EMBEDDED_LOGOS_HEADER "${CMDIQO_EMBEDDED_RESOURCES_DIR}/embedded_logos.hpp")
+file(MAKE_DIRECTORY "${CMDIQO_EMBEDDED_RESOURCES_DIR}")
+file(WRITE "${CMDIQO_EMBEDDED_LOGOS_HEADER}"
+    "#pragma once\n\n#include <array>\n\nnamespace cmdiqo::installer::resources {\n")
+foreach(logo IN ITEMS win linux)
+    set(logo_path "${CMAKE_CURRENT_SOURCE_DIR}/src/bitmaps/${logo}.png")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${logo_path}")
+    file(READ "${logo_path}" logo_hex HEX)
+    string(REGEX MATCHALL "[0-9A-Fa-f][0-9A-Fa-f]" logo_bytes "${logo_hex}")
+    list(LENGTH logo_bytes logo_size)
+    file(APPEND "${CMDIQO_EMBEDDED_LOGOS_HEADER}"
+        "\ninline constexpr std::array<unsigned char, ${logo_size}> ${logo}_logo = {\n")
+    foreach(byte IN LISTS logo_bytes)
+        file(APPEND "${CMDIQO_EMBEDDED_LOGOS_HEADER}" "0x${byte},")
+    endforeach()
+    file(APPEND "${CMDIQO_EMBEDDED_LOGOS_HEADER}" "\n};\n")
+endforeach()
+file(APPEND "${CMDIQO_EMBEDDED_LOGOS_HEADER}" "\n}  // namespace cmdiqo::installer::resources\n")
+
 add_library(cmdiqo_installer_core STATIC
     src/core.cpp
     src/installer.cpp
@@ -41,6 +61,7 @@ target_link_libraries(cmdiqo-agent-setup
         wx::core
         wx::base
 )
+target_include_directories(cmdiqo-agent-setup PRIVATE "${CMDIQO_EMBEDDED_RESOURCES_DIR}")
 
 if(WIN32)
     enable_language(RC)
