@@ -52,6 +52,7 @@ RUN apt-get update \
     && echo "${CMAKE_SHA256}  /tmp/cmake-linux-x86_64.tar.gz" | sha256sum --check --strict \
     && tar -xzf /tmp/cmake-linux-x86_64.tar.gz -C /opt \
     && ln -sf "/opt/cmake-${CMAKE_VERSION}-linux-x86_64/bin/cmake" /usr/local/bin/cmake \
+    && ln -sf "/opt/cmake-${CMAKE_VERSION}-linux-x86_64/bin/ctest" /usr/local/bin/ctest \
     && cmake --version \
     && rm -rf /var/lib/apt/lists/* /tmp/cmake-linux-x86_64.tar.gz
 
