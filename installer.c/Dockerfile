@@ -65,7 +65,8 @@ RUN git clone https://github.com/microsoft/vcpkg.git /opt/vcpkg \
         /opt/vcpkg/packages \
         /opt/vcpkg/downloads
 
-ENV VCPKG_ROOT=/opt/vcpkg \
+ENV HOME=/tmp \
+    VCPKG_ROOT=/opt/vcpkg \
     VCPKG_INSTALLED_DIR=/opt/cmdiqo-vcpkg-installed \
     VCPKG_OVERLAY_TRIPLETS=/opt/cmdiqo-triplets \
     VCPKG_DISABLE_METRICS=1 \
@@ -135,7 +136,8 @@ RUN mkdir -p /tmp/vcpkg-binary-cache \
         --x-packages-root=/tmp/vcpkg-packages \
         --downloads-root=/tmp/vcpkg-downloads \
     && rm -rf /tmp/vcpkg-binary-cache /tmp/vcpkg-buildtrees /tmp/vcpkg-downloads /tmp/vcpkg-packages \
-    && install --directory --mode=1777 "${VCPKG_INSTALLED_DIR}/vcpkg" \
+    && install --directory --mode=0777 "${VCPKG_INSTALLED_DIR}/vcpkg" \
+    && find "${VCPKG_INSTALLED_DIR}" -type d -exec chmod a+rwx {} + \
     && chmod -R a+rwX "${VCPKG_INSTALLED_DIR}/vcpkg"
 
 WORKDIR /workspace
@@ -172,7 +174,8 @@ RUN mkdir -p /tmp/vcpkg-binary-cache \
         --x-packages-root=/tmp/vcpkg-packages \
         --downloads-root=/tmp/vcpkg-downloads \
     && rm -rf /tmp/vcpkg-binary-cache /tmp/vcpkg-buildtrees /tmp/vcpkg-downloads /tmp/vcpkg-packages \
-    && install --directory --mode=1777 "${VCPKG_INSTALLED_DIR}/vcpkg" \
+    && install --directory --mode=0777 "${VCPKG_INSTALLED_DIR}/vcpkg" \
+    && find "${VCPKG_INSTALLED_DIR}" -type d -exec chmod a+rwx {} + \
     && chmod -R a+rwX "${VCPKG_INSTALLED_DIR}/vcpkg"
 
 WORKDIR /workspace
@@ -209,7 +212,8 @@ RUN mkdir -p /tmp/vcpkg-binary-cache \
         --x-packages-root=/tmp/vcpkg-packages \
         --downloads-root=/tmp/vcpkg-downloads \
     && rm -rf /tmp/vcpkg-binary-cache /tmp/vcpkg-buildtrees /tmp/vcpkg-downloads /tmp/vcpkg-packages \
-    && install --directory --mode=1777 "${VCPKG_INSTALLED_DIR}/vcpkg" \
+    && install --directory --mode=0777 "${VCPKG_INSTALLED_DIR}/vcpkg" \
+    && find "${VCPKG_INSTALLED_DIR}" -type d -exec chmod a+rwx {} + \
     && chmod -R a+rwX "${VCPKG_INSTALLED_DIR}/vcpkg"
 
 WORKDIR /workspace
