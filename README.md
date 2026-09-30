@@ -479,7 +479,14 @@ Outputs: `dist/cmdiqo-agent` and `dist/cmdiqo-agent-linux-x64.zip`. Each ZIP inc
 the matching ZIP. Keep both `dist` files together when distributing the
 graphical installer.
 
-`build.sh` produces Linux executables only. PyInstaller emits Windows PE files only when run by Windows Python, so use `build.ps1` on Windows or the native Windows GitHub Actions runner for `.exe` files.
+The Docker installer routes in `build.sh` and `build.ps1` use the unified
+`lhotakj/cmdiqo-installer-builder:all` image: GCC builds the Linux GTK3 setup,
+and MinGW-w64 cross-compiles the Windows wxMSW setup. PyInstaller still needs
+native Windows Python for the Windows agent. From Unix, place a Windows-built
+agent ZIP in `dist/`, then run
+`./build.sh --installer --platform win64 --skip-agent-build`. Windows Git Bash
+can build the agent with native Windows Python; PowerShell supports a complete
+two-platform build with `.\build.ps1 -Installer -Platform all`.
 
 #### 3. Automated CI Builds via GitHub Actions (Direct Download)
 The repository includes [`.github/workflows/build-agent.yml`](.github/workflows/build-agent.yml). Select **Actions → Build Agent Binaries (Windows & Linux x64) → Run workflow** to create downloadable artifacts without a release:

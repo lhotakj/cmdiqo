@@ -149,15 +149,28 @@ build_docker_image() {
   build_input_hash="$(
     {
       cat "${DOCKERFILE}" "${ROOT}/vcpkg.json"
-      find "${ROOT}/triplets" -type f -print0 | sort -z | xargs -0 cat
-    } | sha256sum | awk '{print $1}'
+      find "${ROOT}/triplets" -type f | LC_ALL=C sort |
+        while IFS= read -r triplet; do cat "${triplet}"; done
+    } | tr -d '\r' | {
+      if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum
+      else
+        shasum -a 256
+      fi
+    } | awk '{print $1}'
   )"
   local image_build_input_hash=""
-  if docker image inspect "${local_tag}" >/dev/null 2>&1; then
-    image_build_input_hash="$(docker image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' "${local_tag}")"
-  elif docker image inspect "${remote_tag}" >/dev/null 2>&1; then
-    image_build_input_hash="$(docker image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' "${remote_tag}")"
-  fi
+  local existing_image=""
+  local candidate
+  for candidate in "${local_tag}" "${remote_tag}"; do
+    if docker image inspect "${candidate}" >/dev/null 2>&1; then
+      image_build_input_hash="$(docker image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' "${candidate}")"
+      if [[ "${image_build_input_hash}" == "${build_input_hash}" ]]; then
+        existing_image="${candidate}"
+        break
+      fi
+    fi
+  done
   debug "Build input hash: ${build_input_hash}; current image hash: ${image_build_input_hash:-none}"
 
   if [[ "${REBUILD_IMAGE}" -eq 1 || "${image_build_input_hash}" != "${build_input_hash}" ]]; then
@@ -169,6 +182,7 @@ build_docker_image() {
     # --load  → image is exported into the local Docker daemon (local dev path)
     local build_args=(
       buildx build
+      --platform linux/amd64
       --file "${DOCKERFILE}"
       --target "${target_stage}"
       --build-arg "BUILDER_INPUT_SHA=${build_input_hash}"
@@ -194,24 +208,21 @@ build_docker_image() {
     docker "${build_args[@]}" "${ROOT}"
   else
     # Image is already up-to-date; just re-tag and optionally push.
+    if [[ "${existing_image}" != "${local_tag}" ]]; then
+      docker tag "${existing_image}" "${local_tag}"
+    fi
+    docker tag "${local_tag}" "${remote_tag}"
+    if [[ -n "${alt_remote_tag}" ]]; then
+      docker tag "${local_tag}" "${alt_remote_tag}"
+    fi
     if [[ "${PUSH}" -eq 1 ]]; then
       info "Pushing existing ${label} builder image to Docker Hub (${remote_tag})."
-      docker tag "${local_tag}" "${remote_tag}" 2>/dev/null \
-        || docker tag "${remote_tag}" "${local_tag}" 2>/dev/null \
-        || true
       docker push "${remote_tag}"
       if [[ -n "${alt_remote_tag}" ]]; then
-        docker tag "${remote_tag}" "${alt_remote_tag}" 2>/dev/null || true
         docker push "${alt_remote_tag}"
       fi
     else
       info "Reusing current ${label} Docker builder image."
-      docker tag "${local_tag}" "${remote_tag}" 2>/dev/null \
-        || docker tag "${remote_tag}" "${local_tag}" 2>/dev/null \
-        || true
-      if [[ -n "${alt_remote_tag}" ]]; then
-        docker tag "${remote_tag}" "${alt_remote_tag}" 2>/dev/null || true
-      fi
     fi
   fi
 

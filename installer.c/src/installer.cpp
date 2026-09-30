@@ -1,9 +1,11 @@
 #include "cmdiqo/installer.hpp"
 
 #include <array>
+#include <chrono>
 #include <fstream>
 #include <regex>
 #include <system_error>
+#include <thread>
 #include <utility>
 
 #include <zip.h>
@@ -45,7 +47,13 @@ bool copy_zip_entry(zip_t* archive, zip_uint64_t index, const std::filesystem::p
     std::ofstream output(destination, std::ios::binary | std::ios::trunc);
     if (!output) {
         zip_fclose(entry);
+#ifdef _WIN32
+        const DWORD windows_error = GetLastError();
+        error = "Could not open " + destination.string() + " for writing (Windows error "
+            + std::to_string(windows_error) + ").";
+#else
         error = "Could not open " + destination.string() + " for writing.";
+#endif
         return false;
     }
 
@@ -70,6 +78,39 @@ bool copy_zip_entry(zip_t* archive, zip_uint64_t index, const std::filesystem::p
     }
     return true;
 }
+
+#ifdef _WIN32
+OperationResult wait_for_file_release(const std::filesystem::path& path) {
+    constexpr int max_wait_seconds = 30;
+    for (int attempt = 0; attempt <= max_wait_seconds; ++attempt) {
+        HANDLE handle = CreateFileW(
+            path.c_str(),
+            GENERIC_READ | GENERIC_WRITE,
+            0,
+            nullptr,
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            nullptr);
+        if (handle != INVALID_HANDLE_VALUE) {
+            CloseHandle(handle);
+            return OperationResult::success("Existing agent executable is no longer in use.");
+        }
+
+        const DWORD windows_error = GetLastError();
+        if (windows_error == ERROR_FILE_NOT_FOUND || windows_error == ERROR_PATH_NOT_FOUND) {
+            return OperationResult::success("Existing agent executable is no longer present.");
+        }
+        if (attempt < max_wait_seconds) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            continue;
+        }
+        return OperationResult::failure(
+            "Agent executable is still locked after waiting 30 seconds for the service to stop (Windows error "
+            + std::to_string(windows_error) + ").");
+    }
+    return OperationResult::failure("Agent executable release check did not complete.");
+}
+#endif
 
 std::optional<std::string> read_zip_text_entry(zip_t* archive, const char* name) {
     zip_stat_t information{};
@@ -273,6 +314,7 @@ OperationResult InstallerService::install_or_upgrade(
     if (!PlatformOperations::is_elevated()) {
         return OperationResult::failure("Installation requires Administrator/root privileges.");
     }
+    report(progress, "Installer elevation check passed.");
     report(progress, "Saving configuration.");
     if (const OperationResult saved = save_config(paths_, config); !saved.ok) {
         logger_.error(saved.message);
@@ -284,7 +326,17 @@ OperationResult InstallerService::install_or_upgrade(
             logger_.error(stopped.message);
             return stopped;
         }
+        report(progress, "Service stop confirmed.");
     }
+#ifdef _WIN32
+    report(progress, "Waiting for the agent executable to be released.");
+    const OperationResult released = wait_for_file_release(paths_.binary_path);
+    if (!released.ok) {
+        logger_.error(released.message);
+        return released;
+    }
+    report(progress, released.message);
+#endif
     report(progress, "Validating and extracting " + payload.filename().string() + ".");
     if (const OperationResult extracted = extract_payload(payload, progress); !extracted.ok) {
         logger_.error(extracted.message);

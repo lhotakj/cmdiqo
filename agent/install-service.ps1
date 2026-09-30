@@ -77,6 +77,27 @@ $ServiceName = "CmdiqoAgent"
 $DisplayName = "Cmdiqo LAN Remote Agent"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
+function Stop-ServiceForAgentUpdate {
+    $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+    if (-not $service) {
+        return
+    }
+
+    if ($service.Status -ne [System.ServiceProcess.ServiceControllerStatus]::Stopped) {
+        Write-Host "[*] Stopping service $ServiceName before replacing its executable..." -ForegroundColor Cyan
+        Stop-Service -Name $ServiceName -Force -ErrorAction Stop
+    }
+
+    try {
+        $service.WaitForStatus(
+            [System.ServiceProcess.ServiceControllerStatus]::Stopped,
+            [TimeSpan]::FromSeconds(30)
+        )
+    } catch {
+        throw "Service $ServiceName did not stop within 30 seconds; the agent executable was not replaced. $($_.Exception.Message)"
+    }
+}
+
 # ==============================================================================
 # UNINSTALL WORKFLOW
 # ==============================================================================
@@ -206,6 +227,7 @@ try {
 
 # 4. Locate or copy cmdiqo-agent binary / python scripts
 $DestExe = Join-Path $InstallDir "cmdiqo-agent.exe"
+Stop-ServiceForAgentUpdate
 
 $latestDownload = Get-ChildItem -Path "$env:USERPROFILE\Downloads" -Filter "*cmdiqo-agent*.exe" -Recurse -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending |
@@ -299,8 +321,6 @@ $serviceConfigured = $false
 
 if ($existingSvc) {
     Write-Host "[*] Updating existing service '$ServiceName' in-place..." -ForegroundColor Cyan
-    Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 1
 
     $configResult = & sc.exe config $ServiceName binPath= $BinPathValue start= auto DisplayName= $DisplayName 2>&1
     if ($LASTEXITCODE -eq 0) {
@@ -320,11 +340,20 @@ if ($existingSvc) {
                     break
                 }
             }
+            if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
+                throw "Service $ServiceName is still marked for deletion. Close services.msc and re-run the installer."
+            }
+        } else {
+            $configError = ($configResult | Out-String).Trim()
+            throw "Could not update existing service ${ServiceName}: $configError"
         }
     }
 }
 
 if (-not $serviceConfigured) {
+    if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
+        throw "Service $ServiceName already exists and could not be updated."
+    }
     Write-Host "[*] Registering '$ServiceName' with Windows Service Control Manager..." -ForegroundColor Cyan
     try {
         New-Service -Name $ServiceName `

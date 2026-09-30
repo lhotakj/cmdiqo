@@ -144,7 +144,10 @@ def package_agent_zip(system: str, dist_path: Path) -> Path:
     dist_dir = dist_path.parent
     pkg_dir = dist_dir / "package"
     if pkg_dir.exists():
-        shutil.rmtree(pkg_dir)
+        if pkg_dir.is_dir():
+            shutil.rmtree(pkg_dir)
+        else:
+            pkg_dir.unlink()
     pkg_dir.mkdir(parents=True)
 
     if system == "windows":

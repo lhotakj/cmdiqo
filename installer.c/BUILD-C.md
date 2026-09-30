@@ -20,11 +20,14 @@ All native C++ installer binaries are built in **`Release`** configuration with 
 # Build Linux agent package and native Linux setup (Release by default):
 ./build.sh --installer
 
-# Build Windows agent package and native Windows setup in Docker via MinGW-w64:
-./build.sh --installer --platform win64
+# Cross-build Windows setup via MinGW-w64, using a ZIP built on Windows:
+./build.sh --installer --platform win64 --skip-agent-build
 
 # Reuse existing ZIP package and rebuild only the native setup:
 ./build.sh --installer --skip-agent-build
+
+# Rebuild both setups from their existing platform ZIPs:
+./build.sh --installer --platform all --skip-agent-build
 ```
 
 ### Building on Windows (PowerShell)
@@ -38,6 +41,9 @@ All native C++ installer binaries are built in **`Release`** configuration with 
 
 # Build Linux agent ZIP and native Linux setup using Docker Desktop:
 .\build.ps1 -Installer -Platform Linux
+
+# Build both agent packages and both setups:
+.\build.ps1 -Installer -Platform All
 
 ```
 
@@ -67,7 +73,8 @@ addition to the agent package and bot image.
 
 Release installers embed the precise version read from the payload ZIP:
 `major.minor.<12-character-git-sha>` in CI, or
-`major.minor.devel+<hex-timestamp>` locally. The Release executables are
+`major.minor.devel+<hex-timestamp>` locally; explicit numeric overrides such as
+`1.2.0` are also accepted. The Release executables are
 stripped after linking. MinGW Windows builds statically link the C/C++ runtime
 (`-static -static-libgcc -static-libstdc++`) via the `x64-mingw-static` vcpkg
 triplet so the output binary runs on any 64-bit Windows host without external MinGW DLLs.
@@ -90,6 +97,63 @@ default root of the stage (Linux for `linux`/`all`, MinGW for `windows`), and th
 scripts pass the matching platform-specific root to CMake. No external host caches or
 directory mounts are required.
 
+The root Bash and PowerShell Docker routes both use
+`lhotakj/cmdiqo-installer-builder:all`, even for a single-platform installer
+build. The optional local MSVC route in PowerShell remains available. The
+platform-specific image stages below are available for manual use, but are not
+selected by the root build scripts.
+
+All native-installer containers target `linux/amd64`. CMake consumes the selected
+pre-built root with `VCPKG_MANIFEST_INSTALL=OFF`; a missing dependency fails the
+build instead of triggering a second vcpkg installation. Linux tests run
+natively, and Windows tests run through `wine64`, available on the image's
+`PATH`. The root scripts and builder workflow fail on either test suite's
+errors and give Wine a writable `WINEPREFIX=/tmp/cmdiqo-wine`.
+
+Windows agent packaging is separate from C++ cross-compilation: PyInstaller
+needs native Windows Python. On Unix, first obtain the Windows ZIP from
+`build.ps1` or the Windows CI runner and put it in `dist/`; then use
+`--skip-agent-build`. On Windows Git Bash, `build.sh` defaults to `win64` and
+uses native Windows Python for the agent, with Docker for the setup.
+
+### GUI backends and Linux-hosted Windows cross-compilation
+
+The same application source uses **wxGTK with GTK3 on Linux** and **wxMSW with
+native Windows controls on Windows**. Both can be compiled inside the `all`
+Linux image: native GCC builds the Linux executable, and MinGW-w64 builds the
+Windows executable. Linux GTK3 development libraries are not Windows target
+libraries; the Windows executable does not depend on GTK3.
+
+The overlay triplets configure wxWidgets through vcpkg's supported
+`VCPKG_CMAKE_CONFIGURE_OPTIONS`, scoped to `PORT STREQUAL "wxwidgets"`:
+
+| Triplet | wxWidgets configuration |
+|---|---|
+| `x64-linux-release` | `wxBUILD_TOOLKIT=gtk3` |
+| `x64-mingw-static-release` | `wxBUILD_TOOLKIT=msw`, `wxBUILD_WIN32_MSVC_NAMING=ON` |
+
+The explicit Windows naming option is important even though the compiler is
+MinGW, not MSVC. With its default `AUTO` setting, wxWidgets chooses Unix-style
+library names and versioned include directories for Linux-hosted cross-builds.
+The vcpkg Windows package finder expects Windows-style names such as
+`libwxbase33u.a` and the `include/wx` header layout. Selecting the upstream
+option aligns the producer and consumer without rewriting portfiles, renaming
+libraries, skipping header processing, or forcing `CMAKE_CROSSCOMPILING` off
+in application configuration.
+
+References:
+
+- [wxWidgets naming option and cross-compilation defaults](https://github.com/wxWidgets/wxWidgets/blob/v3.3.1/build/cmake/options.cmake#L96-L110)
+- [vcpkg Windows wxWidgets package finder](https://github.com/microsoft/vcpkg/blob/2026.07.29/ports/wxwidgets/vcpkg-cmake-wrapper.cmake#L11-L32)
+- [Supported vcpkg per-port triplet customization](https://learn.microsoft.com/en-us/vcpkg/users/triplets#per-port-customization)
+- [Supported vcpkg CMake configuration options](https://learn.microsoft.com/en-us/vcpkg/users/triplets#vcpkg_cmake_configure_options)
+
+Dockerfile and triplet changes invalidate the builder-input hash. Rebuild and
+republish the affected images rather than reusing the previous pre-built
+dependencies. The builder workflow compiles the real installer for both targets
+with manifest installation disabled, so it cannot mask a bad pre-built package
+by downloading or rebuilding dependencies.
+
 Pre-built builder images are published to Docker Hub under `lhotakj/cmdiqo-installer-builder:*`:
 
 | Target Stage (`Dockerfile`) | Docker Hub Image Tag | Local Image Tag | Toolchain & Triplet | Description |
@@ -101,10 +165,10 @@ Pre-built builder images are published to Docker Hub under `lhotakj/cmdiqo-insta
 ### Smart Pre-built Image Resolution
 
 When `./build.sh --installer` or `.\build.ps1 -Installer` runs:
-1. It calculates the SHA-256 hash of `Dockerfile` + `vcpkg.json`.
+1. It calculates the SHA-256 hash of `Dockerfile` + `vcpkg.json` + the sorted overlay triplet files, normalizing checkout CRLF line endings to LF.
 2. It checks if a local image with matching `io.cmdiqo.installer-builder.build-input-sha256` exists.
-3. If not present locally, it automatically pulls the matching pre-built image from Docker Hub (`lhotakj/cmdiqo-installer-builder:...`), eliminating compilation time.
-4. If pulling is unavailable or local changes were made to `Dockerfile` / `vcpkg.json`, it cleanly falls back to building the Docker image locally.
+3. If not present locally, it pulls `lhotakj/cmdiqo-installer-builder:all` and requires the same hash. Images with absent labels are not trusted.
+4. If pulling is unavailable or the hash differs, it builds target `all` locally with `docker buildx build --load --platform linux/amd64`. This also works with the `docker-container` Buildx driver.
 
 ### GitHub Actions Dispatcher Pipeline
 
@@ -120,13 +184,16 @@ Use the setup scripts to pre-build, refresh, or push Docker builder images:
 ```bash
 cd installer.c
 
-# Prepare Linux Docker builder locally:
+# Prepare the unified Docker builder locally (default):
 ./setup-env.sh
+
+# Prepare a Linux-only image for manual use:
+./setup-env.sh --platform linux
 
 # Prepare Windows MinGW-w64 Docker builder locally:
 ./setup-env.sh --platform windows
 
-# Prepare both builder images locally:
+# Prepare the unified builder image locally:
 ./setup-env.sh --platform all
 
 # Build and push all builder images to Docker Hub:
@@ -137,13 +204,16 @@ cd installer.c
 ```powershell
 Set-Location installer.c
 
-# Prepare Windows MinGW-w64 Docker builder locally (default):
+# Prepare the unified Docker builder locally (default):
 .\setup-env.ps1
+
+# Prepare a Windows-only image for manual use:
+.\setup-env.ps1 -Platform Windows
 
 # Prepare Linux Docker builder locally:
 .\setup-env.ps1 -Platform Linux
 
-# Prepare all Docker builders locally:
+# Prepare the unified Docker builder locally:
 .\setup-env.ps1 -Platform All
 
 # Build and push all builder images to Docker Hub:

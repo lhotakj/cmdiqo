@@ -75,7 +75,12 @@ for ($index = 0; $index -lt $CliArgs.Count; $index++) {
     }
 }
 
-$Platform = $Platform.ToLower()
+$Platform = $Platform.ToLowerInvariant()
+switch ($Platform) {
+    "linux" { $Platform = "linux64" }
+    "windows" { $Platform = "win64" }
+    "win" { $Platform = "win64" }
+}
 if ($Platform -notin @("win64", "linux64", "all")) {
     throw "Invalid platform '$Platform'. Expected win64, linux64, or all."
 }
@@ -98,6 +103,11 @@ function Write-Err($msg) {
     Write-Host "[ERROR] $msg" -ForegroundColor Red
 }
 
+function Remove-GeneratedFile([string]$Path) {
+    # File.Delete is idempotent, so an artifact removed between discovery and cleanup is harmless.
+    [System.IO.File]::Delete($Path)
+}
+
 function Show-Usage {
     Write-Host @"
 Usage: .\build.ps1 [options]
@@ -117,7 +127,7 @@ Versioning:
   -Dev, --dev                  Tag version as development build (<major>.<minor>.dev<HEX>)
 
 Compilation & Packaging:
-  -Clean, --clean              Clean build, dist, and selected native installer outputs before building
+  -Clean, --clean              Clean only selected agent and native installer build outputs
   -SkipAgentBuild, --skip-agent-build
                                With -Installer, reuse the existing agent ZIP and build only the native setup
   -SkipSign, --skip-sign       Skip Authenticode signing on Windows
@@ -176,8 +186,12 @@ function Get-PayloadVersion {
     if (-not (Test-Path $PayloadArchive -PathType Leaf)) {
         throw "Native installer packaging requires $PayloadArchive."
     }
-    $payloadVersion = (& python -c "import sys, zipfile; archive = zipfile.ZipFile(sys.argv[1]); name = 'version.txt'; sys.exit('Payload is missing version.txt.') if name not in archive.namelist() else print(archive.read(name).decode('utf-8').strip())" $PayloadArchive).Trim()
-    if ($LASTEXITCODE -ne 0 -or $payloadVersion -notmatch '^\d+\.\d+\.(devel\+[0-9A-F]+|[0-9A-Fa-f]{7,40})$') {
+    $payloadVersionOutput = & python -c "import sys, zipfile; archive = zipfile.ZipFile(sys.argv[1]); name = 'version.txt'; sys.exit('Payload is missing version.txt.') if name not in archive.namelist() else print(archive.read(name).decode('utf-8').strip())" $PayloadArchive
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to read version.txt from the agent payload. Rebuild it with .\build.ps1 -Agent."
+    }
+    $payloadVersion = ([string]$payloadVersionOutput).Trim()
+    if ($payloadVersion -notmatch '^\d+\.\d+\.(\d+|devel\+[0-9A-Fa-f]+|[0-9A-Fa-f]{7,40})$') {
         throw "The agent payload has an invalid or missing version.txt. Rebuild it with .\build.ps1 -Agent."
     }
     return $payloadVersion
@@ -199,7 +213,8 @@ function Ensure-InstallerBuilderImage {
             Sort-Object FullName |
             Select-Object -ExpandProperty FullName
         foreach ($path in @($dockerfile, $manifest) + @($triplets)) {
-            $bytes = [System.IO.File]::ReadAllBytes($path)
+            $text = [System.IO.File]::ReadAllText($path).Replace("`r`n", "`n")
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($text)
             [void]$sha256.TransformBlock($bytes, 0, $bytes.Length, $bytes, 0)
         }
         [void]$sha256.TransformFinalBlock([byte[]]::new(0), 0, 0)
@@ -209,34 +224,52 @@ function Ensure-InstallerBuilderImage {
         $sha256.Dispose()
     }
 
+    # PowerShell 5 must let redirected native stderr reach the exit-code checks.
+    $ErrorActionPreference = "Continue"
+
     # 1. Check local image hash
-    $localHash = & docker image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' $LocalImage 2>$null
-    if ($LASTEXITCODE -eq 0 -and $localHash -eq $buildInputHash) {
-        return
+    $localLabels = & docker image inspect --format '{{json .Config.Labels}}' $LocalImage 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        $localHash = ($localLabels | ConvertFrom-Json -ErrorAction Stop).'io.cmdiqo.installer-builder.build-input-sha256'
+        if ($localHash -eq $buildInputHash) {
+            return
+        }
     }
 
     # 2. Check remote-tagged image hash
-    $remoteHash = & docker image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' $RemoteImage 2>$null
-    if ($LASTEXITCODE -eq 0 -and $remoteHash -eq $buildInputHash) {
-        & docker tag $RemoteImage $LocalImage 2>$null
-        return
+    $remoteLabels = & docker image inspect --format '{{json .Config.Labels}}' $RemoteImage 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        $remoteHash = ($remoteLabels | ConvertFrom-Json -ErrorAction Stop).'io.cmdiqo.installer-builder.build-input-sha256'
+        if ($remoteHash -eq $buildInputHash) {
+            & docker tag $RemoteImage $LocalImage 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to tag native installer builder $RemoteImage as $LocalImage."
+            }
+            return
+        }
     }
 
     # 3. Try pulling from Docker Hub
     Write-Info "Attempting to pull pre-built builder image ($RemoteImage) from Docker Hub..."
     & docker pull $RemoteImage 2>$null
     if ($LASTEXITCODE -eq 0) {
-        $pulledHash = & docker image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' $RemoteImage 2>$null
-        if ($LASTEXITCODE -eq 0 -and ($pulledHash -eq $buildInputHash -or -not $pulledHash)) {
-            Write-Info "Pre-built builder image ($RemoteImage) is ready."
-            & docker tag $RemoteImage $LocalImage 2>$null
-            return
+        $pulledLabels = & docker image inspect --format '{{json .Config.Labels}}' $RemoteImage 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $pulledHash = ($pulledLabels | ConvertFrom-Json -ErrorAction Stop).'io.cmdiqo.installer-builder.build-input-sha256'
+            if ($pulledHash -eq $buildInputHash) {
+                Write-Info "Pre-built builder image ($RemoteImage) is ready."
+                & docker tag $RemoteImage $LocalImage 2>$null
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Failed to tag native installer builder $RemoteImage as $LocalImage."
+                }
+                return
+            }
         }
     }
 
     # 4. Fallback: Build locally
     Write-Info "=== Building native installer Docker image locally ($LocalImage, target: $TargetStage) ==="
-    & docker build --tag $LocalImage --tag $RemoteImage --file $dockerfile --target $TargetStage --build-arg "BUILDER_INPUT_SHA=$buildInputHash" $InstallerRoot
+    & docker buildx build --load --platform linux/amd64 --tag $LocalImage --tag $RemoteImage --file $dockerfile --target $TargetStage --build-arg "BUILDER_INPUT_SHA=$buildInputHash" $InstallerRoot
     if ($LASTEXITCODE -ne 0) {
         throw "Native installer Docker image build failed ($LocalImage)."
     }
@@ -265,8 +298,17 @@ function Invoke-NativeWindowsInstaller {
         Push-Location $installerRoot
         try {
             cmake --fresh --preset windows-x64 "-DCMDIQO_BUILD_VERSION=$payloadVersion"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Native Windows installer configuration failed."
+            }
             cmake --build --preset build-windows-x64 --config Release
-            ctest --preset test-windows-x64 -C Release
+            if ($LASTEXITCODE -ne 0) {
+                throw "Native Windows installer compilation failed."
+            }
+            ctest --preset test-windows-x64 -C Release --output-on-failure
+            if ($LASTEXITCODE -ne 0) {
+                throw "Native Windows installer tests failed."
+            }
             $sourceExe = Join-Path $buildDirectory "cmdiqo-agent-setup.exe"
             if (-not (Test-Path $sourceExe)) {
                 $sourceExe = Join-Path $buildDirectory "Release\cmdiqo-agent-setup.exe"
@@ -283,25 +325,31 @@ function Invoke-NativeWindowsInstaller {
             throw "Docker Desktop was found but its daemon is unavailable. Start Docker Desktop and retry."
         }
 
-        $localImage = "cmdiqo-installer-builder:windows-mingw"
-        $remoteImage = "${DockerUser}/cmdiqo-installer-builder:windows-mingw"
+        $localImage = "cmdiqo-installer-builder:all"
+        $remoteImage = "${DockerUser}/cmdiqo-installer-builder:all"
         $buildDirectory = Join-Path $installerRoot "out\build\windows-x64-mingw"
         if ($Clean -and (Test-Path $buildDirectory)) {
             Remove-Item -Recurse -Force $buildDirectory
         }
 
-        Ensure-InstallerBuilderImage -TargetStage "windows" -LocalImage $localImage -RemoteImage $remoteImage -InstallerRoot $installerRoot
+        Ensure-InstallerBuilderImage -TargetStage "all" -LocalImage $localImage -RemoteImage $remoteImage -InstallerRoot $installerRoot
 
         Write-Info "=== Building native Windows installer (MinGW-w64 in Docker, Release) ==="
         $command = @'
 set -euo pipefail
-cmake --fresh --preset windows-x64-mingw "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR_WINDOWS:-$VCPKG_INSTALLED_DIR}" "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}"
+export TMPDIR="/tmp/cmdiqo-tmp-$$"
+export WINEPREFIX="/tmp/cmdiqo-wine-$$"
+install --directory --mode=700 "$TMPDIR" "$WINEPREFIX"
+cmake --fresh --preset windows-x64-mingw -DVCPKG_MANIFEST_INSTALL=OFF "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR_WINDOWS}" "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}"
 cmake --build --preset build-windows-x64-mingw --config Release
-ctest --preset test-windows-x64-mingw -C Release || true
+ctest --preset test-windows-x64-mingw -C Release --output-on-failure
 '@
         & docker run --rm `
+            --platform linux/amd64 `
             --workdir /workspace/installer.c `
             --volume "${rootDir}:/workspace" `
+            --env HOME=/tmp `
+            --env WINEDEBUG=-all `
             --env "CMDIQO_BUILD_VERSION=$payloadVersion" `
             $localImage bash -c $command
         if ($LASTEXITCODE -ne 0) {
@@ -309,7 +357,7 @@ ctest --preset test-windows-x64-mingw -C Release || true
         }
         Copy-Item -LiteralPath (Join-Path $buildDirectory "cmdiqo-agent-setup.exe") -Destination (Join-Path $rootDir "dist\cmdiqo-agent-windows-x64-setup.exe") -Force
     } else {
-        throw "Native installer dependencies are missing. Run .\installer.c\setup-env.ps1 (for MSVC) or start Docker Desktop (for MinGW builder)."
+        throw "Native installer dependencies are missing. Configure local MSVC with vcpkg, or start Docker Desktop and run .\installer.c\setup-env.ps1."
     }
     Write-Info "Native installer: $(Join-Path $rootDir 'dist\cmdiqo-agent-windows-x64-setup.exe')"
 }
@@ -318,8 +366,8 @@ function Invoke-NativeLinuxInstaller {
     param([string]$PayloadArchive)
 
     $installerRoot = Join-Path $rootDir "installer.c"
-    $localImage = "cmdiqo-installer-builder:ubuntu-22.04"
-    $remoteImage = "${DockerUser}/cmdiqo-installer-builder:ubuntu-22.04"
+    $localImage = "cmdiqo-installer-builder:all"
+    $remoteImage = "${DockerUser}/cmdiqo-installer-builder:all"
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
         throw "Docker Desktop is required to build the native Linux installer."
     }
@@ -334,18 +382,23 @@ function Invoke-NativeLinuxInstaller {
         Remove-Item -Recurse -Force $buildDirectory
     }
 
-    Ensure-InstallerBuilderImage -TargetStage "linux" -LocalImage $localImage -RemoteImage $remoteImage -InstallerRoot $installerRoot
+    Ensure-InstallerBuilderImage -TargetStage "all" -LocalImage $localImage -RemoteImage $remoteImage -InstallerRoot $installerRoot
 
     Write-Info "=== Building native Linux installer (Release) ==="
     $command = @'
 set -euo pipefail
-cmake --fresh --preset linux-x64 "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR_LINUX:-$VCPKG_INSTALLED_DIR}" "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}"
+export TMPDIR="/tmp/cmdiqo-tmp-$$"
+export WINEPREFIX="/tmp/cmdiqo-wine-$$"
+install --directory --mode=700 "$TMPDIR" "$WINEPREFIX"
+cmake --fresh --preset linux-x64 -DVCPKG_MANIFEST_INSTALL=OFF "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR_LINUX}" "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}"
 cmake --build --preset build-linux-x64 --config Release
-ctest --preset test-linux-x64 -C Release
+ctest --preset test-linux-x64 -C Release --output-on-failure
 '@
     & docker run --rm `
+        --platform linux/amd64 `
         --workdir /workspace/installer.c `
         --volume "${rootDir}:/workspace" `
+        --env HOME=/tmp `
         --env "CMDIQO_BUILD_VERSION=$payloadVersion" `
         $localImage bash -c $command
     if ($LASTEXITCODE -ne 0) {
@@ -355,10 +408,46 @@ ctest --preset test-linux-x64 -C Release
     Write-Info "Native installer: $(Join-Path $rootDir 'dist\cmdiqo-agent-linux-x64-setup')"
 }
 
+$buildWin = ($Platform -eq "win64" -or $Platform -eq "all")
+$buildLinux = ($Platform -eq "linux64" -or $Platform -eq "all")
+if ($CopyTo -and (-not $buildAgent -or $Platform -eq "all")) {
+    throw "-CopyTo requires an agent build for a single platform."
+}
+if ($buildAgent -and $buildWin) {
+    $pythonPlatformOutput = & python -c "import platform, struct; print(platform.system().lower() + ':' + platform.machine().lower() + ':' + str(struct.calcsize('P') * 8))"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to identify the Python platform for the Windows x64 agent build."
+    }
+    $pythonPlatform = ([string]$pythonPlatformOutput).Trim()
+    if ($pythonPlatform -notmatch '^windows:(amd64|x86_64):64$') {
+        throw "Windows x64 agent builds require native Windows x64 Python (detected '$pythonPlatform')."
+    }
+}
 if ($Clean) {
-    Write-Info "Cleaning previous build artifacts in build/ and dist/ ..."
-    if (Test-Path "$rootDir\build") { Remove-Item -Recurse -Force "$rootDir\build" }
-    if (-not $SkipAgentBuild -and (Test-Path "$rootDir\dist")) { Remove-Item -Recurse -Force "$rootDir\dist" }
+    Write-Info "Cleaning selected build artifacts ..."
+    $artifacts = @()
+    if ($buildAgent) {
+        $agentBuildDirectory = Join-Path $rootDir "build\cmdiqo-agent"
+        if (Test-Path $agentBuildDirectory -PathType Container) {
+            Remove-Item -LiteralPath $agentBuildDirectory -Recurse -Force
+        }
+        if ($buildWin) {
+            $artifacts += @("cmdiqo-agent.exe", "cmdiqo-agent-windows-x64.zip")
+        }
+        if ($buildLinux) {
+            $artifacts += @("cmdiqo-agent", "cmdiqo-agent-linux-x64.zip")
+        }
+    }
+    if ($buildInstaller -and $buildWin) {
+        $artifacts += "cmdiqo-agent-windows-x64-setup.exe"
+    }
+    if ($buildInstaller -and $buildLinux) {
+        $artifacts += "cmdiqo-agent-linux-x64-setup"
+    }
+    foreach ($artifact in $artifacts) {
+        $artifactPath = Join-Path $rootDir "dist\$artifact"
+        Remove-GeneratedFile $artifactPath
+    }
 }
 
 $versionArgs = @()
@@ -367,17 +456,19 @@ if ($Version) {
 } elseif ($Dev) {
     $versionArgs += "--dev"
 }
-$currentVersion = (python "$rootDir\development\update_version.py" @versionArgs --print-version).Trim()
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($currentVersion)) {
+$currentVersionOutput = & python "$rootDir\development\update_version.py" @versionArgs --print-version
+if ($LASTEXITCODE -ne 0) {
+    Write-Err "Failed to synchronize version."
+    exit 1
+}
+$currentVersion = ([string]$currentVersionOutput).Trim()
+if ([string]::IsNullOrWhiteSpace($currentVersion)) {
     Write-Err "Failed to synchronize version."
     exit 1
 }
 
 $parts = $currentVersion.Split('.')
 $shortVersion = "$($parts[0]).$($parts[1])"
-$plat = $Platform.ToLower()
-$buildWin = ($plat -eq "win64" -or $plat -eq "all")
-$buildLinux = ($plat -eq "linux64" -or $plat -eq "all")
 Write-Info "Building target version: $currentVersion (Short: $shortVersion)"
 Write-Info "Platform selection: $Platform (win64: $buildWin, linux64: $buildLinux)"
 
@@ -387,28 +478,73 @@ if ($buildAgent -and $buildWin) {
     if ($SkipSign) { $buildArgs += "--skip-sign" }
     if ($CopyTo) { $buildArgs += @("--copy-to", $CopyTo) }
 
+    $windowsAgentArtifacts = @(
+        (Join-Path $rootDir "dist\cmdiqo-agent.exe"),
+        (Join-Path $rootDir "dist\cmdiqo-agent-windows-x64.zip")
+    )
+    foreach ($artifact in $windowsAgentArtifacts) {
+        Remove-GeneratedFile $artifact
+    }
     python @buildArgs
     if ($LASTEXITCODE -ne 0) {
         Write-Err "Agent build failed."
         exit 1
+    }
+    foreach ($artifact in $windowsAgentArtifacts) {
+        if (-not (Test-Path $artifact -PathType Leaf)) {
+            throw "Windows agent build did not produce $artifact."
+        }
     }
 }
 
 if ($buildAgent -and $buildLinux) {
     $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
     if (-not $dockerCmd) {
-        Write-Warn "Building linux64 binaries on Windows requires Docker Desktop. Start Docker or run build.sh on Linux."
+        throw "Building linux64 binaries on Windows requires Docker Desktop. Start Docker or run build.sh on Linux."
     } else {
+        & docker info *> $null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Docker Desktop was found but its daemon is unavailable. Start Docker Desktop and retry."
+        }
         Write-Info "=== Building Linux agent in Debian trixie container via Docker ==="
-        docker build -t cmdiqo-builder-linux:trixie -f "$rootDir\docker\Dockerfile.builder-linux" "$rootDir"
+        docker buildx build --load --platform linux/amd64 -t cmdiqo-builder-linux:trixie -f "$rootDir\docker\Dockerfile.builder-linux" "$rootDir"
         if ($LASTEXITCODE -ne 0) {
             throw "Linux Docker builder image creation failed."
         }
 
-        $linuxBashScript = "python3 development/build_agent.py --version $currentVersion"
-        docker run --rm -v "${rootDir}:/workspace" -w /workspace -e HOME=/workspace cmdiqo-builder-linux:trixie bash -c $linuxBashScript
+        $linuxAgentArtifacts = @(
+            (Join-Path $rootDir "dist\cmdiqo-agent"),
+            (Join-Path $rootDir "dist\cmdiqo-agent-linux-x64.zip")
+        )
+        foreach ($artifact in $linuxAgentArtifacts) {
+            Remove-GeneratedFile $artifact
+        }
+        $linuxBashScript = 'python3 development/build_agent.py --version "$CMDIQO_BUILD_VERSION"'
+        docker run --rm --platform linux/amd64 -v "${rootDir}:/workspace" -w /workspace -e HOME=/tmp -e "CMDIQO_BUILD_VERSION=$currentVersion" cmdiqo-builder-linux:trixie bash -c $linuxBashScript
         if ($LASTEXITCODE -ne 0) {
             throw "Linux agent build failed."
+        }
+        foreach ($artifact in $linuxAgentArtifacts) {
+            if (-not (Test-Path $artifact -PathType Leaf)) {
+                throw "Linux agent build did not produce $artifact."
+            }
+        }
+        if ($CopyTo) {
+            $copyDestination = if (Test-Path $CopyTo -PathType Container) {
+                Join-Path $CopyTo "cmdiqo-agent"
+            } else {
+                $CopyTo
+            }
+            $copyDestination = [System.IO.Path]::GetFullPath($copyDestination)
+            $copyDirectory = Split-Path -Parent $copyDestination
+            [void](New-Item -ItemType Directory -Force -Path $copyDirectory)
+            if ($copyDestination -ne $linuxAgentArtifacts[0]) {
+                Copy-Item -LiteralPath $linuxAgentArtifacts[0] -Destination $copyDestination -Force
+            }
+            $copyArchive = Join-Path $copyDirectory "cmdiqo-agent-linux-x64.zip"
+            if ($copyArchive -ne $linuxAgentArtifacts[1]) {
+                Copy-Item -LiteralPath $linuxAgentArtifacts[1] -Destination $copyArchive -Force
+            }
         }
     }
 }
@@ -424,12 +560,17 @@ if ($buildBot) {
     Write-Info "=== Building Docker image for cmdiqo-bot ==="
     $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
     if (-not $dockerCmd) {
-        Write-Warn "Docker CLI is not installed or not in PATH. Skipping container build."
+        throw "Docker CLI is required to build the bot container."
     } else {
+        & docker info *> $null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Docker Desktop was found but its daemon is unavailable. Start Docker Desktop and retry."
+        }
         $timestamp = (Get-Date -Format "yyyyMMddHHmmss")
         $imgLatest = "$DockerUser/cmdiqo-bot:latest"
         $imgShort = "$DockerUser/cmdiqo-bot:$shortVersion"
-        $imgFull = "$DockerUser/cmdiqo-bot:$currentVersion"
+        $dockerVersion = $currentVersion.Replace('+', '-')
+        $imgFull = "$DockerUser/cmdiqo-bot:$dockerVersion"
         $imgTs = "$DockerUser/cmdiqo-bot:$timestamp"
 
         if ($Push) {
@@ -446,7 +587,7 @@ if ($buildBot) {
                 .
         } else {
             Write-Info "Building local container image ($imgFull) ..."
-            docker build `
+            docker buildx build --load `
                 -t $imgLatest `
                 -t $imgShort `
                 -t $imgFull `

@@ -152,7 +152,7 @@ If you want to test-build an ad-hoc version without modifying `version.txt`:
 
 Cmdiqo provides unified, self-contained native build scripts located at the repository root:
 - `build.ps1` for Windows (PowerShell)
-- `build.sh` for Linux, macOS, and WSL (Bash)
+- `build.sh` for Linux, macOS, WSL, and Windows Git Bash
 
 Supporting utilities (`build_agent.py`, `update_version.py`, certificates, and environment setup scripts) reside in `development/`.
 
@@ -203,7 +203,9 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1 --target agent --platform w
 - `-SkipAgentBuild`: With `-Installer`, reuse the existing platform ZIP and
   rebuild only the native C++ setup executable.
 - `-SkipSign`: Skip Authenticode digital signing on Windows.
-- `-CopyTo <path>`: Automatically copy built executable to destination path upon completion.
+- `-CopyTo <path>`: Automatically copy the built agent binary to a destination
+  path. Requires an agent build for a single platform; Linux Docker builds also
+  copy the ZIP beside it.
 - `-Push`: Build and push multi-architecture Docker image to registry (`linux/amd64,linux/arm64`).
 - `-DockerUser <string>`: Docker Hub registry namespace/username (defaults to `$env:DOCKERHUB_USERNAME` or `lhotakj`).
 - `-Help, -h, -?`: Display detailed usage instructions.
@@ -225,11 +227,14 @@ Run `./build.sh`:
 # 4. Build the Linux agent package and native setup executable (Release by default):
 ./build.sh --installer
 
-# 5. Build Windows native setup from Linux via MinGW-w64 in Docker:
-./build.sh --installer --platform win64
+# 5. Cross-build Windows setup using a ZIP built on Windows:
+./build.sh --installer --platform win64 --skip-agent-build
 
 # 6. Rebuild only the native setup using the existing agent ZIP:
 ./build.sh --installer --skip-agent-build
+
+# Rebuild both native setups from existing Linux and Windows ZIPs:
+./build.sh --installer --platform all --skip-agent-build
 
 # 7. Build Docker container for cmdiqo-bot:
 ./build.sh --bot
@@ -246,22 +251,65 @@ Run `./build.sh`:
 - `--installer, -i`: Build the standalone agent binary and ZIP package, then
   build the native C++ setup executable with that exact ZIP beside it.
 - `--bot, -b, --docker`: Build Docker container for `cmdiqo-bot`.
-- `--all`: Build the Linux agent package, native setup executable, and bot container.
+- `--all`: Build the agent package, native setup executable, and bot container
+  for the selected platform. This is a component selector, not `--platform all`.
 - `--target <agent|installer|bot|all>`: Explicit target selection parameter.
-- `--platform, -p <linux64|win64|all>`: Target platform selection (default: `linux64`).
+- `--platform, -p <linux64|win64|all>`: Target platform selection. Defaults to
+  `win64` on Windows Git Bash and `linux64` elsewhere; `linux`, `windows`, and
+  `win` are accepted aliases.
 - `-v, --version <string>`: Explicit version override (e.g. `1.2.0`).
 - `--dev`: Force development build format `<major>.<minor>.devel+<HEX>`.
-- `--clean`: Clean `build/` and `dist/` directories before compiling.
-- `--skip-agent-build`: With `--installer`, reuse the existing Linux agent ZIP
-  and rebuild only the native C++ setup executable.
-- `--copy-to <path>`: Automatically copy built binary to destination path upon completion.
+- `--clean`: Clean selected build outputs; preserve input ZIPs when
+  `--skip-agent-build` is used and preserve other platforms' distributions.
+- `--skip-agent-build`: With `--installer`, reuse the selected platforms'
+  existing agent ZIPs and rebuild only the native C++ setup executables.
+- `--copy-to <path>`: Copy the agent binary and its ZIP to a destination
+  directory or binary filename. Requires an agent build for a single platform;
+  works for both Docker and host-Python builds.
+- `--skip-sign`: Skip Authenticode signing when building with native Windows Python.
 - `--push`: Build and push multi-architecture Docker image to registry (`linux/amd64,linux/arm64`).
-- `--docker-user <string>`: Docker Hub registry namespace/username (defaults to `$DOCKERHUB_USERNAME` or `lhotakj`).
+- `--docker-user <string>`: Docker Hub registry namespace/username (defaults to
+  `$DOCKERHUB_USER`, `$DOCKERHUB_USERNAME`, or `lhotakj`).
 - `-h, --help`: Display detailed usage instructions.
 
 > [!TIP]
 > **Containerized builds & Pre-built Docker Hub Images**:
-> When Docker is present, `build.sh` and `build.ps1` automatically pull pre-built builder images from Docker Hub (`lhotakj/cmdiqo-installer-builder:ubuntu-22.04` and `lhotakj/cmdiqo-installer-builder:windows-mingw`), making C++ installer compilation immediate without compiling vcpkg from source.
+> Docker installer builds from both entry points use the unified
+> `lhotakj/cmdiqo-installer-builder:all` image for Linux GTK3 and Windows wxMSW.
+> A matching local image is reused; otherwise the image is pulled and its
+> Dockerfile/manifest/triplet hash must match. Missing or mismatched hashes
+> trigger a local `all` image build, never reuse of unknown dependencies.
+
+### Host and target requirements
+
+| Host | Linux x64 agent | Windows x64 agent | Native C++ setup |
+|---|---|---|---|
+| Linux x64 | Docker, or native Linux x64 Python | Build the ZIP on Windows first | Docker for either target |
+| macOS / non-x64 Linux | Linux-container Docker | Build the ZIP on Windows first | Docker for either target |
+| Windows PowerShell / Git Bash | Linux-container Docker | Native Windows x64 Python | Unified Docker builder; optional local MSVC from PowerShell |
+
+PyInstaller builds for the operating system of its Python interpreter; MinGW
+cross-compiles only the C++ setup, not the Python agent. A Unix invocation that
+requests a Windows agent fails explicitly rather than accepting an old `.exe`
+or ZIP as a successful build. To produce both agent packages and both setups
+in one invocation, run `.\build.ps1 -Installer -Platform all` on Windows.
+From Unix, place both platform ZIPs in `dist/` and use the combined
+`--skip-agent-build` command above.
+
+All agent and native-installer Docker builds target `linux/amd64`. ARM hosts
+need Docker's amd64 emulation; the bot's `--push` path remains multi-architecture.
+Local Buildx builds use `--load` so their images are available even with the
+`docker-container` driver. Docker Desktop must run Linux containers. Git Bash
+mount paths are converted to Windows paths without rewriting container paths.
+Without Docker, only native Linux x64 agent builds are supported by `build.sh`.
+
+Installer builds consume pre-built dependencies with
+`VCPKG_MANIFEST_INSTALL=OFF` and fail on configure, compilation, or test errors.
+Windows C++ tests execute through Wine with a writable temporary prefix.
+Payload `version.txt` accepts normal numeric versions such as `1.2.0`, CI SHA
+versions, and local `devel+HEX` versions; the setup embeds the payload version.
+Development Docker image tags use `devel-HEX` because Docker tags cannot contain
+`+`; agent and installer version metadata remains unchanged.
 
 ### Distribution Files
 

@@ -256,9 +256,13 @@ private:
             return std::nullopt;
         }
         const std::filesystem::path staged = *base / "elevation-config.json";
-        if (std::filesystem::is_symlink(staged, error) || error) {
-            failure = error ? "could not inspect " + staged.string() + ": " + error.message()
-                            : "refusing to replace symbolic link " + staged.string();
+        const bool is_link = std::filesystem::is_symlink(staged, error);
+        if (error && error != std::errc::no_such_file_or_directory) {
+            failure = "could not inspect " + staged.string() + ": " + error.message();
+            return std::nullopt;
+        }
+        if (is_link) {
+            failure = "refusing to replace symbolic link " + staged.string();
             return std::nullopt;
         }
         std::ofstream output(staged, std::ios::binary | std::ios::trunc);

@@ -107,10 +107,12 @@ jobs:
             # A missing pre-built dependency fails the configure step within seconds
             # instead of silently recompiling the whole vcpkg tree from source.
             docker run --rm \
+              --platform linux/amd64 \
               --user "$(id -u):$(id -g)" \
               --workdir /workspace/installer.c \
               --volume "${GITHUB_WORKSPACE}:/workspace" \
               --env HOME=/tmp \
+              --env WINEPREFIX=/tmp/cmdiqo-wine \
               --env CMDIQO_BUILD_VERSION=0.9.ci \
               --env "INSTALLED_DIR_VAR=${INSTALLED_DIR_VAR}" \
               --env "PRESET=${PRESET}" \
@@ -123,8 +125,6 @@ jobs:
                   -DVCPKG_MANIFEST_INSTALL=OFF
                 cmake --build --preset "build-${PRESET}" --config Release
                 file "out/build/${PRESET}/${ARTIFACT}"
-                if [ "${PRESET}" = "linux-x64" ]; then
-                  ctest --preset "test-${PRESET}" -C Release --output-on-failure
-                fi
+                ctest --preset "test-${PRESET}" -C Release --output-on-failure
               '
           done

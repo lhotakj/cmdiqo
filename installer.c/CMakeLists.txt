@@ -42,6 +42,12 @@ target_link_libraries(cmdiqo-agent-setup
         wx::base
 )
 
+if(WIN32)
+    enable_language(RC)
+    target_sources(cmdiqo-agent-setup PRIVATE resources/cmdiqo-agent-setup.rc)
+    set_target_properties(cmdiqo-agent-setup PROPERTIES WIN32_EXECUTABLE TRUE)
+endif()
+
 if(MINGW)
     target_link_options(cmdiqo-agent-setup PRIVATE -static -static-libgcc -static-libstdc++)
     if(CMAKE_BUILD_TYPE STREQUAL "Release")

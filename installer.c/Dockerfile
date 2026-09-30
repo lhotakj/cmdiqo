@@ -58,7 +58,6 @@ RUN apt-get update \
 
 RUN git clone https://github.com/microsoft/vcpkg.git /opt/vcpkg \
     && git -C /opt/vcpkg checkout "${VCPKG_TAG}" \
-    && sed -i '/if(NOT "debug-support" IN_LIST FEATURES)/,/^endif()$/ { s|if(VCPKG_TARGET_IS_WINDOWS)|if(VCPKG_TARGET_IS_WINDOWS AND EXISTS "${CURRENT_PACKAGES_DIR}/include/wx/debug.h")|; }' /opt/vcpkg/ports/wxwidgets/portfile.cmake \
     && /opt/vcpkg/bootstrap-vcpkg.sh -disableMetrics \
     && rm -rf /opt/vcpkg/.git \
     && install --directory --mode=1777 \
@@ -77,7 +76,7 @@ ENV HOME=/tmp \
     VCPKG_INSTALLED_DIR=/opt/cmdiqo-vcpkg-installed/linux \
     VCPKG_OVERLAY_TRIPLETS=/opt/cmdiqo-triplets \
     VCPKG_DISABLE_METRICS=1 \
-    PATH=/opt/vcpkg:/usr/local/bin:${PATH}
+    PATH=/opt/vcpkg:/usr/local/bin:/usr/lib/wine:${PATH}
 
 COPY vcpkg.json /tmp/cmdiqo-manifest/vcpkg.json
 COPY triplets /opt/cmdiqo-triplets

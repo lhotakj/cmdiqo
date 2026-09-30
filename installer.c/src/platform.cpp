@@ -290,14 +290,19 @@ OperationResult PlatformOperations::stop_service(const InstallerPaths& paths) {
         return OperationResult::failure("Could not stop service " + paths.service_name + ": " + result.output);
     }
     if (current_platform() == Platform::windows) {
-        for (int attempt = 0; attempt < 20; ++attempt) {
-            const ServiceStatus status = service_status(paths);
-            if (status == ServiceStatus::stopped || status == ServiceStatus::not_installed) {
+        constexpr int max_wait_seconds = 30;
+        for (int attempt = 0; attempt <= max_wait_seconds; ++attempt) {
+            const CommandResult status = run({"sc.exe", "query", paths.service_name});
+            if (contains_case_insensitive(status.output, "STOPPED")
+                || contains_case_insensitive(status.output, "FAILED 1060")) {
                 return OperationResult::success("Stopped service " + paths.service_name + ".");
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            if (attempt < max_wait_seconds) {
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+            }
         }
-        return OperationResult::failure("Service stop timed out for " + paths.service_name + ".");
+        return OperationResult::failure(
+            "Service did not respond to stop within 30 seconds: " + paths.service_name + ".");
     }
     return OperationResult::success("Stopped service " + paths.service_name + ".");
 }
