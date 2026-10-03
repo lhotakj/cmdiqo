@@ -1,4 +1,5 @@
 #include "cmdiqo/installer.hpp"
+#include "embedded_payload.hpp"
 
 #include <array>
 #include <chrono>
@@ -144,6 +145,48 @@ bool is_extractable_entry(Platform platform, std::string_view entry) {
     return entry == "cmdiqo-agent" || entry == "version.txt" || entry == "cmdiqo-agent.service";
 }
 
+zip_t* open_payload_archive(const std::optional<std::filesystem::path>& explicit_payload, std::string& error) {
+    if (explicit_payload && std::filesystem::is_regular_file(*explicit_payload)) {
+        int err = 0;
+        zip_t* archive = zip_open(explicit_payload->string().c_str(), ZIP_RDONLY, &err);
+        if (archive == nullptr) {
+            zip_error_t zip_error;
+            zip_error_init_with_code(&zip_error, err);
+            error = "Could not open payload: " + std::string(zip_error_strerror(&zip_error));
+            zip_error_fini(&zip_error);
+            return nullptr;
+        }
+        return archive;
+    }
+
+    if (resources::embedded_payload_size > 0 && resources::embedded_payload_data != nullptr) {
+        zip_error_t zip_error;
+        zip_error_init(&zip_error);
+        zip_source_t* src = zip_source_buffer_create(
+            resources::embedded_payload_data,
+            resources::embedded_payload_size,
+            0,
+            &zip_error);
+        if (src == nullptr) {
+            error = "Could not create memory buffer for embedded payload: " + std::string(zip_error_strerror(&zip_error));
+            zip_error_fini(&zip_error);
+            return nullptr;
+        }
+        zip_t* archive = zip_open_from_source(src, ZIP_RDONLY, &zip_error);
+        if (archive == nullptr) {
+            error = "Could not open embedded payload: " + std::string(zip_error_strerror(&zip_error));
+            zip_source_free(src);
+            zip_error_fini(&zip_error);
+            return nullptr;
+        }
+        zip_error_fini(&zip_error);
+        return archive;
+    }
+
+    error = "No embedded payload found and no payload archive was specified.";
+    return nullptr;
+}
+
 }  // namespace
 
 InstallerService::InstallerService(InstallerPaths paths)
@@ -175,15 +218,30 @@ std::optional<std::string> InstallerService::installed_version() const {
         : std::nullopt;
 }
 
-std::string InstallerService::bundled_version(const std::filesystem::path& payload) const {
-    int error = 0;
-    zip_t* archive = zip_open(payload.string().c_str(), ZIP_RDONLY, &error);
+std::string InstallerService::bundled_version(const std::optional<std::filesystem::path>& explicit_payload) const {
+    std::string error;
+    std::optional<std::filesystem::path> target_payload = explicit_payload;
+    if (!target_payload) {
+        target_payload = locate_payload(explicit_payload);
+    }
+    zip_t* archive = open_payload_archive(target_payload, error);
     if (archive == nullptr) {
         return CMDIQO_INSTALLER_VERSION;
     }
     const auto version = read_zip_text_entry(archive, "version.txt");
     zip_close(archive);
     return version.value_or(CMDIQO_INSTALLER_VERSION);
+}
+
+bool InstallerService::has_payload(const std::optional<std::filesystem::path>& explicit_payload) const {
+    if (explicit_payload && std::filesystem::is_regular_file(*explicit_payload)) {
+        return true;
+    }
+    if (resources::embedded_payload_size > 0 && resources::embedded_payload_data != nullptr) {
+        return true;
+    }
+    const auto candidate = locate_payload(explicit_payload);
+    return candidate.has_value();
 }
 
 std::optional<std::filesystem::path> InstallerService::locate_payload(
@@ -219,24 +277,25 @@ void InstallerService::report(const ProgressCallback& progress, std::string_view
 }
 
 OperationResult InstallerService::extract_payload(
-    const std::filesystem::path& payload,
+    const std::optional<std::filesystem::path>& explicit_payload,
     const ProgressCallback& progress) {
     const Platform platform = current_platform();
-    const std::string expected_payload = payload_file_name(platform);
-    if (payload.filename() != expected_payload) {
-        return OperationResult::failure("Refusing payload with unexpected name. Expected " + expected_payload + ".");
+    std::optional<std::filesystem::path> target_payload = explicit_payload;
+    if (!target_payload) {
+        target_payload = locate_payload(explicit_payload);
     }
-    int error = 0;
-    zip_t* archive = zip_open(payload.string().c_str(), ZIP_RDONLY, &error);
+    if (target_payload && target_payload->filename() != payload_file_name(platform)) {
+        return OperationResult::failure("Refusing payload with unexpected name. Expected " + payload_file_name(platform) + ".");
+    }
+    std::string open_error;
+    zip_t* archive = open_payload_archive(target_payload, open_error);
     if (archive == nullptr) {
-        zip_error_t zip_error;
-        zip_error_init_with_code(&zip_error, error);
-        const std::string detail = zip_error_strerror(&zip_error);
-        zip_error_fini(&zip_error);
-        return OperationResult::failure("Could not open payload: " + detail);
+        return OperationResult::failure(open_error);
     }
 
-    bool has_binary = false;
+    const bool is_embedded = !target_payload.has_value();
+    report(progress, is_embedded ? "Opening embedded agent payload." : "Opening payload archive " + target_payload->filename().string() + ".");
+
     const zip_int64_t entries = zip_get_num_entries(archive, 0);
     if (entries < 0) {
         const std::string detail = zip_strerror(archive);
@@ -258,6 +317,7 @@ OperationResult InstallerService::extract_payload(
         return OperationResult::failure("Could not create installation directory: " + filesystem_error.message());
     }
 
+    bool has_binary = false;
     for (zip_uint64_t index = 0; index < static_cast<zip_uint64_t>(entries); ++index) {
         const char* raw_entry = zip_get_name(archive, index, 0);
         const std::string entry(raw_entry == nullptr ? "" : raw_entry);
@@ -304,15 +364,18 @@ OperationResult InstallerService::extract_payload(
             return OperationResult::failure("Could not mark agent executable: " + filesystem_error.message());
         }
     }
-    return OperationResult::success("Extracted platform payload.");
+    return OperationResult::success("Extracted agent payload.");
 }
 
 OperationResult InstallerService::install_or_upgrade(
     const Config& config,
-    const std::filesystem::path& payload,
+    const std::optional<std::filesystem::path>& explicit_payload,
     const ProgressCallback& progress) {
     if (!PlatformOperations::is_elevated()) {
         return OperationResult::failure("Installation requires Administrator/root privileges.");
+    }
+    if (!has_payload(explicit_payload)) {
+        return OperationResult::failure("No embedded payload found and no payload archive was specified.");
     }
     report(progress, "Installer elevation check passed.");
     report(progress, "Saving configuration.");
@@ -337,8 +400,8 @@ OperationResult InstallerService::install_or_upgrade(
     }
     report(progress, released.message);
 #endif
-    report(progress, "Validating and extracting " + payload.filename().string() + ".");
-    if (const OperationResult extracted = extract_payload(payload, progress); !extracted.ok) {
+    report(progress, "Extracting agent payload.");
+    if (const OperationResult extracted = extract_payload(explicit_payload, progress); !extracted.ok) {
         logger_.error(extracted.message);
         return extracted;
     }

@@ -8,43 +8,40 @@ repository-root build scripts; `installer.c` deliberately has no `build.sh` or
 ## Release builds
 
 From the repository root, `--installer` / `-Installer` builds the Release platform
-agent, creates its ZIP, verifies the ZIP's `version.txt`, then compiles,
-tests, and packages the native installer. The matching ZIP and setup executable are published together in `dist/` so
-payload discovery works without extra arguments.
+agent, then compiles, tests, and packages the native installer with the agent binary directly embedded into the setup executable. The setup executable is completely self-contained and does not require an external ZIP payload on the target machine.
 
 All native C++ installer binaries are built in **`Release`** configuration with compiler optimizations and stripped symbols.
 
 ### Building on Linux / macOS (Bash)
 
 ```bash
-# Build Linux agent package and native Linux setup (Release by default):
+# Build Linux agent and native Linux setup (Release by default):
 ./build.sh --installer
 
-# Cross-build Windows setup via MinGW-w64, using a ZIP built on Windows:
+# Cross-build Windows setup via MinGW-w64, using a binary built on Windows:
 ./build.sh --installer --platform win64 --skip-agent-build
 
-# Reuse existing ZIP package and rebuild only the native setup:
+# Reuse existing binary and rebuild only the native setup:
 ./build.sh --installer --skip-agent-build
 
-# Rebuild both setups from their existing platform ZIPs:
+# Rebuild both setups from their existing platform binaries:
 ./build.sh --installer --platform all --skip-agent-build
 ```
 
 ### Building on Windows (PowerShell)
 
 ```powershell
-# Build Windows agent ZIP and native Windows setup (Release by default):
+# Build Windows agent and native Windows setup (Release by default):
 .\build.ps1 -Installer
 
-# Reuse existing Windows agent ZIP and rebuild only the native setup:
+# Reuse existing Windows agent binary and rebuild only the native setup:
 .\build.ps1 -Installer -SkipAgentBuild
 
-# Build Linux agent ZIP and native Linux setup using Docker Desktop:
+# Build Linux agent and native Linux setup using Docker Desktop:
 .\build.ps1 -Installer -Platform Linux
 
-# Build both agent packages and both setups:
+# Build both agents and both setups:
 .\build.ps1 -Installer -Platform All
-
 ```
 
 ### Produced Artifacts in `dist/`

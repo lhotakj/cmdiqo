@@ -492,19 +492,26 @@ build_native_agent() {
 
 get_payload_version() {
     local payload="$1"
-    if [[ ! -f "$payload" ]]; then
-        error "Native installer packaging requires $payload."
-        return 1
-    fi
-    local payload_version
-    if ! payload_version="$("$PYTHON_CMD" -c '
+    local payload_version=""
+    if [[ -f "$payload" && "$payload" == *.zip ]]; then
+        if ! payload_version="$("$PYTHON_CMD" -c '
 import sys, zipfile
 with zipfile.ZipFile(sys.argv[1]) as archive:
     if "version.txt" not in archive.namelist():
         sys.exit("Payload is missing version.txt.")
     print(archive.read("version.txt").decode("utf-8-sig").strip())
-' "$payload" | tr -d '\r')"; then
-        error "Cannot read version.txt from $payload. Rebuild the platform agent package."
+' "$payload" 2>/dev/null | tr -d '\r')"; then
+            error "Cannot read version.txt from $payload. Rebuild the platform agent package."
+            return 1
+        fi
+    elif [[ -f "$DIST_DIR/build-version.txt" ]]; then
+        payload_version="$(cat "$DIST_DIR/build-version.txt" | tr -d '\r\n ')"
+    elif [[ -n "${VERSION:-}" ]]; then
+        payload_version="$VERSION"
+    elif [[ -f "$ROOT_DIR/version.txt" ]]; then
+        payload_version="$(cat "$ROOT_DIR/version.txt" | tr -d '\r\n ')"
+    else
+        error "Native installer packaging requires $payload."
         return 1
     fi
     if [[ ! "$payload_version" =~ ^[0-9]+\.[0-9]+\.(devel\+[0-9A-Fa-f]+|[0-9A-Fa-f]{7,40}|[0-9]+)$ ]]; then

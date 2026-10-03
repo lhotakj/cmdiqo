@@ -416,7 +416,7 @@ OperationResult PlatformOperations::secure_config_file(const std::filesystem::pa
 #ifdef _WIN32
     const CommandResult result = run({
         "icacls.exe", config_file.string(), "/inheritance:r", "/grant:r",
-        "BUILTIN\\Administrators:(F)", "NT AUTHORITY\\SYSTEM:(F)"});
+        "BUILTIN\\Administrators:(F)", "NT AUTHORITY\\SYSTEM:(F)", "BUILTIN\\Users:(R)"});
     if (result.exit_code != 0) {
         return OperationResult::failure("Could not restrict configuration ACLs: " + result.output);
     }

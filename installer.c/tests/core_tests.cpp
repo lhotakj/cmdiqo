@@ -46,6 +46,33 @@ TEST_CASE("configuration JSON preserves agent settings") {
     CHECK(parsed->agent_connection_notify);
 }
 
+TEST_CASE("configuration JSON supports alternate token and name keys") {
+    std::string error;
+    const auto parsed1 = config_from_json(R"({
+        "hub_url": "ws://192.168.1.50:8765",
+        "agent_token": "secret-token-123",
+        "agent_name": "worker-node-1"
+    })", error);
+    REQUIRE(parsed1);
+    CHECK(parsed1->token == "secret-token-123");
+    CHECK(parsed1->agent_name == "worker-node-1");
+
+    const auto parsed2 = config_from_json(R"({
+        "hub": "wss://hub.remote.io:443",
+        "AGENT_TOKEN": "caps-token-456",
+        "notify": true
+    })", error);
+    REQUIRE(parsed2);
+    CHECK(parsed2->token == "caps-token-456");
+    CHECK(parsed2->agent_connection_notify);
+
+    const auto parsed3 = config_from_json(R"({
+        "secret": "secret-key-789"
+    })", error);
+    REQUIRE(parsed3);
+    CHECK(parsed3->token == "secret-key-789");
+}
+
 TEST_CASE("Hub endpoint parsing supplies websocket defaults") {
     const auto plain = parse_hub_endpoint("ws://hub.example.test");
     const auto secure = parse_hub_endpoint("wss://[2001:db8::1]/socket");
@@ -131,5 +158,21 @@ TEST_CASE("PlatformOperations run_elevated returns result for empty or invalid c
     if (PlatformOperations::is_elevated()) {
         const auto res = PlatformOperations::run_elevated({});
         CHECK_FALSE(res.ok);
+    }
+}
+
+TEST_CASE("InstallerService bundled_version returns default or embedded version") {
+    InstallerService service;
+    const std::string version = service.bundled_version();
+    CHECK_FALSE(version.empty());
+}
+
+TEST_CASE("InstallerService install_or_upgrade fails when not elevated") {
+    if (!PlatformOperations::is_elevated()) {
+        InstallerService service;
+        const Config config;
+        const auto res = service.install_or_upgrade(config);
+        CHECK_FALSE(res.ok);
+        CHECK(res.message.find("privileges") != std::string::npos);
     }
 }

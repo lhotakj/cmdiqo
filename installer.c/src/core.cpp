@@ -29,9 +29,9 @@
 #endif
 
 namespace cmdiqo::installer {
-namespace {
-
 using json = nlohmann::json;
+
+namespace {
 
 struct ParsedVersion {
     std::array<unsigned long long, 3> numbers{};
@@ -126,6 +126,20 @@ std::string timestamp() {
     std::ostringstream output;
     output << std::put_time(&local_time, "%Y-%m-%d %H:%M:%S");
     return output.str();
+}
+
+std::filesystem::path executable_directory() {
+#ifdef _WIN32
+    std::array<char, 32768> executable{};
+    const DWORD length = GetModuleFileNameA(nullptr, executable.data(), static_cast<DWORD>(executable.size()));
+    return length == 0 ? std::filesystem::current_path() : std::filesystem::path(std::string(executable.data(), length)).parent_path();
+#elif defined(__linux__)
+    std::array<char, 4096> executable{};
+    const ssize_t length = readlink("/proc/self/exe", executable.data(), executable.size() - 1);
+    return length <= 0 ? std::filesystem::current_path() : std::filesystem::path(std::string(executable.data(), static_cast<std::size_t>(length))).parent_path();
+#else
+    return std::filesystem::current_path();
+#endif
 }
 
 }  // namespace
@@ -337,17 +351,57 @@ std::optional<Config> config_from_json(std::string_view document, std::string& e
             return std::nullopt;
         }
         Config config;
-        config.hub_url = parsed.value("hub_url", config.hub_url);
-        config.token = parsed.value("token", "");
-        config.agent_name = parsed.value("name", hostname());
-        config.agent_connection_notify = parsed.value("agent_connection_notify", false);
-        if (!parse_hub_endpoint(config.hub_url)) {
+
+        auto get_string = [&](const std::initializer_list<const char*>& keys) -> std::optional<std::string> {
+            for (const char* key : keys) {
+                if (parsed.contains(key)) {
+                    if (parsed[key].is_string()) {
+                        return parsed[key].get<std::string>();
+                    }
+                    if (parsed[key].is_number() || parsed[key].is_boolean()) {
+                        return parsed[key].dump();
+                    }
+                }
+            }
+            return std::nullopt;
+        };
+
+        if (auto hub = get_string({"hub_url", "hub", "hubUrl", "HUB_URL", "url"})) {
+            config.hub_url = *hub;
+        }
+        if (auto tok = get_string({"token", "agent_token", "AGENT_TOKEN", "TOKEN", "secret", "agentToken", "token_key"})) {
+            config.token = *tok;
+        }
+        if (auto nm = get_string({"name", "agent_name", "agentName", "AGENT_NAME", "NAME", "hostname"})) {
+            config.agent_name = *nm;
+        } else {
+            config.agent_name = hostname();
+        }
+
+        for (const char* key : {"agent_connection_notify", "agentConnectionNotify", "AGENT_CONNECTION_NOTIFY", "notify", "agent_notify"}) {
+            if (parsed.contains(key)) {
+                if (parsed[key].is_boolean()) {
+                    config.agent_connection_notify = parsed[key].get<bool>();
+                    break;
+                }
+                if (parsed[key].is_string()) {
+                    const std::string s = parsed[key].get<std::string>();
+                    config.agent_connection_notify = (s == "true" || s == "1" || s == "yes");
+                    break;
+                }
+                if (parsed[key].is_number_integer()) {
+                    config.agent_connection_notify = (parsed[key].get<int>() != 0);
+                    break;
+                }
+            }
+        }
+
+        if (!config.hub_url.empty() && !parse_hub_endpoint(config.hub_url)) {
             error = "Configuration contains an invalid Hub URL.";
             return std::nullopt;
         }
         if (config.agent_name.empty()) {
-            error = "Configuration agent name cannot be empty.";
-            return std::nullopt;
+            config.agent_name = hostname();
         }
         return config;
     } catch (const json::exception& exception) {
@@ -360,39 +414,118 @@ Config load_config(const InstallerPaths& paths) {
     Config config;
     config.agent_name = hostname();
 
-    std::ifstream json_file(paths.config_file);
-    if (json_file) {
+    auto try_json = [&](const std::filesystem::path& path) -> bool {
+        if (path.empty()) return false;
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(path, ec)) return false;
+        std::ifstream file(path);
+        if (!file) return false;
         std::stringstream contents;
-        contents << json_file.rdbuf();
+        contents << file.rdbuf();
         std::string error;
         if (const auto parsed = config_from_json(contents.str(), error)) {
-            return *parsed;
+            if (!parsed->hub_url.empty()) config.hub_url = parsed->hub_url;
+            if (!parsed->token.empty()) config.token = parsed->token;
+            if (!parsed->agent_name.empty()) config.agent_name = parsed->agent_name;
+            config.agent_connection_notify = parsed->agent_connection_notify;
+            return true;
+        }
+        return false;
+    };
+
+    auto try_env = [&](const std::filesystem::path& path) -> bool {
+        if (path.empty()) return false;
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(path, ec)) return false;
+        std::ifstream env_file(path);
+        if (!env_file) return false;
+        bool found = false;
+        std::string line;
+        while (std::getline(env_file, line)) {
+            const auto separator = line.find('=');
+            if (separator == std::string::npos || line.empty() || line.front() == '#') {
+                continue;
+            }
+            const std::string key = trim(line.substr(0, separator));
+            std::string value = trim(line.substr(separator + 1));
+            if (value.size() >= 2 && ((value.front() == '"' && value.back() == '"')
+                                      || (value.front() == '\'' && value.back() == '\''))) {
+                value = value.substr(1, value.size() - 2);
+            }
+            if (key == "HUB_URL" && !value.empty()) {
+                config.hub_url = value;
+                found = true;
+            } else if ((key == "AGENT_TOKEN" || key == "TOKEN" || key == "SECRET") && !value.empty()) {
+                config.token = value;
+                found = true;
+            } else if ((key == "AGENT_NAME" || key == "NAME") && !value.empty()) {
+                config.agent_name = value;
+                found = true;
+            } else if (key == "AGENT_CONNECTION_NOTIFY") {
+                config.agent_connection_notify = value == "true" || value == "1" || value == "yes";
+                found = true;
+            }
+        }
+        return found;
+    };
+
+    // 1. Environment variable AGENT_CONFIG
+    if (const char* env_config = std::getenv("AGENT_CONFIG"); env_config != nullptr && *env_config != '\0') {
+        if (try_json(env_config) && !config.token.empty()) {
+            return config;
         }
     }
 
-    std::ifstream env_file(paths.legacy_env_file);
-    std::string line;
-    while (std::getline(env_file, line)) {
-        const auto separator = line.find('=');
-        if (separator == std::string::npos || line.empty() || line.front() == '#') {
-            continue;
-        }
-        const std::string key = trim(line.substr(0, separator));
-        std::string value = trim(line.substr(separator + 1));
-        if (value.size() >= 2 && ((value.front() == '"' && value.back() == '"')
-                                  || (value.front() == '\'' && value.back() == '\''))) {
-            value = value.substr(1, value.size() - 2);
-        }
-        if (key == "HUB_URL") {
-            config.hub_url = value;
-        } else if (key == "AGENT_TOKEN" || key == "TOKEN") {
-            config.token = value;
-        } else if (key == "AGENT_NAME" || key == "NAME") {
-            config.agent_name = value;
-        } else if (key == "AGENT_CONNECTION_NOTIFY") {
-            config.agent_connection_notify = value == "true" || value == "1" || value == "yes";
+    // 2. Primary config file
+    if (!paths.config_file.empty()) {
+        if (try_json(paths.config_file) && !config.token.empty()) {
+            return config;
         }
     }
+
+    // 3. Config directory fallbacks
+    if (!paths.config_dir.empty()) {
+        if (try_json(paths.config_dir / "agent.json") && !config.token.empty()) return config;
+        if (try_json(paths.config_dir / "cmdiqo.json") && !config.token.empty()) return config;
+        if (try_env(paths.legacy_env_file) && !config.token.empty()) return config;
+        if (try_env(paths.config_dir / "agent.env") && !config.token.empty()) return config;
+    }
+
+    // 4. Install directory fallbacks
+    if (!paths.install_dir.empty()) {
+        if (try_json(paths.install_dir / "config.json") && !config.token.empty()) return config;
+        if (try_json(paths.install_dir / "agent.json") && !config.token.empty()) return config;
+        if (try_env(paths.install_dir / "agent.env") && !config.token.empty()) return config;
+    }
+
+    // 5. Executable directory fallbacks
+    const std::filesystem::path exe_dir = executable_directory();
+    if (!exe_dir.empty()) {
+        if (try_json(exe_dir / "config.json") && !config.token.empty()) return config;
+        if (try_json(exe_dir / "agent.json") && !config.token.empty()) return config;
+        if (try_env(exe_dir / "agent.env") && !config.token.empty()) return config;
+    }
+
+    // 6. Current working directory fallbacks
+    if (try_json(std::filesystem::current_path() / "config.json") && !config.token.empty()) return config;
+    if (try_json(std::filesystem::current_path() / "agent.json") && !config.token.empty()) return config;
+    if (try_env(std::filesystem::current_path() / "agent.env") && !config.token.empty()) return config;
+
+    // 7. Direct environment variables
+    if (const char* val = std::getenv("AGENT_TOKEN"); val != nullptr && *val != '\0') {
+        config.token = val;
+    } else if (const char* val2 = std::getenv("TOKEN"); val2 != nullptr && *val2 != '\0') {
+        config.token = val2;
+    }
+    if (const char* val = std::getenv("HUB_URL"); val != nullptr && *val != '\0') {
+        config.hub_url = val;
+    }
+    if (const char* val = std::getenv("AGENT_NAME"); val != nullptr && *val != '\0') {
+        config.agent_name = val;
+    } else if (const char* val2 = std::getenv("NAME"); val2 != nullptr && *val2 != '\0') {
+        config.agent_name = val2;
+    }
+
     return config;
 }
 
@@ -458,6 +591,15 @@ OperationResult save_config(const InstallerPaths& paths, const Config& config) {
     if (current_platform() == Platform::windows) {
         if (const OperationResult secured = PlatformOperations::secure_config_file(paths.config_file); !secured.ok) {
             return secured;
+        }
+    }
+
+    if (!paths.install_dir.empty() && paths.install_dir != paths.config_dir && std::filesystem::is_directory(paths.install_dir)) {
+        std::error_code ec;
+        const std::filesystem::path target = paths.install_dir / "config.json";
+        std::filesystem::copy_file(paths.config_file, target, std::filesystem::copy_options::overwrite_existing, ec);
+        if (!ec && current_platform() == Platform::windows) {
+            PlatformOperations::secure_config_file(target);
         }
     }
 

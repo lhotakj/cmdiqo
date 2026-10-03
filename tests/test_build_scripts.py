@@ -136,6 +136,8 @@ def build(tmp_path: Path, bash: str) -> BuildHarness:
     for name in ("Dockerfile", "vcpkg.json", "setup-env.sh"):
         shutil.copy2(repo / "installer.c" / name, installer / name)
     shutil.copytree(repo / "installer.c" / "triplets", installer / "triplets")
+    if (repo / "installer.c" / "scripts").is_dir():
+        shutil.copytree(repo / "installer.c" / "scripts", installer / "scripts")
     agent = root / "agent.c"
     agent.mkdir()
     for name in (

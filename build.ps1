@@ -185,18 +185,34 @@ if ($SkipAgentBuild) {
 function Get-PayloadVersion {
     param([string]$PayloadArchive)
 
-    if (-not (Test-Path $PayloadArchive -PathType Leaf)) {
-        throw "Native installer packaging requires $PayloadArchive."
+    if (Test-Path $PayloadArchive -PathType Leaf) {
+        if ($PayloadArchive.EndsWith(".zip")) {
+            $payloadVersionOutput = & python -c "import sys, zipfile; archive = zipfile.ZipFile(sys.argv[1]); name = 'version.txt'; sys.exit('Payload is missing version.txt.') if name not in archive.namelist() else print(archive.read(name).decode('utf-8').strip())" $PayloadArchive
+            if ($LASTEXITCODE -ne 0) {
+                throw "Unable to read version.txt from the agent payload. Rebuild it with .\build.ps1 -Agent."
+            }
+            $payloadVersion = ([string]$payloadVersionOutput).Trim()
+            if ($payloadVersion -notmatch '^\d+\.\d+\.(\d+|devel\+[0-9A-Fa-f]+|[0-9A-Fa-f]{7,40})$') {
+                throw "The agent payload has an invalid or missing version.txt. Rebuild it with .\build.ps1 -Agent."
+            }
+            return $payloadVersion
+        }
     }
-    $payloadVersionOutput = & python -c "import sys, zipfile; archive = zipfile.ZipFile(sys.argv[1]); name = 'version.txt'; sys.exit('Payload is missing version.txt.') if name not in archive.namelist() else print(archive.read(name).decode('utf-8').strip())" $PayloadArchive
-    if ($LASTEXITCODE -ne 0) {
-        throw "Unable to read version.txt from the agent payload. Rebuild it with .\build.ps1 -Agent."
+    $buildVersionFile = Join-Path $rootDir "dist\build-version.txt"
+    if (Test-Path $buildVersionFile -PathType Leaf) {
+        $payloadVersion = ([string](Get-Content $buildVersionFile -Raw)).Trim()
+        if ($payloadVersion -match '^\d+\.\d+\.(\d+|devel\+[0-9A-Fa-f]+|[0-9A-Fa-f]{7,40})$') {
+            return $payloadVersion
+        }
     }
-    $payloadVersion = ([string]$payloadVersionOutput).Trim()
-    if ($payloadVersion -notmatch '^\d+\.\d+\.(\d+|devel\+[0-9A-Fa-f]+|[0-9A-Fa-f]{7,40})$') {
-        throw "The agent payload has an invalid or missing version.txt. Rebuild it with .\build.ps1 -Agent."
+    if ($currentVersion) {
+        return $currentVersion
     }
-    return $payloadVersion
+    $versionFile = Join-Path $rootDir "version.txt"
+    if (Test-Path $versionFile -PathType Leaf) {
+        return ([string](Get-Content $versionFile -Raw)).Trim()
+    }
+    throw "Native installer packaging requires $PayloadArchive."
 }
 
 function Ensure-InstallerBuilderImage {

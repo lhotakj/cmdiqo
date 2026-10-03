@@ -118,19 +118,22 @@ public:
 
     const InstallerPaths& paths() const noexcept;
     std::optional<std::string> installed_version() const;
-    std::string bundled_version(const std::filesystem::path& payload) const;
+    std::string bundled_version(const std::optional<std::filesystem::path>& explicit_payload = std::nullopt) const;
+    bool has_payload(const std::optional<std::filesystem::path>& explicit_payload = std::nullopt) const;
     std::optional<std::filesystem::path> locate_payload(
         const std::optional<std::filesystem::path>& explicit_payload) const;
 
     OperationResult install_or_upgrade(
         const Config& config,
-        const std::filesystem::path& payload,
+        const std::optional<std::filesystem::path>& explicit_payload = std::nullopt,
         const ProgressCallback& progress = {});
     OperationResult uninstall(bool purge_config, const ProgressCallback& progress = {});
 
 private:
     void report(const ProgressCallback& progress, std::string_view message) const;
-    OperationResult extract_payload(const std::filesystem::path& payload, const ProgressCallback& progress);
+    OperationResult extract_payload(
+        const std::optional<std::filesystem::path>& explicit_payload,
+        const ProgressCallback& progress);
 
     InstallerPaths paths_;
     Logger logger_;

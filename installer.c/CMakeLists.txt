@@ -13,10 +13,40 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(libzip CONFIG REQUIRED)
 find_package(wxWidgets CONFIG REQUIRED)
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 set(CMDIQO_EMBEDDED_RESOURCES_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(CMDIQO_EMBEDDED_LOGOS_HEADER "${CMDIQO_EMBEDDED_RESOURCES_DIR}/embedded_logos.hpp")
+set(CMDIQO_EMBEDDED_PAYLOAD_HEADER "${CMDIQO_EMBEDDED_RESOURCES_DIR}/embedded_payload.hpp")
+set(CMDIQO_EMBEDDED_PAYLOAD_SOURCE "${CMDIQO_EMBEDDED_RESOURCES_DIR}/embedded_payload.cpp")
 file(MAKE_DIRECTORY "${CMDIQO_EMBEDDED_RESOURCES_DIR}")
+
+# Resolve default agent binary path if not explicitly provided
+if(NOT DEFINED CMDIQO_AGENT_BINARY OR CMDIQO_AGENT_BINARY STREQUAL "")
+    if(WIN32 OR MINGW)
+        set(CMDIQO_AGENT_BINARY "${CMAKE_CURRENT_SOURCE_DIR}/../dist/cmdiqo-agent.exe")
+    else()
+        set(CMDIQO_AGENT_BINARY "${CMAKE_CURRENT_SOURCE_DIR}/../dist/cmdiqo-agent")
+    endif()
+endif()
+
+if(EXISTS "${CMDIQO_AGENT_BINARY}")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMDIQO_AGENT_BINARY}")
+endif()
+
+execute_process(
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_payload.py"
+        --binary "${CMDIQO_AGENT_BINARY}"
+        --version "${CMDIQO_BUILD_VERSION}"
+        --output-header "${CMDIQO_EMBEDDED_PAYLOAD_HEADER}"
+        --output-source "${CMDIQO_EMBEDDED_PAYLOAD_SOURCE}"
+        --zip
+    RESULT_VARIABLE EMBED_PAYLOAD_RES
+)
+if(NOT EMBED_PAYLOAD_RES EQUAL 0)
+    message(WARNING "embed_payload.py failed with exit code ${EMBED_PAYLOAD_RES}")
+endif()
+
 file(WRITE "${CMDIQO_EMBEDDED_LOGOS_HEADER}"
     "#pragma once\n\n#include <array>\n\nnamespace cmdiqo::installer::resources {\n")
 foreach(logo IN ITEMS win linux)
@@ -38,8 +68,12 @@ add_library(cmdiqo_installer_core STATIC
     src/core.cpp
     src/installer.cpp
     src/platform.cpp
+    "${CMDIQO_EMBEDDED_PAYLOAD_SOURCE}"
 )
-target_include_directories(cmdiqo_installer_core PUBLIC include)
+target_include_directories(cmdiqo_installer_core PUBLIC
+    include
+    "${CMDIQO_EMBEDDED_RESOURCES_DIR}"
+)
 target_link_libraries(cmdiqo_installer_core
     PUBLIC
         nlohmann_json::nlohmann_json

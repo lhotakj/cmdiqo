@@ -268,6 +268,7 @@ def main() -> None:
         sys.executable,
         "-m",
         "PyInstaller",
+        "--noconfirm",
         "--onefile",
         "--clean",
         "--optimize",

@@ -19,11 +19,13 @@
 #include <wx/checkbox.h>
 #include <wx/dcmemory.h>
 #include <wx/frame.h>
+#include <wx/graphics.h>
 #include <wx/image.h>
 #include <wx/imagpng.h>
 #include <wx/mstream.h>
 #include <wx/msgdlg.h>
 #include <wx/panel.h>
+#include <wx/settings.h>
 #include <wx/sizer.h>
 #include <wx/statbmp.h>
 #include <wx/statusbr.h>
@@ -81,6 +83,184 @@ void append_gui_log(std::string_view message) {
     }
 }
 
+wxBitmap draw_eye_icon(bool show_plain, int dip_w, int dip_h, const wxColour& bg_color, const wxColour& fg_color) {
+    wxBitmap bitmap(dip_w, dip_h);
+    wxMemoryDC dc(bitmap);
+    dc.SetBackground(wxBrush(bg_color));
+    dc.Clear();
+
+    std::unique_ptr<wxGraphicsContext> gc(wxGraphicsContext::Create(dc));
+    if (gc) {
+        gc->SetAntialiasMode(wxANTIALIAS_DEFAULT);
+
+        const double cx = dip_w / 2.0;
+        const double cy = dip_h / 2.0;
+        const double w = dip_w * 0.72;
+        const double h = dip_h * 0.44;
+        const double x0 = cx - w / 2.0;
+        const double x1 = cx + w / 2.0;
+
+        if (show_plain) {
+            // 1. Open eye almond contour
+            auto path = gc->CreatePath();
+            path.MoveToPoint(x0, cy);
+            path.AddQuadCurveToPoint(cx, cy - h, x1, cy);
+            path.AddQuadCurveToPoint(cx, cy + h, x0, cy);
+            path.CloseSubpath();
+            gc->SetBrush(*wxTRANSPARENT_BRUSH);
+            gc->SetPen(wxPen(fg_color, 1.8));
+            gc->StrokePath(path);
+
+            // 2. Center pupil
+            const double pr = h * 0.60;
+            gc->SetBrush(wxBrush(fg_color));
+            gc->SetPen(*wxTRANSPARENT_PEN);
+            gc->DrawEllipse(cx - pr, cy - pr, pr * 2.0, pr * 2.0);
+
+            // 3. Highlight dot
+            const double hr = pr * 0.35;
+            gc->SetBrush(wxBrush(bg_color));
+            gc->DrawEllipse(cx - pr * 0.35, cy - pr * 0.35, hr * 2.0, hr * 2.0);
+
+            // 4. Eyelashes radiating upwards from top lid
+            gc->SetPen(wxPen(fg_color, 1.4));
+            constexpr int num_lashes = 5;
+            for (int i = 0; i < num_lashes; ++i) {
+                const double t = (i + 0.5) / num_lashes;
+                const double lx = x0 + t * w;
+                const double ly = (1 - t) * (1 - t) * cy + 2 * (1 - t) * t * (cy - h) + t * t * cy;
+                const double lash_len = dip_h * 0.22;
+                const double dx = (t - 0.5) * (dip_w * 0.18);
+                gc->StrokeLine(lx, ly, lx + dx, ly - lash_len);
+            }
+        } else {
+            // 1. Closed eye downward curved arc
+            auto path = gc->CreatePath();
+            path.MoveToPoint(x0, cy - h * 0.25);
+            path.AddQuadCurveToPoint(cx, cy + h * 0.70, x1, cy - h * 0.25);
+            gc->SetBrush(*wxTRANSPARENT_BRUSH);
+            gc->SetPen(wxPen(fg_color, 2.0));
+            gc->StrokePath(path);
+
+            // 2. Eyelashes radiating downwards
+            gc->SetPen(wxPen(fg_color, 1.4));
+            constexpr int num_lashes = 5;
+            for (int i = 0; i < num_lashes; ++i) {
+                const double t = (i + 0.5) / num_lashes;
+                const double lx = x0 + t * w;
+                const double ly = (1 - t) * (1 - t) * (cy - h * 0.25) + 2 * (1 - t) * t * (cy + h * 0.70) + t * t * (cy - h * 0.25);
+                const double lash_len = dip_h * 0.22;
+                const double dx = (t - 0.5) * (dip_w * 0.18);
+                gc->StrokeLine(lx, ly, lx + dx, ly + lash_len);
+            }
+        }
+    } else {
+        dc.SetPen(wxPen(fg_color, 2));
+        dc.SetBrush(wxBrush(fg_color));
+        const int cx = dip_w / 2;
+        const int cy = dip_h / 2;
+        if (show_plain) {
+            dc.DrawEllipse(cx - dip_w / 3, cy - dip_h / 4, (dip_w * 2) / 3, dip_h / 2);
+            dc.SetBrush(wxBrush(bg_color));
+            dc.DrawCircle(cx, cy, dip_h / 5);
+        } else {
+            dc.DrawLine(cx - dip_w / 3, cy, cx + dip_w / 3, cy);
+        }
+    }
+    dc.SelectObject(wxNullBitmap);
+    return bitmap;
+}
+
+class TokenInputCtrl final : public wxPanel {
+public:
+    explicit TokenInputCtrl(wxWindow* parent)
+        : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_THEME | wxTAB_TRAVERSAL) {
+        const wxColour bg = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
+        SetBackgroundColour(bg);
+
+        auto* sizer = new wxBoxSizer(wxHORIZONTAL);
+        text_ = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxNO_BORDER | wxTE_PASSWORD);
+        text_->SetBackgroundColour(bg);
+        sizer->Add(text_, 1, wxALIGN_CENTER_VERTICAL | wxLEFT | wxTOP | wxBOTTOM, FromDIP(4));
+
+        eye_button_ = new wxStaticBitmap(this, wxID_ANY, create_eye_bitmap(false));
+        eye_button_->SetCursor(wxCursor(wxCURSOR_HAND));
+        eye_button_->SetToolTip("Show token");
+        sizer->Add(eye_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT | wxLEFT, FromDIP(6));
+
+        SetSizer(sizer);
+
+        eye_button_->Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent&) {
+            toggle_visibility();
+        });
+
+        Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent&) {
+            text_->SetFocus();
+        });
+
+#ifdef _WIN32
+        HWND hwnd = reinterpret_cast<HWND>(text_->GetHWND());
+        if (hwnd != nullptr) {
+            LRESULT ch = SendMessageW(hwnd, EM_GETPASSWORDCHAR, 0, 0);
+            if (ch != 0) {
+                default_password_char_ = static_cast<wchar_t>(ch);
+            }
+        }
+#endif
+    }
+
+    void toggle_visibility() {
+        show_token_ = !show_token_;
+        eye_button_->SetBitmap(create_eye_bitmap(show_token_));
+        eye_button_->SetToolTip(show_token_ ? "Hide token" : "Show token");
+
+#ifdef _WIN32
+        HWND hwnd = reinterpret_cast<HWND>(text_->GetHWND());
+        if (hwnd != nullptr) {
+            SendMessageW(hwnd, EM_SETPASSWORDCHAR, show_token_ ? 0 : default_password_char_, 0);
+            text_->Refresh();
+        }
+#else
+        long style = text_->GetWindowStyleFlag();
+        if (show_token_) {
+            style &= ~wxTE_PASSWORD;
+        } else {
+            style |= wxTE_PASSWORD;
+        }
+        text_->SetWindowStyleFlag(style);
+        text_->Refresh();
+#endif
+    }
+
+    wxString GetValue() const {
+        return text_->GetValue();
+    }
+
+    void SetValue(const wxString& value) {
+        text_->SetValue(value);
+    }
+
+    wxTextCtrl* GetTextCtrl() {
+        return text_;
+    }
+
+private:
+    wxBitmap create_eye_bitmap(bool show_plain) const {
+        const int width = FromDIP(24);
+        const int height = FromDIP(18);
+        const wxColour bg = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
+        const wxColour fg = wxColour(90, 95, 105);
+        return draw_eye_icon(show_plain, width, height, bg, fg);
+    }
+
+    wxTextCtrl* text_{nullptr};
+    wxStaticBitmap* eye_button_{nullptr};
+    bool show_token_{false};
+#ifdef _WIN32
+    wchar_t default_password_char_{L'\u25CF'};
+#endif
+};
+
 class InstallerFrame final : public wxFrame {
 public:
     InstallerFrame(
@@ -118,7 +298,7 @@ public:
         auto* form = new wxFlexGridSizer(2, 8, 10);
         form->AddGrowableCol(1, 1);
         add_field(panel, form, "Hub URL", hub_url_ = new wxTextCtrl(panel, wxID_ANY));
-        add_field(panel, form, "Token", token_ = new wxTextCtrl(panel, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_PASSWORD));
+        add_field(panel, form, "Token", token_ = new TokenInputCtrl(panel));
         add_field(panel, form, "Agent name", agent_name_ = new wxTextCtrl(panel, wxID_ANY));
         form->Add(new wxStaticText(panel, wxID_ANY, "Slack notification"), 0, wxALIGN_CENTER_VERTICAL);
         notify_ = new wxCheckBox(panel, wxID_ANY, "Notify when the agent connects");
@@ -127,8 +307,9 @@ public:
 
         auto* installation_buttons = new wxBoxSizer(wxHORIZONTAL);
         add_button(panel, installation_buttons, "Install / Upgrade / Repair", [this] { install(); });
+        add_button(panel, installation_buttons, "Update config", [this] { update_config(); });
         add_button(panel, installation_buttons, "Test Hub TCP", [this] { test_hub(); });
-        add_button(panel, installation_buttons, "Refresh State", [this] { refresh(); });
+        add_button(panel, installation_buttons, "Refresh State", [this] { refresh(true); });
         layout->Add(installation_buttons, 0, wxLEFT | wxRIGHT | wxBOTTOM, 12);
 
         auto* service_buttons = new wxBoxSizer(wxHORIZONTAL);
@@ -170,7 +351,7 @@ public:
             }
             event.Skip();
         });
-        refresh();
+        refresh(true);
     }
 
 private:
@@ -191,7 +372,7 @@ private:
         return wxBitmap(image);
     }
 
-    static void add_field(wxWindow* parent, wxFlexGridSizer* form, const wxString& label, wxTextCtrl* control) {
+    static void add_field(wxWindow* parent, wxFlexGridSizer* form, const wxString& label, wxWindow* control) {
         form->Add(new wxStaticText(parent, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL);
         form->Add(control, 1, wxEXPAND);
     }
@@ -308,54 +489,63 @@ private:
         };
     }
 
-    void refresh() {
-        Config config = load_config(service_.paths());
-        if (initial_config_) {
-            std::error_code staged_status_error;
-            if (!is_staged_elevation_config(*initial_config_)
-                || std::filesystem::is_symlink(*initial_config_, staged_status_error)
-                || staged_status_error) {
-                append_log("Ignored an invalid staged elevation configuration path.");
-            } else {
-                std::ifstream input(*initial_config_);
-                std::string document((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
-                input.close();
-                std::string error;
-                if (!document.empty()) {
-                    if (const auto staged = config_from_json(document, error)) {
-                        config = *staged;
-                        std::error_code remove_error;
-                        std::filesystem::remove(*initial_config_, remove_error);
-                        if (remove_error) {
-                            append_log("Could not remove staged elevation configuration.");
+    void refresh(bool reload_form_fields = false) {
+        if (reload_form_fields || initial_config_) {
+            Config config = load_config(service_.paths());
+            if (initial_config_) {
+                std::error_code staged_status_error;
+                if (!is_staged_elevation_config(*initial_config_)
+                    || std::filesystem::is_symlink(*initial_config_, staged_status_error)
+                    || staged_status_error) {
+                    append_log("Ignored an invalid staged elevation configuration path.");
+                } else {
+                    std::ifstream input(*initial_config_);
+                    std::string document((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+                    input.close();
+                    std::string error;
+                    if (!document.empty()) {
+                        if (const auto staged = config_from_json(document, error)) {
+                            config = *staged;
+                            std::error_code remove_error;
+                            std::filesystem::remove(*initial_config_, remove_error);
+                            if (remove_error) {
+                                append_log("Could not remove staged elevation configuration.");
+                            }
+                        } else {
+                            append_log("Could not read staged configuration: " + error);
                         }
                     } else {
-                        append_log("Could not read staged configuration: " + error);
+                        append_log("Could not open requested configuration file.");
                     }
-                } else {
-                    append_log("Could not open requested configuration file.");
                 }
+                initial_config_.reset();
             }
-            initial_config_.reset();
+            if (!config.hub_url.empty() || hub_url_->GetValue().empty()) {
+                hub_url_->SetValue(wxString::FromUTF8(config.hub_url));
+            }
+            if (!config.token.empty() || token_->GetValue().empty()) {
+                token_->SetValue(wxString::FromUTF8(config.token));
+            }
+            if (!config.agent_name.empty() || agent_name_->GetValue().empty()) {
+                agent_name_->SetValue(wxString::FromUTF8(config.agent_name));
+            }
+            notify_->SetValue(config.agent_connection_notify);
         }
-        hub_url_->SetValue(wxString::FromUTF8(config.hub_url));
-        token_->SetValue(wxString::FromUTF8(config.token));
-        agent_name_->SetValue(wxString::FromUTF8(config.agent_name));
-        notify_->SetValue(config.agent_connection_notify);
 
-        const auto payload = service_.locate_payload(payload_);
-        const std::string bundled = payload ? service_.bundled_version(*payload) : "";
+        const std::string bundled = service_.bundled_version(payload_);
         const auto installed = service_.installed_version();
 
         std::string summary;
-        if (!installed || (payload && compare_versions(*installed, bundled) == VersionRelation::older)) {
-            if (!bundled.empty() && bundled != "payload not found") {
+        if (!installed || compare_versions(*installed, bundled) == VersionRelation::older) {
+            if (!bundled.empty()) {
                 summary = "New version " + bundled + " can be installed\n";
             } else {
                 summary = "New version can be installed\n";
             }
-        } else {
+        } else if (compare_versions(*installed, bundled) == VersionRelation::same) {
             summary = "You're running the latest version\n";
+        } else {
+            summary = "Installed version is newer than this installer\n";
         }
 
         summary += "Configuration file: " + service_.paths().config_file.string();
@@ -413,20 +603,20 @@ private:
         return staged;
     }
 
-    void run_background(const std::function<OperationResult()>& work) {
+    void run_background(const std::function<OperationResult()>& work, bool reload_form_fields = false) {
         operation_in_progress_ = true;
         for (auto* button : buttons_) {
             button->Disable();
         }
-        std::thread([this, work] {
+        std::thread([this, work, reload_form_fields] {
             const OperationResult result = work();
-            wxTheApp->CallAfter([this, result] {
+            wxTheApp->CallAfter([this, result, reload_form_fields] {
                 operation_in_progress_ = false;
                 append_log((result.ok ? "[OK] " : "[ERROR] ") + result.message);
                 for (auto* button : buttons_) {
                     button->Enable();
                 }
-                refresh();
+                refresh(reload_form_fields);
             });
         }).detach();
     }
@@ -437,19 +627,20 @@ private:
             wxMessageBox("Enter a valid ws:// or wss:// Hub URL.", "Cmdiqo Agent Setup", wxOK | wxICON_WARNING, this);
             return;
         }
-        const auto payload = service_.locate_payload(payload_);
-        if (!payload) {
-            const wxString missing_payload = "The exact platform payload was not found. Put "
-                + wxString::FromUTF8(payload_file_name(current_platform()))
-                + " beside the installer or pass --payload from the CLI.";
+        if (config.token.empty()) {
+            wxMessageBox("Token cannot be empty. Please enter an agent token.", "Cmdiqo Agent Setup", wxOK | wxICON_WARNING, this);
+            return;
+        }
+        if (!service_.has_payload(payload_)) {
             wxMessageBox(
-                missing_payload, "Cmdiqo Agent Setup", wxOK | wxICON_ERROR, this);
+                "No embedded agent payload found and no payload archive was specified.",
+                "Cmdiqo Agent Setup", wxOK | wxICON_ERROR, this);
             return;
         }
         show_starting_service_status();
-        run_background([this, config, payload] {
+        run_background([this, config] {
             if (PlatformOperations::is_elevated()) {
-                return service_.install_or_upgrade(config, *payload, [this](std::string_view message) {
+                return service_.install_or_upgrade(config, payload_, [this](std::string_view message) {
                     const std::string copy(message);
                     wxTheApp->CallAfter([this, copy] { append_log(copy); });
                 });
@@ -459,17 +650,67 @@ private:
             if (!staged) {
                 return OperationResult::failure("Could not stage configuration: " + staging_error);
             }
-            const std::filesystem::path abs_payload = std::filesystem::absolute(*payload);
-            const std::vector<std::string> args{
+            std::vector<std::string> args{
                 "--cli", "--install",
-                "--config", staged->string(),
-                "--payload", abs_payload.string()
+                "--config", staged->string()
+            };
+            if (payload_) {
+                args.push_back("--payload");
+                args.push_back(std::filesystem::absolute(*payload_).string());
+            }
+            const auto res = PlatformOperations::run_elevated(args);
+            std::error_code ec;
+            std::filesystem::remove(*staged, ec);
+            return res;
+        }, true);
+    }
+
+    void update_config() {
+        const Config config = current_config();
+        if (!parse_hub_endpoint(config.hub_url)) {
+            wxMessageBox("Enter a valid ws:// or wss:// Hub URL.", "Cmdiqo Agent Setup", wxOK | wxICON_WARNING, this);
+            return;
+        }
+        if (config.token.empty()) {
+            wxMessageBox("Token cannot be empty. Please enter an agent token.", "Cmdiqo Agent Setup", wxOK | wxICON_WARNING, this);
+            return;
+        }
+        if (config.agent_name.empty()) {
+            wxMessageBox("Agent name cannot be empty.", "Cmdiqo Agent Setup", wxOK | wxICON_WARNING, this);
+            return;
+        }
+
+        append_log("Saving updated configuration...");
+        run_background([this, config] {
+            if (PlatformOperations::is_elevated()) {
+                const auto save_res = save_config(service_.paths(), config);
+                if (!save_res.ok) {
+                    return save_res;
+                }
+                if (PlatformOperations::service_status(service_.paths()) == ServiceStatus::running) {
+                    const auto restart_res = PlatformOperations::restart_service(service_.paths());
+                    if (!restart_res.ok) {
+                        return OperationResult::failure("Configuration saved, but service restart failed: " + restart_res.message);
+                    }
+                    return OperationResult::success("Configuration saved and service restarted.");
+                }
+                return OperationResult::success("Configuration saved successfully.");
+            }
+
+            std::string staging_error;
+            const auto staged = stage_elevation_config(staging_error);
+            if (!staged) {
+                return OperationResult::failure("Could not stage configuration: " + staging_error);
+            }
+            std::vector<std::string> args{
+                "--cli", "--configure",
+                "--config", staged->string()
             };
             const auto res = PlatformOperations::run_elevated(args);
             std::error_code ec;
             std::filesystem::remove(*staged, ec);
             return res;
-        });
+        }, true);
     }
 
     void test_hub() {
@@ -534,7 +775,7 @@ private:
     std::optional<std::filesystem::path> initial_config_;
     wxStaticText* state_{};
     wxTextCtrl* hub_url_{};
-    wxTextCtrl* token_{};
+    TokenInputCtrl* token_{};
     wxTextCtrl* agent_name_{};
     wxCheckBox* notify_{};
     wxTextCtrl* log_{};

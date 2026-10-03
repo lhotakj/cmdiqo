@@ -190,7 +190,6 @@ Config configured_values(const Options& options, const InstallerPaths& paths, st
 }
 
 void show_status(InstallerService& service, const Options& options) {
-    const auto payload = service.locate_payload(options.payload);
     const auto installed = service.installed_version();
     std::cout << "Platform: " << platform_name(current_platform()) << '\n';
     std::cout << "Installed version: " << installed.value_or("not installed") << '\n';
@@ -206,12 +205,7 @@ void show_status(InstallerService& service, const Options& options) {
             std::cout << "not installed\n";
             break;
     }
-    if (!payload) {
-        std::cout << "Bundled version: payload not found (expected "
-                  << payload_file_name(current_platform()) << ")\n";
-        return;
-    }
-    const std::string bundled = service.bundled_version(*payload);
+    const std::string bundled = service.bundled_version(options.payload);
     std::cout << "Bundled version: " << bundled << '\n';
     if (installed) {
         std::cout << version_relation_message(compare_versions(*installed, bundled)) << '\n';
@@ -263,19 +257,24 @@ int run_cli(const Options& options) {
         if (options.config) {
             std::ifstream input(*options.config);
             if (!input) {
-                std::cerr << "Could not open configuration file " << options.config->string() << ".\n";
+                const std::string msg = "Could not open configuration file " + options.config->string() + ".";
+                std::cerr << msg << '\n';
+                write_result_file(OperationResult::failure(msg));
                 return 2;
             }
             std::string document((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
             const auto parsed = config_from_json(document, error);
             if (!parsed) {
                 std::cerr << error << '\n';
+                write_result_file(OperationResult::failure(error));
                 return 2;
             }
             config = *parsed;
         }
 
-        config = prompt_config(config, std::cin, std::cout);
+        if (!options.config && !options.token && !options.hub_url && !options.agent_name) {
+            config = prompt_config(config, std::cin, std::cout);
+        }
 
         if (options.hub_url) {
             config.hub_url = *options.hub_url;
@@ -291,13 +290,16 @@ int run_cli(const Options& options) {
         }
 
         if (config.token.empty()) {
-            std::cerr << "[ERROR] AGENT_TOKEN cannot be empty.\n";
+            constexpr const char* msg = "AGENT_TOKEN cannot be empty.";
+            std::cerr << "[ERROR] " << msg << '\n';
+            write_result_file(OperationResult::failure(msg));
             return 2;
         }
 
         const OperationResult save_result = save_config(service.paths(), config);
         if (!save_result.ok) {
             std::cerr << "[ERROR] " << save_result.message << '\n';
+            write_result_file(save_result);
             return 1;
         }
 
@@ -308,9 +310,14 @@ int run_cli(const Options& options) {
             const auto restart_result = PlatformOperations::restart_service(service.paths());
             if (restart_result.ok) {
                 std::cout << "[OK] " << restart_result.message << '\n';
+                write_result_file(OperationResult::success("Configuration saved and service restarted."));
             } else {
                 std::cerr << "[WARN] " << restart_result.message << '\n';
+                write_result_file(OperationResult::failure("Configuration saved, but service restart failed: " + restart_result.message));
+                return 1;
             }
+        } else {
+            write_result_file(OperationResult::success("Configuration saved to " + service.paths().config_file.string() + "."));
         }
         return 0;
     }
@@ -356,15 +363,13 @@ int run_cli(const Options& options) {
             write_result_file(OperationResult::failure(err));
             return 2;
         }
-        const auto payload = service.locate_payload(options.payload);
-        if (!payload) {
-            const std::string err = "Expected exact payload " + payload_file_name(current_platform())
-                                  + " beside the installer, in payloads/, or with --payload.";
-            std::cerr << err << "\n";
+        if (!service.has_payload(options.payload)) {
+            const std::string err = "No embedded agent payload found and no payload archive was specified.";
+            std::cerr << "[ERROR] " << err << "\n";
             write_result_file(OperationResult::failure(err));
             return 2;
         }
-        result = service.install_or_upgrade(config, *payload, progress);
+        result = service.install_or_upgrade(config, options.payload, progress);
     } else if (options.uninstall) {
         result = service.uninstall(options.purge, progress);
     } else if (options.start) {

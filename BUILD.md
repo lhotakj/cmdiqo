@@ -191,8 +191,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1 --target agent --platform w
 
 #### Parameters for `build.ps1`:
 - `-Agent`: Switch to build the standalone Windows agent executable and ZIP package (default).
-- `-Installer`: Build the standalone Windows agent executable and ZIP package,
-  then build the native C++ setup executable with that exact ZIP beside it.
+- `-Installer`: Build the standalone Windows agent executable, then build the native C++ setup executable with the agent binary embedded directly into the installer.
 - `-Bot`: Switch to build `cmdiqo-bot` Docker container image.
 - `-All`: Switch to build the agent package, native setup executable, and bot container.
 - `-Target <Agent|Installer|Bot|All>`: Explicit target selection parameter.
@@ -200,8 +199,7 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1 --target agent --platform w
 - `-Version, -v <string>`: Explicit version string override (e.g. `1.2.0`).
 - `-Dev`: Force development build format `<major>.<minor>.devel+<HEX>`.
 - `-Clean`: Clean `build/` and `dist/` directories before compiling.
-- `-SkipAgentBuild`: With `-Installer`, reuse the existing platform ZIP and
-  rebuild only the native C++ setup executable.
+- `-SkipAgentBuild`: With `-Installer`, reuse the existing agent binary in `dist/` and rebuild only the native C++ setup executable.
 - `-SkipSign`: Skip Authenticode digital signing on Windows.
 - `-CopyTo <path>`: Automatically copy the built agent binary to a destination
   path. Requires an agent build for a single platform; Linux Docker builds also
@@ -248,8 +246,8 @@ Run `./build.sh`:
 
 #### Parameters for `build.sh`:
 - `--agent, -a`: Build standalone agent binary and ZIP package (default).
-- `--installer, -i`: Build the standalone agent binary and ZIP package, then
-  build the native C++ setup executable with that exact ZIP beside it.
+- `--installer, -i`: Build the standalone agent binary, then
+  build the native C++ setup executable with the agent binary embedded directly into the installer.
 - `--bot, -b, --docker`: Build Docker container for `cmdiqo-bot`.
 - `--all`: Build the agent package, native setup executable, and bot container
   for the selected platform. This is a component selector, not `--platform all`.
@@ -262,7 +260,7 @@ Run `./build.sh`:
 - `--clean`: Clean selected build outputs; preserve input ZIPs when
   `--skip-agent-build` is used and preserve other platforms' distributions.
 - `--skip-agent-build`: With `--installer`, reuse the selected platforms'
-  existing agent ZIPs and rebuild only the native C++ setup executables.
+  existing agent binaries in `dist/` and rebuild only the native C++ setup executables.
 - `--copy-to <path>`: Copy the agent binary and its ZIP to a destination
   directory or binary filename. Requires an agent build for a single platform;
   works for both Docker and host-Python builds.
@@ -322,17 +320,14 @@ Each native build produces a platform ZIP containing the agent binary, command-l
 
 Use the ZIP package for service installation. Extract it, then run the platform-specific install script as an administrator/root user. Linux binaries downloaded outside the ZIP may need `chmod +x`.
 
-`--installer` / `-Installer` additionally produces a native setup bundle whose
-two files must remain together:
+`--installer` / `-Installer` additionally produces a self-contained native setup executable with the agent binary embedded inside:
 
-| Platform | Native setup bundle |
+| Platform | Native setup executable |
 |---|---|
-| Linux x64 | `dist/cmdiqo-agent-linux-x64-setup` and `dist/cmdiqo-agent-linux-x64.zip` |
-| Windows x64 | `dist\cmdiqo-agent-windows-x64-setup.exe` and `dist\cmdiqo-agent-windows-x64.zip` |
+| Linux x64 | `dist/cmdiqo-agent-linux-x64-setup` |
+| Windows x64 | `dist\cmdiqo-agent-windows-x64-setup.exe` |
 
-The root build scripts create the agent ZIP first, validate its `version.txt`,
-compile and test the C++ setup executable in Release mode, and publish both
-files to `dist/`. See [installer.c/BUILD-C.md](installer.c/BUILD-C.md) for native
+The root build scripts compile the agent binary first, embed it directly into the native C++ setup executable in Release mode, and publish it to `dist/`. The installer is completely standalone and does not require an external `.zip` package. See [installer.c/BUILD-C.md](installer.c/BUILD-C.md) for native
 development environment setup, Docker Hub publishing, and manual CMake commands.
 
 ### Building Container with Docker CLI & Compose
