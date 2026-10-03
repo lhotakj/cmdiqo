@@ -2,12 +2,14 @@
 #include "embedded_logos.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <functional>
 #include <iterator>
+#include <memory>
 #include <system_error>
 #include <thread>
 #include <utility>
@@ -15,8 +17,10 @@
 
 #include <wx/app.h>
 #include <wx/bitmap.h>
-#include <wx/button.h>
 #include <wx/checkbox.h>
+#include <wx/control.h>
+#include <wx/dcbuffer.h>
+#include <wx/dcclient.h>
 #include <wx/dcmemory.h>
 #include <wx/frame.h>
 #include <wx/graphics.h>
@@ -28,14 +32,42 @@
 #include <wx/settings.h>
 #include <wx/sizer.h>
 #include <wx/statbmp.h>
-#include <wx/statusbr.h>
 #include <wx/stattext.h>
 #include <wx/textctrl.h>
 #include <wx/timer.h>
 #include <wx/utils.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 namespace cmdiqo::installer {
 namespace {
+
+namespace theme {
+inline const wxColour bg_main(7, 13, 24);             // #070d18 deep dark blue
+inline const wxColour bg_card(12, 24, 42);            // #0c182a glass card
+inline const wxColour bg_input(5, 12, 24);            // #050c18 input box
+inline const wxColour border_panel(25, 51, 84);       // #193354 subtle blue border
+inline const wxColour border_input(28, 56, 92);       // #1c385c text box border
+inline const wxColour border_input_focus(0, 229, 255);// #00e5ff bright cyan focus
+inline const wxColour cyan_accent(0, 229, 255);       // #00e5ff vibrant cyan
+inline const wxColour text_white(255, 255, 255);      // #ffffff
+inline const wxColour text_muted(142, 168, 204);      // #8ea8cc
+inline const wxColour text_dim(80, 107, 140);         // #506b8c
+inline const wxColour term_bg(3, 7, 15);              // #03070f terminal background
+inline const wxColour term_header(10, 20, 36);        // #0a1424 terminal top bar
+inline const wxColour term_text(56, 239, 125);        // #38ef7d vibrant green
+inline const wxColour term_error(255, 82, 82);        // #ff5252 vibrant red
+inline const wxColour term_ok(0, 229, 255);           // #00e5ff cyan OK badge
+}  // namespace theme
+
+enum class ButtonVariant {
+    Primary,   // Vibrant cyan gradient (#00e5ff -> #0099ff)
+    Accent,    // Dark glass with vibrant cyan border
+    Secondary, // Dark glass with white/blue text
+    Danger     // Deep crimson glass with rose-red text
+};
 
 bool is_staged_elevation_config(const std::filesystem::path& path) {
 #ifdef _WIN32
@@ -101,7 +133,6 @@ wxBitmap draw_eye_icon(bool show_plain, int dip_w, int dip_h, const wxColour& bg
         const double x1 = cx + w / 2.0;
 
         if (show_plain) {
-            // 1. Open eye almond contour
             auto path = gc->CreatePath();
             path.MoveToPoint(x0, cy);
             path.AddQuadCurveToPoint(cx, cy - h, x1, cy);
@@ -111,18 +142,15 @@ wxBitmap draw_eye_icon(bool show_plain, int dip_w, int dip_h, const wxColour& bg
             gc->SetPen(wxPen(fg_color, 1.8));
             gc->StrokePath(path);
 
-            // 2. Center pupil
             const double pr = h * 0.60;
             gc->SetBrush(wxBrush(fg_color));
             gc->SetPen(*wxTRANSPARENT_PEN);
             gc->DrawEllipse(cx - pr, cy - pr, pr * 2.0, pr * 2.0);
 
-            // 3. Highlight dot
             const double hr = pr * 0.35;
             gc->SetBrush(wxBrush(bg_color));
             gc->DrawEllipse(cx - pr * 0.35, cy - pr * 0.35, hr * 2.0, hr * 2.0);
 
-            // 4. Eyelashes radiating upwards from top lid
             gc->SetPen(wxPen(fg_color, 1.4));
             constexpr int num_lashes = 5;
             for (int i = 0; i < num_lashes; ++i) {
@@ -134,7 +162,6 @@ wxBitmap draw_eye_icon(bool show_plain, int dip_w, int dip_h, const wxColour& bg
                 gc->StrokeLine(lx, ly, lx + dx, ly - lash_len);
             }
         } else {
-            // 1. Closed eye downward curved arc
             auto path = gc->CreatePath();
             path.MoveToPoint(x0, cy - h * 0.25);
             path.AddQuadCurveToPoint(cx, cy + h * 0.70, x1, cy - h * 0.25);
@@ -142,7 +169,6 @@ wxBitmap draw_eye_icon(bool show_plain, int dip_w, int dip_h, const wxColour& bg
             gc->SetPen(wxPen(fg_color, 2.0));
             gc->StrokePath(path);
 
-            // 2. Eyelashes radiating downwards
             gc->SetPen(wxPen(fg_color, 1.4));
             constexpr int num_lashes = 5;
             for (int i = 0; i < num_lashes; ++i) {
@@ -171,39 +197,241 @@ wxBitmap draw_eye_icon(bool show_plain, int dip_w, int dip_h, const wxColour& bg
     return bitmap;
 }
 
-class TokenInputCtrl final : public wxPanel {
+class ModernButton final : public wxControl {
 public:
-    explicit TokenInputCtrl(wxWindow* parent)
-        : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_THEME | wxTAB_TRAVERSAL) {
-        const wxColour bg = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
-        SetBackgroundColour(bg);
+    ModernButton(
+        wxWindow* parent,
+        wxWindowID id,
+        const wxString& label,
+        ButtonVariant variant = ButtonVariant::Secondary,
+        const wxSize& size = wxDefaultSize)
+        : wxControl(parent, id, wxDefaultPosition, size, wxBORDER_NONE | wxTAB_TRAVERSAL),
+          label_(label),
+          variant_(variant) {
+        SetBackgroundStyle(wxBG_STYLE_PAINT);
+        SetCursor(wxCursor(wxCURSOR_HAND));
+
+        Bind(wxEVT_PAINT, &ModernButton::OnPaint, this);
+        Bind(wxEVT_ENTER_WINDOW, [this](wxMouseEvent&) { is_hovered_ = true; Refresh(); });
+        Bind(wxEVT_LEAVE_WINDOW, [this](wxMouseEvent&) { is_hovered_ = false; is_pressed_ = false; Refresh(); });
+        Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent&) { is_pressed_ = true; Refresh(); });
+        Bind(wxEVT_LEFT_UP, [this](wxMouseEvent&) {
+            if (is_pressed_ && is_hovered_) {
+                is_pressed_ = false;
+                Refresh();
+                wxCommandEvent event(wxEVT_BUTTON, GetId());
+                event.SetEventObject(this);
+                ProcessWindowEvent(event);
+            }
+        });
+    }
+
+    wxSize DoGetBestSize() const override {
+        wxClientDC dc(const_cast<ModernButton*>(this));
+        wxFont font = GetFont();
+        if (!font.IsOk()) {
+            font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
+        }
+        font.SetWeight(wxFONTWEIGHT_BOLD);
+        dc.SetFont(font);
+        const wxSize text_size = dc.GetTextExtent(label_);
+        const int pad_x = FromDIP(24);
+        const int pad_y = FromDIP(10);
+        return wxSize(text_size.GetWidth() + pad_x, std::max(FromDIP(32), text_size.GetHeight() + pad_y));
+    }
+
+    void SetVariant(ButtonVariant variant) {
+        variant_ = variant;
+        Refresh();
+    }
+
+private:
+    void OnPaint(wxPaintEvent&) {
+        wxAutoBufferedPaintDC dc(this);
+        dc.SetBackground(wxBrush(GetParent()->GetBackgroundColour()));
+        dc.Clear();
+
+        std::unique_ptr<wxGraphicsContext> gc(wxGraphicsContext::Create(dc));
+        if (!gc) return;
+
+        const wxRect rect = GetClientRect();
+        const double radius = FromDIP(6);
+        const bool enabled = IsEnabled();
+
+        wxColour bg_start, bg_end, border_col, text_col;
+
+        switch (variant_) {
+            case ButtonVariant::Primary:
+                if (!enabled) {
+                    bg_start = wxColour(20, 50, 75);
+                    bg_end = wxColour(15, 35, 55);
+                    border_col = wxColour(30, 65, 95);
+                    text_col = wxColour(100, 130, 160);
+                } else if (is_pressed_) {
+                    bg_start = wxColour(0, 180, 220);
+                    bg_end = wxColour(0, 120, 200);
+                    border_col = wxColour(0, 220, 255);
+                    text_col = wxColour(2, 16, 36);
+                } else if (is_hovered_) {
+                    bg_start = wxColour(56, 235, 255);
+                    bg_end = wxColour(20, 170, 255);
+                    border_col = wxColour(180, 245, 255);
+                    text_col = wxColour(2, 16, 36);
+                } else {
+                    bg_start = wxColour(0, 229, 255);
+                    bg_end = wxColour(0, 140, 255);
+                    border_col = wxColour(0, 229, 255);
+                    text_col = wxColour(2, 16, 36);
+                }
+                break;
+
+            case ButtonVariant::Accent:
+                if (!enabled) {
+                    bg_start = bg_end = wxColour(10, 22, 38);
+                    border_col = wxColour(25, 50, 80);
+                    text_col = wxColour(80, 120, 160);
+                } else if (is_pressed_) {
+                    bg_start = bg_end = wxColour(16, 45, 75);
+                    border_col = wxColour(0, 229, 255);
+                    text_col = wxColour(0, 229, 255);
+                } else if (is_hovered_) {
+                    bg_start = bg_end = wxColour(18, 50, 85);
+                    border_col = wxColour(56, 235, 255);
+                    text_col = wxColour(56, 235, 255);
+                } else {
+                    bg_start = bg_end = wxColour(10, 28, 50);
+                    border_col = wxColour(0, 200, 230);
+                    text_col = wxColour(0, 229, 255);
+                }
+                break;
+
+            case ButtonVariant::Danger:
+                if (!enabled) {
+                    bg_start = bg_end = wxColour(20, 12, 16);
+                    border_col = wxColour(40, 20, 26);
+                    text_col = wxColour(120, 60, 70);
+                } else if (is_pressed_) {
+                    bg_start = bg_end = wxColour(50, 15, 25);
+                    border_col = wxColour(220, 60, 80);
+                    text_col = wxColour(255, 120, 140);
+                } else if (is_hovered_) {
+                    bg_start = bg_end = wxColour(45, 14, 22);
+                    border_col = wxColour(255, 80, 100);
+                    text_col = wxColour(255, 140, 160);
+                } else {
+                    bg_start = bg_end = wxColour(30, 12, 18);
+                    border_col = wxColour(120, 35, 50);
+                    text_col = wxColour(255, 107, 129);
+                }
+                break;
+
+            case ButtonVariant::Secondary:
+            default:
+                if (!enabled) {
+                    bg_start = bg_end = wxColour(10, 20, 34);
+                    border_col = wxColour(20, 40, 64);
+                    text_col = wxColour(70, 100, 130);
+                } else if (is_pressed_) {
+                    bg_start = bg_end = wxColour(20, 45, 78);
+                    border_col = wxColour(45, 95, 160);
+                    text_col = wxColour(255, 255, 255);
+                } else if (is_hovered_) {
+                    bg_start = bg_end = wxColour(24, 55, 95);
+                    border_col = wxColour(50, 110, 180);
+                    text_col = wxColour(255, 255, 255);
+                } else {
+                    bg_start = bg_end = wxColour(15, 34, 61);
+                    border_col = wxColour(30, 62, 107);
+                    text_col = wxColour(204, 224, 255);
+                }
+                break;
+        }
+
+        auto path = gc->CreatePath();
+        path.AddRoundedRectangle(rect.x + 0.5, rect.y + 0.5, rect.width - 1.0, rect.height - 1.0, radius);
+
+        if (variant_ == ButtonVariant::Primary && enabled) {
+            auto brush = gc->CreateLinearGradientBrush(
+                rect.x, rect.y, rect.x, rect.y + rect.height, bg_start, bg_end);
+            gc->SetBrush(brush);
+        } else {
+            gc->SetBrush(wxBrush(bg_start));
+        }
+
+        gc->SetPen(wxPen(border_col, 1.0));
+        gc->DrawPath(path);
+
+        wxFont font = GetFont();
+        if (!font.IsOk()) {
+            font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
+        }
+        font.SetWeight(variant_ == ButtonVariant::Primary || variant_ == ButtonVariant::Accent ? wxFONTWEIGHT_BOLD : wxFONTWEIGHT_MEDIUM);
+        gc->SetFont(font, text_col);
+
+        double tw, th;
+        gc->GetTextExtent(label_, &tw, &th);
+        const double tx = rect.x + (rect.width - tw) / 2.0;
+        const double ty = rect.y + (rect.height - th) / 2.0;
+        gc->DrawText(label_, tx, ty);
+    }
+
+    wxString label_;
+    ButtonVariant variant_;
+    bool is_hovered_{false};
+    bool is_pressed_{false};
+};
+
+class ModernTextInputCtrl final : public wxPanel {
+public:
+    ModernTextInputCtrl(
+        wxWindow* parent,
+        bool is_password = false)
+        : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE | wxTAB_TRAVERSAL),
+          is_password_(is_password) {
+        SetBackgroundStyle(wxBG_STYLE_PAINT);
 
         auto* sizer = new wxBoxSizer(wxHORIZONTAL);
-        text_ = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxNO_BORDER | wxTE_PASSWORD);
-        text_->SetBackgroundColour(bg);
-        sizer->Add(text_, 1, wxALIGN_CENTER_VERTICAL | wxLEFT | wxTOP | wxBOTTOM, FromDIP(4));
+        long text_style = wxNO_BORDER;
+        if (is_password_) {
+            text_style |= wxTE_PASSWORD;
+        }
 
-        eye_button_ = new wxStaticBitmap(this, wxID_ANY, create_eye_bitmap(false));
-        eye_button_->SetCursor(wxCursor(wxCURSOR_HAND));
-        eye_button_->SetToolTip("Show token");
-        sizer->Add(eye_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT | wxLEFT, FromDIP(6));
+        text_ = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, text_style);
+        text_->SetBackgroundColour(theme::bg_input);
+        text_->SetForegroundColour(theme::text_white);
+
+        wxFont font = text_->GetFont();
+        font.SetPointSize(font.GetPointSize() + 1);
+        text_->SetFont(font);
+
+        sizer->Add(text_, 1, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(6));
+
+        if (is_password_) {
+            eye_button_ = new wxStaticBitmap(this, wxID_ANY, create_eye_bitmap(false));
+            eye_button_->SetCursor(wxCursor(wxCURSOR_HAND));
+            eye_button_->SetToolTip("Show token");
+            sizer->Add(eye_button_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
+
+            eye_button_->Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent&) {
+                toggle_visibility();
+            });
+        }
 
         SetSizer(sizer);
 
-        eye_button_->Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent&) {
-            toggle_visibility();
-        });
-
-        Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent&) {
-            text_->SetFocus();
-        });
+        Bind(wxEVT_PAINT, &ModernTextInputCtrl::OnPaint, this);
+        text_->Bind(wxEVT_SET_FOCUS, [this](wxFocusEvent& event) { is_focused_ = true; Refresh(); event.Skip(); });
+        text_->Bind(wxEVT_KILL_FOCUS, [this](wxFocusEvent& event) { is_focused_ = false; Refresh(); event.Skip(); });
+        Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent&) { text_->SetFocus(); });
 
 #ifdef _WIN32
-        HWND hwnd = reinterpret_cast<HWND>(text_->GetHWND());
-        if (hwnd != nullptr) {
-            LRESULT ch = SendMessageW(hwnd, EM_GETPASSWORDCHAR, 0, 0);
-            if (ch != 0) {
-                default_password_char_ = static_cast<wchar_t>(ch);
+        if (is_password_) {
+            HWND hwnd = reinterpret_cast<HWND>(text_->GetHWND());
+            if (hwnd != nullptr) {
+                LRESULT ch = SendMessageW(hwnd, EM_GETPASSWORDCHAR, 0, 0);
+                if (ch != 0) {
+                    default_password_char_ = static_cast<wchar_t>(ch);
+                }
             }
         }
 #endif
@@ -211,9 +439,10 @@ public:
 
     void toggle_visibility() {
         show_token_ = !show_token_;
-        eye_button_->SetBitmap(create_eye_bitmap(show_token_));
-        eye_button_->SetToolTip(show_token_ ? "Hide token" : "Show token");
-
+        if (eye_button_) {
+            eye_button_->SetBitmap(create_eye_bitmap(show_token_));
+            eye_button_->SetToolTip(show_token_ ? "Hide token" : "Show token");
+        }
 #ifdef _WIN32
         HWND hwnd = reinterpret_cast<HWND>(text_->GetHWND());
         if (hwnd != nullptr) {
@@ -232,33 +461,335 @@ public:
 #endif
     }
 
-    wxString GetValue() const {
-        return text_->GetValue();
-    }
-
-    void SetValue(const wxString& value) {
-        text_->SetValue(value);
-    }
-
-    wxTextCtrl* GetTextCtrl() {
-        return text_;
-    }
+    wxString GetValue() const { return text_->GetValue(); }
+    void SetValue(const wxString& value) { text_->SetValue(value); }
+    wxTextCtrl* GetTextCtrl() { return text_; }
 
 private:
+    void OnPaint(wxPaintEvent&) {
+        wxAutoBufferedPaintDC dc(this);
+        dc.SetBackground(wxBrush(GetParent()->GetBackgroundColour()));
+        dc.Clear();
+
+        std::unique_ptr<wxGraphicsContext> gc(wxGraphicsContext::Create(dc));
+        if (!gc) return;
+
+        const wxRect rect = GetClientRect();
+        const double radius = FromDIP(5);
+
+        auto path = gc->CreatePath();
+        path.AddRoundedRectangle(rect.x + 0.5, rect.y + 0.5, rect.width - 1.0, rect.height - 1.0, radius);
+
+        gc->SetBrush(wxBrush(theme::bg_input));
+        gc->SetPen(wxPen(is_focused_ ? theme::border_input_focus : theme::border_input, is_focused_ ? 1.5 : 1.0));
+        gc->DrawPath(path);
+    }
+
     wxBitmap create_eye_bitmap(bool show_plain) const {
         const int width = FromDIP(24);
         const int height = FromDIP(18);
-        const wxColour bg = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
-        const wxColour fg = wxColour(90, 95, 105);
-        return draw_eye_icon(show_plain, width, height, bg, fg);
+        return draw_eye_icon(show_plain, width, height, theme::bg_input, theme::cyan_accent);
     }
 
     wxTextCtrl* text_{nullptr};
     wxStaticBitmap* eye_button_{nullptr};
+    bool is_password_{false};
     bool show_token_{false};
+    bool is_focused_{false};
 #ifdef _WIN32
     wchar_t default_password_char_{L'\u25CF'};
 #endif
+};
+
+class HeaderBannerPanel final : public wxPanel {
+public:
+    HeaderBannerPanel(wxWindow* parent, const wxString& version_text)
+        : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE),
+          version_text_(version_text) {
+        SetBackgroundStyle(wxBG_STYLE_PAINT);
+        SetMinSize(wxSize(-1, FromDIP(66)));
+        Bind(wxEVT_PAINT, &HeaderBannerPanel::OnPaint, this);
+    }
+
+    void SetVersionText(const wxString& text) {
+        version_text_ = text;
+        Refresh();
+    }
+
+private:
+    void OnPaint(wxPaintEvent&) {
+        wxAutoBufferedPaintDC dc(this);
+        std::unique_ptr<wxGraphicsContext> gc(wxGraphicsContext::Create(dc));
+        if (!gc) return;
+
+        const wxRect rect = GetClientRect();
+
+        auto bg_brush = gc->CreateLinearGradientBrush(
+            rect.x, rect.y, rect.x, rect.y + rect.height,
+            wxColour(11, 23, 40), wxColour(7, 13, 24));
+        gc->SetBrush(bg_brush);
+        gc->SetPen(*wxTRANSPARENT_PEN);
+        gc->DrawRectangle(rect.x, rect.y, rect.width, rect.height);
+
+        gc->SetPen(wxPen(theme::border_panel, 1.0));
+        gc->StrokeLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width, rect.y + rect.height - 1);
+
+        const double icon_x = rect.x + FromDIP(14);
+        const double icon_y = rect.y + FromDIP(15);
+        const double icon_size = FromDIP(36);
+        const double hcx = icon_x + icon_size / 2.0;
+        const double hcy = icon_y + icon_size / 2.0;
+        const double r = icon_size / 2.0;
+
+        auto hex_path = gc->CreatePath();
+        for (int i = 0; i < 6; ++i) {
+            const double angle = i * (M_PI / 3.0) - (M_PI / 6.0);
+            const double px = hcx + r * std::cos(angle);
+            const double py = hcy + r * std::sin(angle);
+            if (i == 0) hex_path.MoveToPoint(px, py);
+            else hex_path.AddLineToPoint(px, py);
+        }
+        hex_path.CloseSubpath();
+
+        auto hex_brush = gc->CreateLinearGradientBrush(
+            icon_x, icon_y, icon_x + icon_size, icon_y + icon_size,
+            theme::cyan_accent, wxColour(0, 119, 182));
+        gc->SetBrush(hex_brush);
+        gc->SetPen(wxPen(theme::cyan_accent, 1.2));
+        gc->DrawPath(hex_path);
+
+        gc->SetBrush(*wxWHITE_BRUSH);
+        gc->SetPen(*wxTRANSPARENT_PEN);
+        gc->DrawCircle(hcx, hcy, r * 0.35);
+
+        const double text_x = icon_x + icon_size + FromDIP(12);
+        
+        wxFont title_font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
+        title_font.SetPointSize(title_font.GetPointSize() + 6);
+        title_font.SetWeight(wxFONTWEIGHT_BOLD);
+        gc->SetFont(title_font, theme::text_white);
+        gc->DrawText("Cmdiqo", text_x, icon_y - FromDIP(1));
+
+        double cmdiqo_w, cmdiqo_h;
+        gc->GetTextExtent("Cmdiqo", &cmdiqo_w, &cmdiqo_h);
+
+        wxFont dot_dev_font = title_font;
+        gc->SetFont(dot_dev_font, theme::cyan_accent);
+        gc->DrawText(".dev", text_x + cmdiqo_w, icon_y - FromDIP(1));
+
+        wxFont sub_font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
+        sub_font.SetPointSize(std::max(7, sub_font.GetPointSize() - 2));
+        sub_font.SetWeight(wxFONTWEIGHT_BOLD);
+        gc->SetFont(sub_font, theme::text_muted);
+        gc->DrawText("LAN REMOTE COMMAND AGENT \xe2\x80\xa2 NATIVE SETUP", text_x, icon_y + FromDIP(20));
+
+        if (!version_text_.empty()) {
+            wxFont pill_font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
+            pill_font.SetPointSize(std::max(8, pill_font.GetPointSize() - 1));
+            pill_font.SetWeight(wxFONTWEIGHT_MEDIUM);
+            gc->SetFont(pill_font, theme::text_white);
+
+            double vtw, vth;
+            gc->GetTextExtent(version_text_, &vtw, &vth);
+
+            const double pill_pad_x = FromDIP(12);
+            const double pill_h = FromDIP(26);
+            const double dot_w = FromDIP(14);
+            const double pill_w = vtw + pill_pad_x * 2 + dot_w;
+            const double pill_x = rect.width - pill_w - FromDIP(16);
+            const double pill_y = rect.y + (rect.height - pill_h) / 2.0;
+
+            auto pill_path = gc->CreatePath();
+            pill_path.AddRoundedRectangle(pill_x, pill_y, pill_w, pill_h, pill_h / 2.0);
+
+            gc->SetBrush(wxBrush(wxColour(10, 24, 45, 200)));
+            gc->SetPen(wxPen(wxColour(0, 229, 255, 120), 1.0));
+            gc->DrawPath(pill_path);
+
+            const double dot_cx = pill_x + pill_pad_x + FromDIP(4);
+            const double dot_cy = pill_y + pill_h / 2.0;
+            gc->SetBrush(wxBrush(theme::cyan_accent));
+            gc->SetPen(*wxTRANSPARENT_PEN);
+            gc->DrawCircle(dot_cx, dot_cy, FromDIP(3.5));
+
+            gc->SetFont(pill_font, wxColour(200, 225, 255));
+            gc->DrawText(version_text_, dot_cx + FromDIP(8), pill_y + (pill_h - vth) / 2.0);
+        }
+    }
+
+    wxString version_text_;
+};
+
+class GlassContainerPanel final : public wxPanel {
+public:
+    GlassContainerPanel(wxWindow* parent)
+        : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE | wxTAB_TRAVERSAL) {
+        SetBackgroundStyle(wxBG_STYLE_PAINT);
+        SetBackgroundColour(theme::bg_card);
+        Bind(wxEVT_PAINT, &GlassContainerPanel::OnPaint, this);
+    }
+
+private:
+    void OnPaint(wxPaintEvent&) {
+        wxAutoBufferedPaintDC dc(this);
+        std::unique_ptr<wxGraphicsContext> gc(wxGraphicsContext::Create(dc));
+        if (!gc) return;
+
+        const wxRect rect = GetClientRect();
+        const double radius = FromDIP(8);
+
+        auto path = gc->CreatePath();
+        path.AddRoundedRectangle(rect.x + 0.5, rect.y + 0.5, rect.width - 1.0, rect.height - 1.0, radius);
+
+        auto brush = gc->CreateLinearGradientBrush(
+            rect.x, rect.y, rect.x, rect.y + rect.height,
+            wxColour(12, 24, 42), wxColour(9, 18, 33));
+        gc->SetBrush(brush);
+        gc->SetPen(wxPen(theme::border_panel, 1.0));
+        gc->DrawPath(path);
+    }
+};
+
+class ModernTerminalPanel final : public wxPanel {
+public:
+    ModernTerminalPanel(wxWindow* parent)
+        : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE) {
+        SetBackgroundStyle(wxBG_STYLE_PAINT);
+
+        auto* sizer = new wxBoxSizer(wxVERTICAL);
+        sizer->AddSpacer(FromDIP(26));
+
+        log_ = new wxTextCtrl(
+            this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize,
+            wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH2 | wxNO_BORDER);
+        log_->SetBackgroundColour(theme::term_bg);
+        log_->SetForegroundColour(theme::term_text);
+
+        wxFont font(FromDIP(9), wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL, false, "Consolas");
+        if (!font.IsOk()) {
+            font = wxFont(FromDIP(9), wxFONTFAMILY_MODERN, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+        }
+        log_->SetFont(font);
+
+        sizer->Add(log_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(6));
+        SetSizer(sizer);
+
+        Bind(wxEVT_PAINT, &ModernTerminalPanel::OnPaint, this);
+    }
+
+    wxTextCtrl* GetLogCtrl() { return log_; }
+
+private:
+    void OnPaint(wxPaintEvent&) {
+        wxAutoBufferedPaintDC dc(this);
+        std::unique_ptr<wxGraphicsContext> gc(wxGraphicsContext::Create(dc));
+        if (!gc) return;
+
+        const wxRect rect = GetClientRect();
+        const double radius = FromDIP(6);
+
+        auto card_path = gc->CreatePath();
+        card_path.AddRoundedRectangle(rect.x + 0.5, rect.y + 0.5, rect.width - 1.0, rect.height - 1.0, radius);
+        gc->SetBrush(wxBrush(theme::term_bg));
+        gc->SetPen(wxPen(theme::border_panel, 1.0));
+        gc->DrawPath(card_path);
+
+        const double bar_h = FromDIP(24);
+        auto header_path = gc->CreatePath();
+        header_path.MoveToPoint(rect.x + radius, rect.y + 0.5);
+        header_path.AddLineToPoint(rect.x + rect.width - radius, rect.y + 0.5);
+        header_path.AddArc(rect.x + rect.width - radius, rect.y + radius, radius, -M_PI / 2.0, 0, true);
+        header_path.AddLineToPoint(rect.x + rect.width, rect.y + bar_h);
+        header_path.AddLineToPoint(rect.x, rect.y + bar_h);
+        header_path.AddLineToPoint(rect.x, rect.y + radius);
+        header_path.AddArc(rect.x + radius, rect.y + radius, radius, M_PI, -M_PI / 2.0, true);
+        header_path.CloseSubpath();
+
+        gc->SetBrush(wxBrush(theme::term_header));
+        gc->SetPen(wxPen(theme::border_panel, 1.0));
+        gc->DrawPath(header_path);
+
+        const double dot_r = FromDIP(3.5);
+        const double dot_y = rect.y + bar_h / 2.0;
+        const double dot_start_x = rect.x + FromDIP(12);
+        const double dot_spacing = FromDIP(11);
+
+        gc->SetPen(*wxTRANSPARENT_PEN);
+        gc->SetBrush(wxBrush(wxColour(255, 95, 86)));
+        gc->DrawCircle(dot_start_x, dot_y, dot_r);
+
+        gc->SetBrush(wxBrush(wxColour(255, 189, 46)));
+        gc->DrawCircle(dot_start_x + dot_spacing, dot_y, dot_r);
+
+        gc->SetBrush(wxBrush(wxColour(39, 201, 63)));
+        gc->DrawCircle(dot_start_x + dot_spacing * 2, dot_y, dot_r);
+
+        wxFont hfont = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
+        hfont.SetPointSize(std::max(8, hfont.GetPointSize() - 2));
+        gc->SetFont(hfont, theme::text_dim);
+        double tw, th;
+        gc->GetTextExtent("bash \xe2\x80\x94 daemon activity & installer log", &tw, &th);
+        gc->DrawText("bash \xe2\x80\x94 daemon activity & installer log", rect.x + (rect.width - tw) / 2.0, rect.y + (bar_h - th) / 2.0);
+    }
+
+    wxTextCtrl* log_{nullptr};
+};
+
+class ModernStatusBarPanel final : public wxPanel {
+public:
+    ModernStatusBarPanel(wxWindow* parent)
+        : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE) {
+        SetBackgroundStyle(wxBG_STYLE_PAINT);
+        SetMinSize(wxSize(-1, FromDIP(32)));
+        Bind(wxEVT_PAINT, &ModernStatusBarPanel::OnPaint, this);
+    }
+
+    void SetStatus(const wxString& text, const wxColour& dot_color, bool visible = true) {
+        text_ = text;
+        dot_color_ = dot_color;
+        dot_visible_ = visible;
+        Refresh();
+    }
+
+private:
+    void OnPaint(wxPaintEvent&) {
+        wxAutoBufferedPaintDC dc(this);
+        std::unique_ptr<wxGraphicsContext> gc(wxGraphicsContext::Create(dc));
+        if (!gc) return;
+
+        const wxRect rect = GetClientRect();
+
+        gc->SetBrush(wxBrush(theme::bg_main));
+        gc->SetPen(wxPen(theme::border_panel, 1.0));
+        gc->DrawRectangle(rect.x, rect.y, rect.width, rect.height);
+        gc->StrokeLine(rect.x, rect.y, rect.x + rect.width, rect.y);
+
+        if (dot_visible_) {
+            const double dot_x = rect.x + FromDIP(14);
+            const double dot_y = rect.y + rect.height / 2.0;
+            const double dot_r = FromDIP(4.5);
+
+            gc->SetBrush(wxBrush(wxColour(dot_color_.Red(), dot_color_.Green(), dot_color_.Blue(), 60)));
+            gc->SetPen(*wxTRANSPARENT_PEN);
+            gc->DrawCircle(dot_x, dot_y, dot_r + FromDIP(2.5));
+
+            gc->SetBrush(wxBrush(dot_color_));
+            gc->DrawCircle(dot_x, dot_y, dot_r);
+
+            wxFont font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
+            font.SetPointSize(std::max(8, font.GetPointSize() - 1));
+            font.SetWeight(wxFONTWEIGHT_MEDIUM);
+            gc->SetFont(font, theme::text_white);
+
+            double tw, th;
+            gc->GetTextExtent(text_, &tw, &th);
+            gc->DrawText(text_, dot_x + dot_r + FromDIP(8), rect.y + (rect.height - th) / 2.0);
+        }
+    }
+
+    wxString text_{"Service status initializing..."};
+    wxColour dot_color_{theme::text_dim};
+    bool dot_visible_{true};
 };
 
 class InstallerFrame final : public wxFrame {
@@ -266,13 +797,13 @@ public:
     InstallerFrame(
         std::optional<std::filesystem::path> payload,
         std::optional<std::filesystem::path> initial_config)
-        : wxFrame(nullptr, wxID_ANY, "Cmdiqo Agent Setup", wxDefaultPosition, wxSize(720, 680)),
+        : wxFrame(nullptr, wxID_ANY, "Cmdiqo Agent Setup", wxDefaultPosition, wxSize(760, 720)),
           service_(),
           payload_(std::move(payload)),
           initial_config_(std::move(initial_config)),
           service_status_timer_(this) {
-        auto* panel = new wxPanel(this);
-        auto* layout = new wxBoxSizer(wxVERTICAL);
+        SetBackgroundColour(theme::bg_main);
+        SetMinSize(wxSize(680, 620));
 
         if (wxImage::FindHandler(wxBITMAP_TYPE_PNG) == nullptr) {
             wxImage::AddHandler(new wxPNGHandler);
@@ -285,57 +816,64 @@ public:
                 SetIcon(frame_icon);
             }
         }
-        auto* header = new wxBoxSizer(wxHORIZONTAL);
-        auto* title = new wxStaticText(panel, wxID_ANY, "Cmdiqo Agent native installer");
-        header->Add(title, 1, wxALL | wxALIGN_CENTER_VERTICAL, 12);
-        auto* logo = new wxStaticBitmap(panel, wxID_ANY, icon_bmp);
-        logo->SetToolTip(wxGetOsDescription());
-        header->Add(logo, 0, wxTOP | wxRIGHT | wxBOTTOM, 12);
-        layout->Add(header, 0, wxEXPAND);
-        state_ = new wxStaticText(panel, wxID_ANY, "");
-        layout->Add(state_, 0, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 12);
 
-        auto* form = new wxFlexGridSizer(2, 8, 10);
+        auto* main_panel = new wxPanel(this, wxID_ANY);
+        main_panel->SetBackgroundColour(theme::bg_main);
+        auto* layout = new wxBoxSizer(wxVERTICAL);
+
+        header_banner_ = new HeaderBannerPanel(main_panel, "Loading version...");
+        layout->Add(header_banner_, 0, wxEXPAND);
+
+        state_summary_ = new wxStaticText(main_panel, wxID_ANY, "");
+        state_summary_->SetForegroundColour(theme::text_muted);
+        layout->Add(state_summary_, 0, wxLEFT | wxRIGHT | wxTOP | wxEXPAND, FromDIP(14));
+
+        auto* glass_card = new GlassContainerPanel(main_panel);
+        auto* card_sizer = new wxBoxSizer(wxVERTICAL);
+
+        auto* form = new wxFlexGridSizer(2, FromDIP(8), FromDIP(10));
         form->AddGrowableCol(1, 1);
-        add_field(panel, form, "Hub URL", hub_url_ = new wxTextCtrl(panel, wxID_ANY));
-        add_field(panel, form, "Token", token_ = new TokenInputCtrl(panel));
-        add_field(panel, form, "Agent name", agent_name_ = new wxTextCtrl(panel, wxID_ANY));
-        form->Add(new wxStaticText(panel, wxID_ANY, "Slack notification"), 0, wxALIGN_CENTER_VERTICAL);
-        notify_ = new wxCheckBox(panel, wxID_ANY, "Notify when the agent connects");
+
+        add_field(glass_card, form, "Hub WebSocket URL", hub_url_ = new ModernTextInputCtrl(glass_card, false));
+        add_field(glass_card, form, "Shared Agent Token", token_ = new ModernTextInputCtrl(glass_card, true));
+        add_field(glass_card, form, "Agent Hostname", agent_name_ = new ModernTextInputCtrl(glass_card, false));
+
+        auto* notify_label = new wxStaticText(glass_card, wxID_ANY, "Slack Connectivity");
+        notify_label->SetForegroundColour(theme::text_muted);
+        form->Add(notify_label, 0, wxALIGN_CENTER_VERTICAL);
+
+        notify_ = new wxCheckBox(glass_card, wxID_ANY, "Notify Slack channel on agent connect / disconnect");
+        notify_->SetForegroundColour(theme::text_white);
         form->Add(notify_, 0, wxALIGN_CENTER_VERTICAL);
-        layout->Add(form, 0, wxALL | wxEXPAND, 12);
+
+        card_sizer->Add(form, 1, wxALL | wxEXPAND, FromDIP(12));
+        glass_card->SetSizer(card_sizer);
+        layout->Add(glass_card, 0, wxLEFT | wxRIGHT | wxTOP | wxEXPAND, FromDIP(14));
 
         auto* installation_buttons = new wxBoxSizer(wxHORIZONTAL);
-        add_button(panel, installation_buttons, "Install / Upgrade / Repair", [this] { install(); });
-        add_button(panel, installation_buttons, "Update config", [this] { update_config(); });
-        add_button(panel, installation_buttons, "Test Hub TCP", [this] { test_hub(); });
-        add_button(panel, installation_buttons, "Refresh State", [this] { refresh(true); });
-        layout->Add(installation_buttons, 0, wxLEFT | wxRIGHT | wxBOTTOM, 12);
+        add_button(main_panel, installation_buttons, "Install / Upgrade / Repair", ButtonVariant::Primary, [this] { install(); });
+        add_button(main_panel, installation_buttons, "Update config", ButtonVariant::Accent, [this] { update_config(); });
+        add_button(main_panel, installation_buttons, "Test Hub TCP", ButtonVariant::Secondary, [this] { test_hub(); });
+        add_button(main_panel, installation_buttons, "Refresh State", ButtonVariant::Secondary, [this] { refresh(true); });
+        layout->Add(installation_buttons, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(14));
 
         auto* service_buttons = new wxBoxSizer(wxHORIZONTAL);
-        add_button(panel, service_buttons, "Start", [this] { service_action("start"); });
-        add_button(panel, service_buttons, "Restart", [this] { service_action("restart"); });
-        add_button(panel, service_buttons, "Stop", [this] { service_action("stop"); });
-        add_button(panel, service_buttons, "Uninstall (keep config)", [this] { uninstall(false); });
-        add_button(panel, service_buttons, "Purge and uninstall", [this] { uninstall(true); });
-        layout->Add(service_buttons, 0, wxLEFT | wxRIGHT | wxBOTTOM, 12);
+        add_button(main_panel, service_buttons, "Start", ButtonVariant::Secondary, [this] { service_action("start"); });
+        add_button(main_panel, service_buttons, "Restart", ButtonVariant::Secondary, [this] { service_action("restart"); });
+        add_button(main_panel, service_buttons, "Stop", ButtonVariant::Secondary, [this] { service_action("stop"); });
+        add_button(main_panel, service_buttons, "Uninstall (keep config)", ButtonVariant::Danger, [this] { uninstall(false); });
+        add_button(main_panel, service_buttons, "Purge and uninstall", ButtonVariant::Danger, [this] { uninstall(true); });
+        layout->Add(service_buttons, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(14));
 
-        layout->Add(new wxStaticText(panel, wxID_ANY, "Progress and log"), 0, wxLEFT | wxRIGHT | wxBOTTOM, 12);
-        log_ = new wxTextCtrl(panel, wxID_ANY, "", wxDefaultPosition, wxDefaultSize,
-                              wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH2);
-        log_->SetBackgroundColour(wxColour(0, 0, 0));
-        log_->SetForegroundColour(wxColour(144, 238, 144));
-        layout->Add(log_, 1, wxLEFT | wxRIGHT | wxBOTTOM | wxEXPAND, 12);
-        panel->SetSizer(layout);
-        status_bar_ = CreateStatusBar(2);
-        const int status_widths[] = {FromDIP(20), -1};
-        status_bar_->SetStatusWidths(2, status_widths);
-        status_icon_ = new wxStaticBitmap(status_bar_, wxID_ANY, make_status_icon(wxColour(128, 128, 128)));
-        position_status_icon();
-        status_bar_->Bind(wxEVT_SIZE, [this](wxSizeEvent& event) {
-            position_status_icon();
-            event.Skip();
-        });
+        terminal_ = new ModernTerminalPanel(main_panel);
+        log_ = terminal_->GetLogCtrl();
+        layout->Add(terminal_, 1, wxLEFT | wxRIGHT | wxTOP | wxEXPAND, FromDIP(14));
+
+        status_bar_ = new ModernStatusBarPanel(main_panel);
+        layout->Add(status_bar_, 0, wxEXPAND | wxTOP, FromDIP(10));
+
+        main_panel->SetSizer(layout);
+
         Bind(wxEVT_SIZE, [this](wxSizeEvent& event) {
             layout_state_summary();
             event.Skip();
@@ -373,19 +911,30 @@ private:
     }
 
     static void add_field(wxWindow* parent, wxFlexGridSizer* form, const wxString& label, wxWindow* control) {
-        form->Add(new wxStaticText(parent, wxID_ANY, label), 0, wxALIGN_CENTER_VERTICAL);
+        auto* label_ctrl = new wxStaticText(parent, wxID_ANY, label);
+        label_ctrl->SetForegroundColour(theme::text_muted);
+        wxFont font = label_ctrl->GetFont();
+        font.SetWeight(wxFONTWEIGHT_MEDIUM);
+        label_ctrl->SetFont(font);
+        form->Add(label_ctrl, 0, wxALIGN_CENTER_VERTICAL);
         form->Add(control, 1, wxEXPAND);
     }
 
-    void add_button(wxPanel* panel, wxBoxSizer* container, const wxString& label, const std::function<void()>& handler) {
-        auto* button = new wxButton(panel, wxID_ANY, label);
+    ModernButton* add_button(
+        wxWindow* parent,
+        wxBoxSizer* container,
+        const wxString& label,
+        ButtonVariant variant,
+        const std::function<void()>& handler) {
+        auto* button = new ModernButton(parent, wxID_ANY, label, variant);
         button->Bind(wxEVT_BUTTON, [handler](wxCommandEvent&) { handler(); });
         buttons_.push_back(button);
-        container->Add(button, 0, wxRIGHT, 8);
+        container->Add(button, 0, wxRIGHT, FromDIP(8));
+        return button;
     }
 
     void append_log_segment(const wxString& text, const wxColour& color, bool bold) {
-        wxTextAttr style(color, wxColour(0, 0, 0));
+        wxTextAttr style(color, theme::term_bg);
         wxFont font = log_->GetFont();
         font.SetWeight(bold ? wxFONTWEIGHT_BOLD : wxFONTWEIGHT_NORMAL);
         style.SetFont(font);
@@ -397,74 +946,46 @@ private:
         constexpr std::string_view ok_prefix = "[OK] ";
         constexpr std::string_view error_prefix = "[ERROR] ";
         if (message.starts_with(ok_prefix)) {
-            append_log_segment("[OK]", wxColour(144, 238, 144), true);
-            append_log_segment(wxString::FromUTF8(message.substr(ok_prefix.size())), wxColour(144, 238, 144), false);
+            append_log_segment("[OK]", theme::cyan_accent, true);
+            append_log_segment(wxString::FromUTF8(message.substr(ok_prefix.size())), theme::cyan_accent, false);
         } else if (message.starts_with(error_prefix)) {
-            append_log_segment("[ERROR]", wxColour(255, 99, 71), true);
-            append_log_segment(wxString::FromUTF8(message.substr(error_prefix.size())), wxColour(144, 238, 144), false);
+            append_log_segment("[ERROR]", theme::term_error, true);
+            append_log_segment(wxString::FromUTF8(message.substr(error_prefix.size())), theme::term_error, false);
         } else {
-            append_log_segment(wxString::FromUTF8(message), wxColour(144, 238, 144), false);
+            append_log_segment(wxString::FromUTF8(message), theme::term_text, false);
         }
-        append_log_segment("\n", wxColour(144, 238, 144), false);
+        append_log_segment("\n", theme::term_text, false);
         append_gui_log(message);
     }
 
     void layout_state_summary() {
-        wxWindow* parent = state_->GetParent();
-        const int available_width = parent->GetClientSize().GetWidth() - FromDIP(24);
-        state_->Wrap(std::max(FromDIP(250), available_width));
+        if (state_summary_ == nullptr) return;
+        wxWindow* parent = state_summary_->GetParent();
+        const int available_width = parent->GetClientSize().GetWidth() - FromDIP(28);
+        state_summary_->Wrap(std::max(FromDIP(250), available_width));
         parent->Layout();
     }
 
-    wxBitmap make_status_icon(const wxColour& color) const {
-        const int size = FromDIP(12);
-        wxBitmap bitmap(size, size);
-        wxMemoryDC context(bitmap);
-        context.SetBackground(wxBrush(status_bar_->GetBackgroundColour()));
-        context.Clear();
-        context.SetBrush(wxBrush(color));
-        context.SetPen(wxPen(color));
-        context.DrawCircle(size / 2, size / 2, size / 2 - 1);
-        context.SelectObject(wxNullBitmap);
-        return bitmap;
-    }
-
-    void position_status_icon() {
-        if (status_bar_ == nullptr || status_icon_ == nullptr) {
-            return;
-        }
-        wxRect field;
-        status_bar_->GetFieldRect(0, field);
-        const int icon_size = FromDIP(12);
-        status_icon_->SetSize(
-            field.x + (field.width - icon_size) / 2,
-            field.y + (field.height - icon_size) / 2,
-            icon_size,
-            icon_size);
-    }
-
     void set_service_status_text(const std::string& text, const wxColour& color) {
-        status_icon_->SetBitmap(make_status_icon(color));
-        status_icon_->Show();
-        status_bar_->SetStatusText(wxString::FromUTF8(text), 1);
+        status_bar_->SetStatus(wxString::FromUTF8(text), color, true);
     }
 
     void show_starting_service_status() {
         service_starting_ = true;
         starting_icon_visible_ = true;
         service_status_timer_.Start(500);
-        set_service_status_text("service is being started ...", wxColour(255, 140, 0));
+        set_service_status_text("service is being started ...", wxColour(255, 189, 46));
     }
 
     void update_service_status(ServiceStatus status, const std::optional<std::string>& version) {
         service_starting_ = false;
         service_status_timer_.Stop();
         if (status == ServiceStatus::running) {
-            set_service_status_text("service running version " + version.value_or("unknown"), wxColour(50, 205, 50));
+            set_service_status_text("service running version " + version.value_or("unknown"), wxColour(39, 201, 63));
         } else if (status == ServiceStatus::stopped) {
-            set_service_status_text("service stopped version " + version.value_or("unknown"), wxColour(30, 144, 255));
+            set_service_status_text("service stopped version " + version.value_or("unknown"), wxColour(56, 189, 248));
         } else {
-            set_service_status_text("service not installed ...", wxColour(192, 192, 192));
+            set_service_status_text("service not installed ...", theme::text_dim);
         }
     }
 
@@ -474,9 +995,9 @@ private:
         }
         starting_icon_visible_ = !starting_icon_visible_;
         if (starting_icon_visible_) {
-            set_service_status_text("service is being started ...", wxColour(255, 140, 0));
+            set_service_status_text("service is being started ...", wxColour(255, 189, 46));
         } else {
-            status_icon_->Hide();
+            status_bar_->SetStatus("service is being started ...", wxColour(255, 189, 46), false);
         }
     }
 
@@ -550,8 +1071,14 @@ private:
 
         summary += "Configuration file: " + service_.paths().config_file.string();
 
-        state_->SetLabel(wxString::FromUTF8(summary));
+        state_summary_->SetLabel(wxString::FromUTF8(summary));
         layout_state_summary();
+
+        const std::string ver_badge = !installed.value_or("").empty()
+            ? ("Installed v" + *installed + " \xe2\x80\xa2 Bundled v" + bundled)
+            : ("Bundled v" + bundled + " \xe2\x80\xa2 Zero Inbound Ports");
+        header_banner_->SetVersionText(wxString::FromUTF8(ver_badge));
+
         update_service_status(PlatformOperations::service_status(service_.paths()), installed);
         append_log("State refreshed.");
     }
@@ -773,16 +1300,17 @@ private:
     InstallerService service_;
     std::optional<std::filesystem::path> payload_;
     std::optional<std::filesystem::path> initial_config_;
-    wxStaticText* state_{};
-    wxTextCtrl* hub_url_{};
-    TokenInputCtrl* token_{};
-    wxTextCtrl* agent_name_{};
+    HeaderBannerPanel* header_banner_{};
+    wxStaticText* state_summary_{};
+    ModernTextInputCtrl* hub_url_{};
+    ModernTextInputCtrl* token_{};
+    ModernTextInputCtrl* agent_name_{};
     wxCheckBox* notify_{};
+    ModernTerminalPanel* terminal_{};
     wxTextCtrl* log_{};
-    wxStatusBar* status_bar_{};
-    wxStaticBitmap* status_icon_{};
+    ModernStatusBarPanel* status_bar_{};
     wxTimer service_status_timer_;
-    std::vector<wxButton*> buttons_;
+    std::vector<ModernButton*> buttons_;
     bool operation_in_progress_{false};
     bool service_starting_{false};
     bool starting_icon_visible_{false};
@@ -813,9 +1341,6 @@ int run_gui(
     char** argv,
     const std::optional<std::filesystem::path>& payload,
     const std::optional<std::filesystem::path>& initial_config) {
-    // If the user explicitly requested a GUI on a headless Linux host, fail fast
-    // with a clear message instead of letting wxWidgets attempt initialization
-    // (which can lead to allocator errors / double-free on some setups).
     if (current_platform() == Platform::linux && !PlatformOperations::has_graphical_session()) {
         std::cerr << "No graphical session detected; run without --gui for CLI mode, or start an X/Wayland session (or use X forwarding / Xvfb) to use the GUI." << std::endl;
         return 1;
@@ -824,8 +1349,6 @@ int run_gui(
     auto* app = new InstallerApp(payload, initial_config);
     wxApp::SetInstance(app);
     if (!wxEntryStart(argc, argv)) {
-        // Avoid deleting 'app' here: wxEntryStart may already free internal resources
-        // and deleting it again can cause a double-free in some wxWidgets builds.
         return 1;
     }
     if (!wxTheApp->CallOnInit()) {
