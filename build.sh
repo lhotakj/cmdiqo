@@ -96,6 +96,7 @@ DEV_FLAG=false
 CLEAN=false
 SKIP_AGENT_BUILD=false
 SKIP_SIGN=false
+REBUILD_BUILDER=false
 COPY_TO=""
 VERSION_OVERRIDE=""
 DOCKER_USERNAME="${DOCKERHUB_USER:-${DOCKERHUB_USERNAME:-lhotakj}}"
@@ -161,6 +162,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --clean) CLEAN=true; shift ;;
         --skip-agent-build) SKIP_AGENT_BUILD=true; shift ;;
+        --rebuild-builder|--rebuild-image) REBUILD_BUILDER=true; shift ;;
         --copy-to) require_option_value "$@"; COPY_TO="$2"; shift 2 ;;
         --copy-to=*) require_option_value --copy-to "${1#*=}"; COPY_TO="${1#*=}"; shift ;;
         --skip-sign) SKIP_SIGN=true; shift ;;
@@ -220,28 +222,11 @@ DOCKER_RUNNING=false
 if command -v docker >/dev/null 2>&1 && docker_cli info >/dev/null 2>&1; then
     DOCKER_RUNNING=true
 fi
-if [[ "$BUILD_INSTALLER" = true || "$BUILD_BOT" = true ]]; then
+if [[ "$BUILD_AGENT" = true || "$BUILD_INSTALLER" = true || "$BUILD_BOT" = true ]]; then
     if [[ "$DOCKER_RUNNING" != true ]]; then
-        error "A running Linux-container Docker daemon is required for installer and bot builds."
+        error "A running Linux-container Docker daemon is required for agent, installer, and bot builds."
         exit 1
     fi
-fi
-if [[ "$BUILD_AGENT" = true && "$BUILD_WIN" = true && "$PYTHON_PLATFORM" != "windows "* ]]; then
-    error "Windows agents require native Windows Python; Linux PyInstaller cannot cross-compile them."
-    error "Build the Windows ZIP with build.ps1 on Windows, then use --installer --platform win64 --skip-agent-build."
-    exit 1
-fi
-if [[ "$BUILD_AGENT" = true && "$BUILD_WIN" = true ]]; then
-    case "$PYTHON_PLATFORM" in
-        "windows amd64 64"|"windows x86_64 64") ;;
-        *) error "Windows x64 agent builds require native Windows x64 Python."; exit 1 ;;
-    esac
-fi
-if [[ "$BUILD_AGENT" = true && "$BUILD_LINUX" = true && "$DOCKER_RUNNING" != true ]]; then
-    case "$PYTHON_PLATFORM" in
-        "linux x86_64 64"|"linux amd64 64") ;;
-        *) error "Building Linux x64 agents from this host requires Docker."; exit 1 ;;
-    esac
 fi
 if [[ -n "$COPY_TO" && ( "$BUILD_AGENT" != true || "$PLATFORM" == all ) ]]; then
     error "--copy-to requires an agent build for a single platform."
@@ -264,6 +249,7 @@ if [[ "$CLEAN" = true ]]; then
     if [[ "$BUILD_LINUX" = true && ( "$BUILD_AGENT" = true || "$BUILD_INSTALLER" = true ) ]]; then
         if [[ "$BUILD_AGENT" = true ]]; then
             rm -f "$DIST_DIR/cmdiqo-agent" "$DIST_DIR/cmdiqo-agent-linux-x64.zip"
+            rm -rf "$ROOT_DIR/agent.c/out/build/linux-x64"
         fi
         if [[ "$BUILD_INSTALLER" = true ]]; then
             rm -f "$DIST_DIR/cmdiqo-agent-linux-x64-setup"
@@ -273,6 +259,7 @@ if [[ "$CLEAN" = true ]]; then
     if [[ "$BUILD_WIN" = true && ( "$BUILD_AGENT" = true || "$BUILD_INSTALLER" = true ) ]]; then
         if [[ "$BUILD_AGENT" = true ]]; then
             rm -f "$DIST_DIR/cmdiqo-agent.exe" "$DIST_DIR/cmdiqo-agent-windows-x64.zip"
+            rm -rf "$ROOT_DIR/agent.c/out/build/windows-x64-mingw" "$ROOT_DIR/agent.c/out/build/windows-x64"
         fi
         if [[ "$BUILD_INSTALLER" = true ]]; then
             rm -f "$DIST_DIR/cmdiqo-agent-windows-x64-setup.exe"
@@ -297,75 +284,6 @@ TIMESTAMP=$(date +%Y%m%d%H%M%S)
 info "Build target version: ${VERSION} (Short: ${SHORT_VERSION})"
 info "Platform selection: ${PLATFORM} (linux64: ${BUILD_LINUX}, win64: ${BUILD_WIN})"
 
-if [[ "$BUILD_AGENT" = true && "$BUILD_LINUX" = true ]]; then
-    mkdir -p "$DIST_DIR"
-    rm -f "$DIST_DIR/cmdiqo-agent" "$DIST_DIR/cmdiqo-agent-linux-x64.zip"
-    if [[ "$DOCKER_RUNNING" = true ]]; then
-        info "=== Building standalone cmdiqo-agent in Debian trixie container ==="
-        BUILDER_IMAGE="cmdiqo-builder-linux:trixie"
-        info "Refreshing Linux builder image ($BUILDER_IMAGE)..."
-        docker_cli buildx build --load --platform linux/amd64 -t "$BUILDER_IMAGE" -f "$DOCKER_VOLUME_ROOT/docker/Dockerfile.builder-linux" "$DOCKER_VOLUME_ROOT"
-        agent_docker_args=(run --rm --platform linux/amd64)
-        if [[ "$PYTHON_PLATFORM" != "windows "* ]]; then
-            agent_docker_args+=(--user "$(id -u):$(id -g)")
-        fi
-        docker_cli "${agent_docker_args[@]}" \
-            -v "$DOCKER_VOLUME_ROOT:/workspace" \
-            -w /workspace \
-            -e HOME=/tmp \
-            "$BUILDER_IMAGE" \
-            python3 development/build_agent.py --version "$VERSION"
-    else
-        warn "Docker is not running; building with host Python."
-        warn "Building in Docker produces a more broadly compatible binary."
-        "$PYTHON_CMD" development/build_agent.py --version "$VERSION"
-    fi
-
-    if [[ ! -f "$DIST_DIR/cmdiqo-agent" ]]; then
-        error "Requested Linux agent binary was not produced."
-        exit 1
-    fi
-    if [[ ! -f "$DIST_DIR/cmdiqo-agent-linux-x64.zip" ]]; then
-        error "Requested Linux agent ZIP package was not produced."
-        exit 1
-    fi
-fi
-
-if [[ "$BUILD_AGENT" = true && "$BUILD_WIN" = true ]]; then
-    info "=== Building standalone Windows agent with native Windows Python ==="
-    mkdir -p "$DIST_DIR"
-    rm -f "$DIST_DIR/cmdiqo-agent.exe" "$DIST_DIR/cmdiqo-agent-windows-x64.zip"
-    AGENT_BUILD_ARGS=("$PYTHON_CMD" development/build_agent.py --version "$VERSION")
-    if [[ "$SKIP_SIGN" = true ]]; then
-        AGENT_BUILD_ARGS+=(--skip-sign)
-    fi
-    "${AGENT_BUILD_ARGS[@]}"
-    if [[ ! -f "$DIST_DIR/cmdiqo-agent.exe" || ! -f "$DIST_DIR/cmdiqo-agent-windows-x64.zip" ]]; then
-        error "The requested Windows agent binary and ZIP package were not produced."
-        exit 1
-    fi
-fi
-
-if [[ -n "$COPY_TO" ]]; then
-    agent_binary="$DIST_DIR/cmdiqo-agent"
-    agent_zip="$DIST_DIR/cmdiqo-agent-linux-x64.zip"
-    if [[ "$BUILD_WIN" = true ]]; then
-        agent_binary="$DIST_DIR/cmdiqo-agent.exe"
-        agent_zip="$DIST_DIR/cmdiqo-agent-windows-x64.zip"
-    fi
-    if [[ -d "$COPY_TO" ]]; then
-        COPY_TO="$COPY_TO/$(basename "$agent_binary")"
-    fi
-    mkdir -p "$(dirname "$COPY_TO")"
-    if [[ ! "$agent_binary" -ef "$COPY_TO" ]]; then
-        cp -f "$agent_binary" "$COPY_TO"
-    fi
-    copy_zip="$(dirname "$COPY_TO")/$(basename "$agent_zip")"
-    if [[ ! "$agent_zip" -ef "$copy_zip" ]]; then
-        cp -f "$agent_zip" "$copy_zip"
-    fi
-fi
-
 ensure_installer_builder_image() {
     local target_stage="$1"
     local local_image="$2"
@@ -386,20 +304,30 @@ for path in files:
 print(digest.hexdigest())
 ' "$installer_root")"
 
-    # 1. Check if local image exists and matches input hash
+    # 1. Check if local image exists
     if docker_cli image inspect "$local_image" >/dev/null 2>&1; then
         local current_hash
         current_hash="$(docker_cli image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' "$local_image")"
         if [[ "$current_hash" == "$build_input_hash" ]]; then
+            info "Pre-built builder image ($local_image) matches source checksum."
+            return 0
+        fi
+        if [[ "$REBUILD_BUILDER" != true ]]; then
+            info "Found existing local builder image ($local_image); reusing without rebuilding."
             return 0
         fi
     fi
 
-    # 2. Check if remote-tagged image exists locally and matches input hash
+    # 2. Check if remote-tagged image exists locally before pulling
     if docker_cli image inspect "$remote_image" >/dev/null 2>&1; then
         local remote_hash
         remote_hash="$(docker_cli image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' "$remote_image")"
         if [[ "$remote_hash" == "$build_input_hash" ]]; then
+            docker_cli tag "$remote_image" "$local_image"
+            return 0
+        fi
+        if [[ "$REBUILD_BUILDER" != true ]]; then
+            info "Found existing remote builder image ($remote_image); tagging as $local_image and reusing."
             docker_cli tag "$remote_image" "$local_image"
             return 0
         fi
@@ -429,6 +357,137 @@ print(digest.hexdigest())
         --target "$target_stage" \
         --build-arg "BUILDER_INPUT_SHA=$build_input_hash" \
         "$DOCKER_VOLUME_ROOT/installer.c"
+}
+
+package_agent_zip() {
+    local platform="$1"
+    local version="$2"
+    local binary_path="$3"
+
+    "$PYTHON_CMD" -c '
+import os, pathlib, stat, sys, zipfile, shutil
+
+platform = sys.argv[1]
+version = sys.argv[2]
+binary_path = pathlib.Path(sys.argv[3]).resolve()
+root_dir = pathlib.Path(sys.argv[4]).resolve()
+dist_dir = binary_path.parent
+agent_c_dir = root_dir / "agent.c"
+
+pkg_dir = dist_dir / "package"
+if pkg_dir.exists():
+    if pkg_dir.is_dir():
+        shutil.rmtree(pkg_dir)
+    else:
+        pkg_dir.unlink()
+pkg_dir.mkdir(parents=True, exist_ok=True)
+
+(dist_dir / "build-version.txt").write_text(version, encoding="utf-8")
+
+if platform == "win64":
+    zip_name = "cmdiqo-agent-windows-x64.zip"
+    files_to_pack = [
+        (binary_path, "cmdiqo-agent.exe"),
+        (agent_c_dir / "install-service.ps1", "install.ps1"),
+        (agent_c_dir / "uninstall-service.ps1", "uninstall.ps1"),
+        (agent_c_dir / "agent.env.example", "agent.env.example"),
+        (agent_c_dir / "agent.json.example", "agent.json.example"),
+        (dist_dir / "build-version.txt", "version.txt"),
+    ]
+    cer_path = dist_dir / "cmdiqo-agent.cer"
+    if cer_path.is_file():
+        files_to_pack.append((cer_path, "cmdiqo-agent.cer"))
+else:
+    zip_name = "cmdiqo-agent-linux-x64.zip"
+    files_to_pack = [
+        (binary_path, "cmdiqo-agent"),
+        (agent_c_dir / "install-service.sh", "install.sh"),
+        (agent_c_dir / "uninstall-service.sh", "uninstall.sh"),
+        (agent_c_dir / "cmdiqo-agent.service", "cmdiqo-agent.service"),
+        (agent_c_dir / "agent.env.example", "agent.env.example"),
+        (agent_c_dir / "agent.json.example", "agent.json.example"),
+        (dist_dir / "build-version.txt", "version.txt"),
+    ]
+
+for src, arc in files_to_pack:
+    if not src.is_file():
+        sys.exit(f"Required package file is missing: {src}")
+    staged = pkg_dir / arc
+    shutil.copy2(src, staged)
+    if platform != "win64" and arc in {"cmdiqo-agent", "install.sh", "uninstall.sh"}:
+        try:
+            os.chmod(staged, 0o755)
+        except OSError:
+            pass
+
+zip_path = dist_dir / zip_name
+with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+    for src, arc in files_to_pack:
+        zip_info = zipfile.ZipInfo.from_file(src, arcname=arc)
+        if platform != "win64" and arc in {"cmdiqo-agent", "install.sh", "uninstall.sh"}:
+            zip_info.create_system = 3
+            zip_info.external_attr = (stat.S_IFREG | 0o755) << 16
+        zf.writestr(zip_info, src.read_bytes(), compress_type=zipfile.ZIP_DEFLATED)
+
+print(f"[INFO] Agent ZIP package created: {zip_path}")
+' "$platform" "$version" "$binary_path" "$ROOT_DIR"
+}
+
+build_native_agent() {
+    local platform="$1"
+    local version="$2"
+    local preset="linux-x64"
+    local artifact="cmdiqo-agent"
+    local destination="cmdiqo-agent"
+    local installed_dir_var="VCPKG_INSTALLED_DIR_LINUX"
+    if [[ "$platform" == win64 ]]; then
+        preset="windows-x64-mingw"
+        artifact="cmdiqo-agent.exe"
+        destination="cmdiqo-agent.exe"
+        installed_dir_var="VCPKG_INSTALLED_DIR_WINDOWS"
+    fi
+    info "=== Building native $platform agent (Release) ==="
+    rm -f "$DIST_DIR/$destination"
+    local docker_args=(
+        run --rm --platform linux/amd64
+        --workdir /workspace/agent.c
+        --volume "$DOCKER_VOLUME_ROOT:/workspace"
+        --env HOME=/tmp
+        --env "PRESET=$preset"
+        --env "INSTALLED_DIR_VAR=$installed_dir_var"
+        --env "CMDIQO_BUILD_VERSION=$version"
+    )
+    if [[ "$PYTHON_PLATFORM" != "windows "* ]]; then
+        docker_args+=(--user "$(id -u):$(id -g)")
+    fi
+    docker_cli "${docker_args[@]}" cmdiqo-installer-builder:all bash -c '
+        set -euo pipefail
+        export TMPDIR="/tmp/cmdiqo-tmp-$$"
+        export WINEPREFIX="/tmp/cmdiqo-wine-$$"
+        install --directory --mode=700 "$TMPDIR" "$WINEPREFIX"
+        installed_dir="${!INSTALLED_DIR_VAR}"
+        if [[ ! -d "$installed_dir" ]]; then
+            printf "[ERROR] Pre-built dependency root is missing: %s\n" "$installed_dir" >&2
+            exit 1
+        fi
+        cmake --fresh --preset "$PRESET" \
+            "-DVCPKG_INSTALLED_DIR=$installed_dir" \
+            -DVCPKG_MANIFEST_INSTALL=OFF \
+            "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}"
+        cmake --build --preset "build-$PRESET" --config Release
+        ctest --preset "test-$PRESET" -C Release --output-on-failure
+    '
+    if [[ ! -f "$ROOT_DIR/agent.c/out/build/$preset/$artifact" ]]; then
+        error "Native $platform agent binary was not produced."
+        exit 1
+    fi
+    cp -f "$ROOT_DIR/agent.c/out/build/$preset/$artifact" "$DIST_DIR/$destination"
+    if [[ "$platform" == linux64 ]]; then
+        chmod +x "$DIST_DIR/$destination"
+    fi
+    info "Native agent: $DIST_DIR/$destination"
+
+    package_agent_zip "$platform" "$version" "$DIST_DIR/$destination"
 }
 
 get_payload_version() {
@@ -513,18 +572,56 @@ build_native_installer() {
 if [[ "$BUILD_INSTALLER" = true ]]; then
     mkdir -p "$DIST_DIR"
     # Validate every input before building either target of a combined invocation.
-    if [[ "$BUILD_LINUX" = true ]]; then
+    if [[ "$BUILD_LINUX" = true && "$BUILD_AGENT" != true ]]; then
         linux_payload_version="$(get_payload_version "$DIST_DIR/cmdiqo-agent-linux-x64.zip")"
     fi
-    if [[ "$BUILD_WIN" = true ]]; then
+    if [[ "$BUILD_WIN" = true && "$BUILD_AGENT" != true ]]; then
         windows_payload_version="$(get_payload_version "$DIST_DIR/cmdiqo-agent-windows-x64.zip")"
     fi
+fi
+
+if [[ "$BUILD_AGENT" = true || "$BUILD_INSTALLER" = true ]]; then
+    mkdir -p "$DIST_DIR"
     ensure_installer_builder_image all cmdiqo-installer-builder:all \
         "${DOCKER_USERNAME}/cmdiqo-installer-builder:all" "$ROOT_DIR/installer.c"
+fi
+
+if [[ "$BUILD_AGENT" = true ]]; then
     if [[ "$BUILD_LINUX" = true ]]; then
+        build_native_agent linux64 "$VERSION"
+    fi
+    if [[ "$BUILD_WIN" = true ]]; then
+        build_native_agent win64 "$VERSION"
+    fi
+fi
+
+if [[ -n "$COPY_TO" ]]; then
+    agent_binary="$DIST_DIR/cmdiqo-agent"
+    agent_zip="$DIST_DIR/cmdiqo-agent-linux-x64.zip"
+    if [[ "$BUILD_WIN" = true ]]; then
+        agent_binary="$DIST_DIR/cmdiqo-agent.exe"
+        agent_zip="$DIST_DIR/cmdiqo-agent-windows-x64.zip"
+    fi
+    if [[ -d "$COPY_TO" ]]; then
+        COPY_TO="$COPY_TO/$(basename "$agent_binary")"
+    fi
+    mkdir -p "$(dirname "$COPY_TO")"
+    if [[ ! "$agent_binary" -ef "$COPY_TO" ]]; then
+        cp -f "$agent_binary" "$COPY_TO"
+    fi
+    copy_zip="$(dirname "$COPY_TO")/$(basename "$agent_zip")"
+    if [[ ! "$agent_zip" -ef "$copy_zip" ]]; then
+        cp -f "$agent_zip" "$copy_zip"
+    fi
+fi
+
+if [[ "$BUILD_INSTALLER" = true ]]; then
+    if [[ "$BUILD_LINUX" = true ]]; then
+        linux_payload_version="$(get_payload_version "$DIST_DIR/cmdiqo-agent-linux-x64.zip")"
         build_native_installer linux64 "$linux_payload_version"
     fi
     if [[ "$BUILD_WIN" = true ]]; then
+        windows_payload_version="$(get_payload_version "$DIST_DIR/cmdiqo-agent-windows-x64.zip")"
         build_native_installer win64 "$windows_payload_version"
     fi
 fi

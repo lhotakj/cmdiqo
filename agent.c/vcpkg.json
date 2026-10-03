@@ -1,0 +1,11 @@
+{
+  "name": "cmdiqo-agent-native",
+  "version-string": "1.0.0",
+  "description": "Native C++20 Cmdiqo Host Agent",
+  "dependencies": [
+    "catch2",
+    "cli11",
+    "ixwebsocket",
+    "nlohmann-json"
+  ]
+}

@@ -136,29 +136,46 @@ def build(tmp_path: Path, bash: str) -> BuildHarness:
     for name in ("Dockerfile", "vcpkg.json", "setup-env.sh"):
         shutil.copy2(repo / "installer.c" / name, installer / name)
     shutil.copytree(repo / "installer.c" / "triplets", installer / "triplets")
+    agent = root / "agent.c"
+    agent.mkdir()
+    for name in (
+        "CMakeLists.txt",
+        "CMakePresets.json",
+        "vcpkg.json",
+        "install-service.sh",
+        "uninstall-service.sh",
+        "install-service.ps1",
+        "uninstall-service.ps1",
+        "cmdiqo-agent.service",
+        "agent.env.example",
+        "agent.json.example",
+    ):
+        if (repo / "agent.c" / name).is_file():
+            shutil.copy2(repo / "agent.c" / name, agent / name)
     (root / "prebuilt-linux").mkdir()
     (root / "prebuilt-windows").mkdir()
     tools = root / "tools"
     tools.mkdir()
     write_command(tools, "uname", 'printf "%s\\n" "$MOCK_UNAME"\n')
+    write_command(
+        tools,
+        "install",
+        r"""
+args=()
+for arg in "$@"; do
+    if [[ "$arg" != --directory && "$arg" != --mode=* ]]; then
+        args+=("$arg")
+    fi
+done
+mkdir -p "${args[@]}"
+""",
+    )
     python_body = r"""
 if [[ "${1:-}" == "-c" && "${2:-}" == *"platform.system()"* ]]; then
     printf '%s\n' "$MOCK_PLATFORM"
 elif [[ "${1:-}" == "development/update_version.py" ]]; then
     if [[ "${MOCK_VERSION_STATUS:-0}" != 0 ]]; then exit "$MOCK_VERSION_STATUS"; fi
     printf '%s\n' "$MOCK_VERSION"
-elif [[ "${1:-}" == "development/build_agent.py" ]]; then
-    if [[ "${MOCK_AGENT_STATUS:-0}" != 0 ]]; then exit "$MOCK_AGENT_STATUS"; fi
-    if [[ "${MOCK_AGENT_OUTPUT:-1}" == 0 ]]; then exit 0; fi
-    mkdir -p "$MOCK_WORKSPACE/dist"
-    if [[ "$MOCK_PLATFORM" == "windows "* ]]; then
-        printf binary > "$MOCK_WORKSPACE/dist/cmdiqo-agent.exe"
-        cp "$MOCK_WORKSPACE/seed-windows.zip" "$MOCK_WORKSPACE/dist/cmdiqo-agent-windows-x64.zip"
-    else
-        printf binary > "$MOCK_WORKSPACE/dist/cmdiqo-agent"
-        chmod +x "$MOCK_WORKSPACE/dist/cmdiqo-agent"
-        cp "$MOCK_WORKSPACE/seed-linux.zip" "$MOCK_WORKSPACE/dist/cmdiqo-agent-linux-x64.zip"
-    fi
 else
     exec "$REAL_PYTHON" "$@"
 fi
@@ -171,12 +188,16 @@ fi
         r"""
 if [[ "${1:-}" == "--build" ]]; then
     if [[ "${MOCK_CMAKE_BUILD_STATUS:-0}" != 0 ]]; then exit "$MOCK_CMAKE_BUILD_STATUS"; fi
-    if [[ "${MOCK_CMAKE_OUTPUT:-1}" == 0 ]]; then exit 0; fi
+    if [[ "${MOCK_CMAKE_OUTPUT:-1}" == 0 || "${MOCK_AGENT_OUTPUT:-1}" == 0 ]]; then exit 0; fi
     preset="${3#build-}"
     mkdir -p "out/build/$preset"
-    artifact=cmdiqo-agent-setup
+    if [[ "$PWD" == *"agent.c"* ]]; then
+        artifact=cmdiqo-agent
+    else
+        artifact=cmdiqo-agent-setup
+    fi
     if [[ "$preset" == windows-x64-mingw ]]; then artifact+=.exe; fi
-    printf setup > "out/build/$preset/$artifact"
+    printf binary > "out/build/$preset/$artifact"
     chmod +x "out/build/$preset/$artifact"
 else
     exit "${MOCK_CONFIGURE_STATUS:-0}"
@@ -230,9 +251,6 @@ case "${1:-}" in
         done
         export VCPKG_INSTALLED_DIR_LINUX="$MOCK_WORKSPACE/prebuilt-linux"
         export VCPKG_INSTALLED_DIR_WINDOWS="$MOCK_WORKSPACE/prebuilt-windows"
-        if [[ "$image" == cmdiqo-builder-linux:trixie ]]; then
-            export MOCK_PLATFORM="linux x86_64 64"
-        fi
         cd "$MOCK_WORKSPACE${workdir#/workspace}"
         "$@"
         ;;
@@ -445,28 +463,27 @@ def test_setup_script_retag_errors_are_not_ignored(build: BuildHarness) -> None:
     assert "[SUCCESS]" not in result.stdout
 
 
-def test_unix_cannot_silently_succeed_at_windows_agent_build(
+def test_agent_builds_windows_via_mingw(
     build: BuildHarness,
 ) -> None:
     result = build.run("--agent", "--platform", "win64")
-    assert result.returncode != 0
-    assert "native Windows Python" in result.stderr
-    assert not [
-        call
-        for call in build.calls("python3")
-        if "development/update_version.py" in call
-    ]
-
-
-def test_windows_bash_default_builds_with_windows_python(build: BuildHarness) -> None:
-    build.env.update(MOCK_PLATFORM="windows amd64 64", MOCK_UNAME="MINGW64_NT-10.0")
-    result = build.run("--skip-sign")
     assert result.returncode == 0, result.stdout + result.stderr
-    agent = next(
-        call for call in build.calls("python") if "development/build_agent.py" in call
-    )
-    assert "--skip-sign" in agent
     assert (build.root / "dist" / "cmdiqo-agent.exe").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-windows-x64.zip").is_file()
+    configure = next(call for call in build.calls("cmake") if "--fresh" in call)
+    assert configure[configure.index("--preset") + 1] == "windows-x64-mingw"
+
+
+def test_agent_builds_all_platforms(
+    build: BuildHarness,
+) -> None:
+    result = build.run("--agent", "--platform", "all")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (build.root / "dist" / "cmdiqo-agent").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-x64.zip").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent.exe").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-windows-x64.zip").is_file()
+    assert len([call for call in build.calls("docker") if call[1] == "run"]) == 2
 
 
 def test_missing_prebuilt_dependency_root_is_reported(build: BuildHarness) -> None:
@@ -493,30 +510,16 @@ def test_summary_does_not_silently_skip_missing_artifacts(build: BuildHarness) -
     assert "Requested artifact is missing" in result.stderr
 
 
-@pytest.mark.parametrize("platform", ["windows arm64 64", "windows amd64 32"])
-def test_wrong_windows_python_cannot_emit_an_x64_agent(
-    build: BuildHarness, platform: str
+def test_agent_copy_works(
+    build: BuildHarness,
 ) -> None:
-    build.env.update(MOCK_PLATFORM=platform, MOCK_UNAME="MINGW64_NT-10.0")
-    result = build.run("--agent")
-    assert result.returncode != 0
-    assert "native Windows x64 Python" in result.stderr
-
-
-@pytest.mark.parametrize("containerized", [True, False])
-def test_linux_agent_copy_works_in_both_build_paths(
-    build: BuildHarness, containerized: bool
-) -> None:
-    if not containerized:
-        build.env["MOCK_DOCKER_STATUS"] = "1"
     copy = build.root / "copied artifacts" / "renamed-agent"
-    result = build.run("--agent", "--copy-to", copy.as_posix())
+    result = build.run("--agent", "--platform", "linux64", "--copy-to", copy.as_posix())
     assert result.returncode == 0, result.stdout + result.stderr
     assert copy.read_text() == "binary"
     assert (copy.parent / "cmdiqo-agent-linux-x64.zip").is_file()
-    if containerized:
-        run = next(call for call in build.calls("docker") if call[1] == "run")
-        assert run[run.index("--platform") + 1] == "linux/amd64"
+    run = next(call for call in build.calls("docker") if call[1] == "run")
+    assert run[run.index("--platform") + 1] == "linux/amd64"
 
 
 def test_success_without_agent_output_does_not_accept_stale_files(
@@ -536,7 +539,7 @@ def test_success_without_installer_output_is_an_error(build: BuildHarness) -> No
     assert "not produced" in result.stderr
 
 
-@pytest.mark.parametrize("target", ["--installer", "--bot"])
+@pytest.mark.parametrize("target", ["--agent", "--installer", "--bot"])
 def test_requested_docker_target_requires_a_running_daemon(
     build: BuildHarness, target: str
 ) -> None:
@@ -570,7 +573,7 @@ def test_macos_without_docker_cannot_emit_macho_as_linux(build: BuildHarness) ->
     )
     result = build.run("--agent", "--platform", "linux64")
     assert result.returncode != 0
-    assert "requires Docker" in result.stderr
+    assert "Docker daemon is required" in result.stderr or "requires Docker" in result.stderr
 
 
 def test_bot_development_version_is_a_valid_docker_tag(build: BuildHarness) -> None:

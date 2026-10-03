@@ -4,6 +4,8 @@
   "description": "Native C++20 Windows and Linux installer for the Cmdiqo Agent.",
   "dependencies": [
     "catch2",
+    "cli11",
+    "ixwebsocket",
     "libzip",
     "nlohmann-json",
     {

@@ -182,30 +182,28 @@ build_docker_image() {
     # --load  → image is exported into the local Docker daemon (local dev path)
     local build_args=(
       buildx build
+      --load
       --platform linux/amd64
       --file "${DOCKERFILE}"
       --target "${target_stage}"
+      --tag "${local_tag}"
+      --tag "${remote_tag}"
       --build-arg "BUILDER_INPUT_SHA=${build_input_hash}"
     )
-    if [[ "${REBUILD_IMAGE}" -eq 1 ]]; then
-      build_args+=(--pull)
+    if [[ -n "${alt_remote_tag}" ]]; then
+      build_args+=(--tag "${alt_remote_tag}")
     fi
-    if [[ "${PUSH}" -eq 1 ]]; then
-      # Direct registry push: no intermediate local image required.
-      build_args+=(--tag "${remote_tag}")
-      if [[ -n "${alt_remote_tag}" ]]; then
-        build_args+=(--tag "${alt_remote_tag}")
-      fi
-      build_args+=(--push)
-    else
-      # Load into local daemon for immediate use / testing.
-      build_args+=(--tag "${local_tag}" --tag "${remote_tag}")
-      if [[ -n "${alt_remote_tag}" ]]; then
-        build_args+=(--tag "${alt_remote_tag}")
-      fi
-      build_args+=(--load)
+    if [[ "${REBUILD_IMAGE}" -eq 1 ]]; then
+      build_args+=(--pull --no-cache)
     fi
     docker "${build_args[@]}" "${ROOT}"
+    if [[ "${PUSH}" -eq 1 ]]; then
+      info "Pushing ${label} builder image to Docker Hub (${remote_tag})."
+      docker push "${remote_tag}"
+      if [[ -n "${alt_remote_tag}" ]]; then
+        docker push "${alt_remote_tag}"
+      fi
+    fi
   else
     # Image is already up-to-date; just re-tag and optionally push.
     if [[ "${existing_image}" != "${local_tag}" ]]; then

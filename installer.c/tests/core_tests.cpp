@@ -1,6 +1,7 @@
 #include "cmdiqo/installer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <sstream>
 
 using namespace cmdiqo::installer;
 
@@ -59,4 +60,76 @@ TEST_CASE("Hub endpoint parsing supplies websocket defaults") {
     CHECK(secure->secure);
     CHECK_FALSE(parse_hub_endpoint("https://hub.example.test"));
     CHECK_FALSE(parse_hub_endpoint("ws://hub.example.test:99999"));
+}
+
+TEST_CASE("prompt_config preserves default values on empty input") {
+    const Config initial{
+        .hub_url = "ws://10.0.0.1:8765",
+        .token = "existing-secret",
+        .agent_name = "default-node",
+        .agent_connection_notify = false,
+    };
+    std::istringstream in("\n\n\n\n");
+    std::ostringstream out;
+
+    const Config result = prompt_config(initial, in, out);
+    CHECK(result.hub_url == initial.hub_url);
+    CHECK(result.token == initial.token);
+    CHECK(result.agent_name == initial.agent_name);
+    CHECK(result.agent_connection_notify == initial.agent_connection_notify);
+    CHECK(out.str().find("ws://10.0.0.1:8765") != std::string::npos);
+    CHECK(out.str().find("<keep existing>") != std::string::npos);
+}
+
+TEST_CASE("prompt_config updates all fields when user provides input") {
+    const Config initial{
+        .hub_url = "ws://192.168.1.10:8765",
+        .token = "",
+        .agent_name = "old-name",
+        .agent_connection_notify = false,
+    };
+    std::istringstream in("wss://hub.production.net:443\nsuper-secret-token\nprod-agent-01\nyes\n");
+    std::ostringstream out;
+
+    const Config result = prompt_config(initial, in, out);
+    CHECK(result.hub_url == "wss://hub.production.net:443");
+    CHECK(result.token == "super-secret-token");
+    CHECK(result.agent_name == "prod-agent-01");
+    CHECK(result.agent_connection_notify);
+}
+
+TEST_CASE("prompt_config handles notification boolean parsing") {
+    const Config initial{
+        .hub_url = "ws://127.0.0.1:8765",
+        .token = "tok",
+        .agent_name = "agent",
+        .agent_connection_notify = true,
+    };
+    {
+        std::istringstream in("\n\n\nno\n");
+        std::ostringstream out;
+        const Config res = prompt_config(initial, in, out);
+        CHECK_FALSE(res.agent_connection_notify);
+    }
+    {
+        std::istringstream in("\n\n\n1\n");
+        std::ostringstream out;
+        const Config res = prompt_config(initial, in, out);
+        CHECK(res.agent_connection_notify);
+    }
+}
+
+TEST_CASE("PlatformOperations paths provides valid config paths") {
+    const InstallerPaths paths = PlatformOperations::paths();
+    CHECK_FALSE(paths.config_file.empty());
+    CHECK_FALSE(paths.config_dir.empty());
+    CHECK(paths.config_file.filename() == "config.json");
+}
+
+TEST_CASE("PlatformOperations run_elevated returns result for empty or invalid command when elevated or not") {
+    // If elevated, running with empty arguments should fail gracefully
+    if (PlatformOperations::is_elevated()) {
+        const auto res = PlatformOperations::run_elevated({});
+        CHECK_FALSE(res.ok);
+    }
 }

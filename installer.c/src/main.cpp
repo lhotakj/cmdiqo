@@ -7,6 +7,11 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
 #ifndef CMDIQO_INSTALLER_VERSION
 #define CMDIQO_INSTALLER_VERSION "unknown"
 #endif
@@ -18,6 +23,9 @@ struct Options {
     bool cli{false};
     bool gui{false};
     bool install{false};
+    bool fresh{false};
+    bool configure{false};
+    bool locate_config{false};
     bool uninstall{false};
     bool purge{false};
     bool status{false};
@@ -34,6 +42,7 @@ struct Options {
     std::optional<std::filesystem::path> payload;
     std::optional<std::filesystem::path> config;
     std::optional<std::filesystem::path> elevation_config;
+    std::optional<std::filesystem::path> result_file;
 };
 
 void print_usage(std::ostream& output) {
@@ -42,7 +51,10 @@ void print_usage(std::ostream& output) {
         << "GUI: cmdiqo-agent-setup [--gui] [--payload PATH]\n"
         << "CLI: cmdiqo-agent-setup --cli ACTION [options]\n\n"
         << "Actions:\n"
-        << "  --install                 Fresh install, upgrade, or repair\n"
+        << "  --install                 Install, upgrade, or repair the agent service\n"
+        << "  --fresh                   Interactive fresh install (prompts for configuration)\n"
+        << "  --configure               Interactively edit and update the agent configuration\n"
+        << "  --locate-config           Print the full path to the configuration file\n"
         << "  --uninstall [--purge]     Remove the service and binary; --purge removes config and logs\n"
         << "  --status                  Show installed version and service state\n"
         << "  --test-hub                Test TCP connectivity to the Hub without changing the system\n"
@@ -78,6 +90,13 @@ std::optional<Options> parse_options(int argc, char** argv, std::string& error) 
             options.gui = true;
         } else if (option == "--install" || option == "--repair") {
             options.install = true;
+        } else if (option == "--fresh") {
+            options.fresh = true;
+            options.install = true;
+        } else if (option == "--configure" || option == "--config-edit") {
+            options.configure = true;
+        } else if (option == "--locate-config" || option == "--config-path") {
+            options.locate_config = true;
         } else if (option == "--uninstall") {
             options.uninstall = true;
         } else if (option == "--purge") {
@@ -110,7 +129,9 @@ std::optional<Options> parse_options(int argc, char** argv, std::string& error) 
             options.config = std::filesystem::path(argv[++index]);
         } else if (option == "--elevation-config" && needs_value(index, argc, "--elevation-config", error)) {
             options.elevation_config = std::filesystem::path(argv[++index]);
-        } else if (option == "--help" || option == "-h") {
+        } else if (option == "--result-file" && needs_value(index, argc, "--result-file", error)) {
+            options.result_file = std::filesystem::path(argv[++index]);
+        } else if (option == "--help" || option == "-h" || option == "-?" || option == "/?") {
             options.help = true;
         } else if (option == "--version") {
             std::cout << "Cmdiqo native installer " << CMDIQO_INSTALLER_VERSION << '\n';
@@ -127,12 +148,15 @@ std::optional<Options> parse_options(int argc, char** argv, std::string& error) 
 }
 
 bool has_cli_action(const Options& options) {
-    return options.install || options.uninstall || options.status || options.test_hub
-        || options.start || options.restart || options.stop;
+    return options.install || options.fresh || options.configure || options.locate_config
+        || options.uninstall || options.status || options.test_hub
+        || options.start || options.restart || options.stop
+        || options.hub_url.has_value() || options.token.has_value() || options.agent_name.has_value()
+        || options.config.has_value() || options.notify_specified;
 }
 
 bool needs_privilege(const Options& options) {
-    return options.install || options.uninstall || options.start || options.restart || options.stop;
+    return options.install || options.configure || options.uninstall || options.start || options.restart || options.stop;
 }
 
 Config configured_values(const Options& options, const InstallerPaths& paths, std::string& error) {
@@ -196,6 +220,10 @@ void show_status(InstallerService& service, const Options& options) {
 
 int run_cli(const Options& options) {
     InstallerService service;
+    if (options.locate_config) {
+        std::cout << service.paths().config_file.string() << '\n';
+        return 0;
+    }
     if (options.status || !has_cli_action(options)) {
         show_status(service, options);
         return 0;
@@ -211,13 +239,80 @@ int run_cli(const Options& options) {
         std::cout << (result.ok ? "[OK] " : "[ERROR] ") << result.message << '\n';
         return result.ok ? 0 : 1;
     }
-    if (needs_privilege(options) && !PlatformOperations::is_elevated()) {
-        if (current_platform() == Platform::linux) {
-            std::cerr << "This action requires root. Re-run with sudo. To avoid exposing a token in shell history, use --config with a root-readable JSON file.\n";
-        } else {
-            std::cerr << "This action requires Administrator privileges. Open an elevated terminal or launch the GUI and accept UAC.\n";
+    const auto write_result_file = [&](const OperationResult& res) {
+        if (options.result_file) {
+            std::ofstream out(*options.result_file, std::ios::binary | std::ios::trunc);
+            if (out) {
+                out << (res.ok ? "OK:" : "ERROR:") << res.message << '\n';
+            }
         }
+    };
+
+    if (needs_privilege(options) && !PlatformOperations::is_elevated()) {
+        const std::string priv_msg = (current_platform() == Platform::linux)
+            ? "This action requires root. Re-run with sudo. To avoid exposing a token in shell history, use --config with a root-readable JSON file."
+            : "This action requires Administrator privileges. Open an elevated terminal or launch the GUI and accept UAC.";
+        std::cerr << priv_msg << '\n';
+        write_result_file(OperationResult::failure(priv_msg));
         return 1;
+    }
+
+    if (options.configure) {
+        std::string error;
+        Config config = load_config(service.paths());
+        if (options.config) {
+            std::ifstream input(*options.config);
+            if (!input) {
+                std::cerr << "Could not open configuration file " << options.config->string() << ".\n";
+                return 2;
+            }
+            std::string document((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+            const auto parsed = config_from_json(document, error);
+            if (!parsed) {
+                std::cerr << error << '\n';
+                return 2;
+            }
+            config = *parsed;
+        }
+
+        config = prompt_config(config, std::cin, std::cout);
+
+        if (options.hub_url) {
+            config.hub_url = *options.hub_url;
+        }
+        if (options.token) {
+            config.token = *options.token;
+        }
+        if (options.agent_name) {
+            config.agent_name = *options.agent_name;
+        }
+        if (options.notify_specified) {
+            config.agent_connection_notify = options.notify;
+        }
+
+        if (config.token.empty()) {
+            std::cerr << "[ERROR] AGENT_TOKEN cannot be empty.\n";
+            return 2;
+        }
+
+        const OperationResult save_result = save_config(service.paths(), config);
+        if (!save_result.ok) {
+            std::cerr << "[ERROR] " << save_result.message << '\n';
+            return 1;
+        }
+
+        std::cout << "[OK] Configuration saved to " << service.paths().config_file.string() << '\n';
+
+        if (PlatformOperations::service_status(service.paths()) == ServiceStatus::running) {
+            std::cout << "[*] Restarting agent service to apply configuration...\n";
+            const auto restart_result = PlatformOperations::restart_service(service.paths());
+            if (restart_result.ok) {
+                std::cout << "[OK] " << restart_result.message << '\n';
+            } else {
+                std::cerr << "[WARN] " << restart_result.message << '\n';
+            }
+        }
+        return 0;
     }
 
     const auto progress = [](std::string_view message) {
@@ -226,15 +321,47 @@ int run_cli(const Options& options) {
     OperationResult result;
     if (options.install) {
         std::string error;
-        const Config config = configured_values(options, service.paths(), error);
-        if (!error.empty()) {
-            std::cerr << error << '\n';
+        Config config;
+        if (options.fresh) {
+            config = load_config(service.paths());
+            if (options.config) {
+                std::ifstream input(*options.config);
+                if (!input) {
+                    std::cerr << "Could not open configuration file " << options.config->string() << ".\n";
+                    return 2;
+                }
+                std::string document((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+                const auto parsed = config_from_json(document, error);
+                if (!parsed) {
+                    std::cerr << error << '\n';
+                    return 2;
+                }
+                config = *parsed;
+            }
+            config = prompt_config(config, std::cin, std::cout);
+            if (options.hub_url) config.hub_url = *options.hub_url;
+            if (options.token) config.token = *options.token;
+            if (options.agent_name) config.agent_name = *options.agent_name;
+            if (options.notify_specified) config.agent_connection_notify = options.notify;
+        } else {
+            config = configured_values(options, service.paths(), error);
+            if (!error.empty()) {
+                std::cerr << error << '\n';
+                return 2;
+            }
+        }
+        if (config.token.empty()) {
+            const std::string err = "AGENT_TOKEN cannot be empty. Specify via prompt, --token, or --config.";
+            std::cerr << "[ERROR] " << err << "\n";
+            write_result_file(OperationResult::failure(err));
             return 2;
         }
         const auto payload = service.locate_payload(options.payload);
         if (!payload) {
-            std::cerr << "Expected exact payload " << payload_file_name(current_platform())
-                      << " beside the installer, in payloads/, or with --payload.\n";
+            const std::string err = "Expected exact payload " + payload_file_name(current_platform())
+                                  + " beside the installer, in payloads/, or with --payload.";
+            std::cerr << err << "\n";
+            write_result_file(OperationResult::failure(err));
             return 2;
         }
         result = service.install_or_upgrade(config, *payload, progress);
@@ -247,6 +374,7 @@ int run_cli(const Options& options) {
     } else {
         result = PlatformOperations::stop_service(service.paths());
     }
+    write_result_file(result);
     std::cout << (result.ok ? "[OK] " : "[ERROR] ") << result.message << '\n';
     return result.ok ? 0 : 1;
 }
@@ -275,10 +403,16 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    const bool cli = options->cli || has_cli_action(*options)
+    const bool any_cli_arg = (argc > 1 && !options->gui);
+    const bool cli = options->cli || has_cli_action(*options) || any_cli_arg
         || (!options->gui && current_platform() == Platform::linux && !PlatformOperations::has_graphical_session());
     if (cli) {
         return run_cli(*options);
     }
+
+#ifdef _WIN32
+    FreeConsole();
+#endif
+
     return run_gui(argc, argv, options->payload, options->elevation_config);
 }

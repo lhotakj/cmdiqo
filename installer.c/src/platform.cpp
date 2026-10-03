@@ -264,10 +264,16 @@ ServiceStatus PlatformOperations::service_status(const InstallerPaths& paths) {
 }
 
 OperationResult PlatformOperations::start_service(const InstallerPaths& paths) {
+    if (service_status(paths) == ServiceStatus::running) {
+        return OperationResult::success("Service " + paths.service_name + " is already running.");
+    }
     const CommandResult result = current_platform() == Platform::windows
         ? run({"sc.exe", "start", paths.service_name})
         : run({"systemctl", "start", paths.service_name});
     if (result.exit_code != 0) {
+        if (current_platform() == Platform::windows && contains_case_insensitive(result.output, "1056")) {
+            return OperationResult::success("Service " + paths.service_name + " is already running.");
+        }
         return OperationResult::failure("Could not start service " + paths.service_name + ": " + result.output);
     }
     if (current_platform() == Platform::windows) {
@@ -477,6 +483,121 @@ bool PlatformOperations::relaunch_elevated(const std::vector<std::string>& argum
 #else
     logger.error("Elevation is unavailable on this platform.");
     return false;
+#endif
+}
+
+OperationResult PlatformOperations::run_elevated(const std::vector<std::string>& arguments, const Logger& logger) {
+    if (is_elevated()) {
+        const CommandResult res = run(arguments);
+        if (res.exit_code != 0) {
+            return OperationResult::failure("Operation failed: " + res.output);
+        }
+        return OperationResult::success(res.output.empty() ? "Operation completed." : res.output);
+    }
+
+    std::error_code temp_ec;
+    const auto temp_dir = std::filesystem::temp_directory_path(temp_ec);
+    const auto process_id = 
+#ifdef _WIN32
+        GetCurrentProcessId();
+#else
+        getpid();
+#endif
+    const std::filesystem::path result_file = (!temp_ec && !temp_dir.empty())
+        ? (temp_dir / ("cmdiqo-res-" + std::to_string(process_id) + ".txt"))
+        : std::filesystem::path{};
+
+    std::vector<std::string> full_arguments = arguments;
+    if (!result_file.empty()) {
+        full_arguments.push_back("--result-file");
+        full_arguments.push_back(result_file.string());
+    }
+
+    const auto read_result_file = [&result_file](int exit_code) -> OperationResult {
+        if (!result_file.empty() && std::filesystem::exists(result_file)) {
+            std::ifstream res_in(result_file);
+            std::string res_text((std::istreambuf_iterator<char>(res_in)), std::istreambuf_iterator<char>());
+            res_in.close();
+            std::error_code rm_ec;
+            std::filesystem::remove(result_file, rm_ec);
+            while (!res_text.empty() && (res_text.back() == '\r' || res_text.back() == '\n')) {
+                res_text.pop_back();
+            }
+            if (res_text.starts_with("OK:")) {
+                return OperationResult::success(res_text.substr(3));
+            }
+            if (res_text.starts_with("ERROR:")) {
+                return OperationResult::failure(res_text.substr(6));
+            }
+        }
+        if (exit_code != 0) {
+            return OperationResult::failure("Elevated operation failed with exit code " + std::to_string(exit_code) + ".");
+        }
+        return OperationResult::success("Operation completed successfully.");
+    };
+
+#ifdef _WIN32
+    char executable[MAX_PATH]{};
+    const DWORD size = GetModuleFileNameA(nullptr, executable, MAX_PATH);
+    if (size == 0 || size == MAX_PATH) {
+        logger.error("Could not determine installer executable for elevation.");
+        return OperationResult::failure("Could not determine installer executable for elevation.");
+    }
+    std::wstring parameters;
+    for (const auto& argument : full_arguments) {
+        if (!parameters.empty()) {
+            parameters += L' ';
+        }
+        parameters += quote_windows_argument(argument);
+    }
+
+    SHELLEXECUTEINFOW sei{};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+    sei.lpVerb = L"runas";
+    sei.lpFile = wide(executable).c_str();
+    sei.lpParameters = parameters.c_str();
+    sei.nShow = SW_HIDE;
+
+    if (!ShellExecuteExW(&sei)) {
+        const DWORD err = GetLastError();
+        if (err == ERROR_CANCELLED) {
+            return OperationResult::failure("Administrator permission was not granted (cancelled by user).");
+        }
+        logger.error("Windows elevation request failed with error " + std::to_string(err));
+        return OperationResult::failure("Elevation request failed (error " + std::to_string(err) + ").");
+    }
+
+    DWORD exit_code = 0;
+    if (sei.hProcess != nullptr) {
+        WaitForSingleObject(sei.hProcess, INFINITE);
+        GetExitCodeProcess(sei.hProcess, &exit_code);
+        CloseHandle(sei.hProcess);
+    }
+    return read_result_file(static_cast<int>(exit_code));
+#elif defined(__linux__)
+    if (!std::filesystem::exists("/usr/bin/pkexec") && !std::filesystem::exists("/bin/pkexec")) {
+        logger.error("pkexec is not installed. Use the documented sudo --cli fallback.");
+        return OperationResult::failure("pkexec is not installed. Run the command with sudo in terminal.");
+    }
+    std::array<char, 4096> executable{};
+    const ssize_t length = readlink("/proc/self/exe", executable.data(), executable.size() - 1);
+    if (length <= 0) {
+        logger.error("Could not determine installer executable for pkexec.");
+        return OperationResult::failure("Could not determine installer executable.");
+    }
+    executable[static_cast<std::size_t>(length)] = '\0';
+    std::vector<std::string> command;
+    command.push_back("pkexec");
+    command.push_back(executable.data());
+    for (const auto& argument : full_arguments) {
+        command.push_back(argument);
+    }
+    const CommandResult result = run(command);
+    return read_result_file(result.exit_code);
+#else
+    logger.error("Elevation is unavailable on this platform.");
+    return OperationResult::failure("Elevation is unavailable on this platform.");
 #endif
 }
 

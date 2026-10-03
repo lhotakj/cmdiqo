@@ -97,10 +97,18 @@ public:
         if (wxImage::FindHandler(wxBITMAP_TYPE_PNG) == nullptr) {
             wxImage::AddHandler(new wxPNGHandler);
         }
+        wxBitmap icon_bmp = platform_logo();
+        if (icon_bmp.IsOk()) {
+            wxIcon frame_icon;
+            frame_icon.CopyFromBitmap(icon_bmp);
+            if (frame_icon.IsOk()) {
+                SetIcon(frame_icon);
+            }
+        }
         auto* header = new wxBoxSizer(wxHORIZONTAL);
         auto* title = new wxStaticText(panel, wxID_ANY, "Cmdiqo Agent native installer");
         header->Add(title, 1, wxALL | wxALIGN_CENTER_VERTICAL, 12);
-        auto* logo = new wxStaticBitmap(panel, wxID_ANY, platform_logo());
+        auto* logo = new wxStaticBitmap(panel, wxID_ANY, icon_bmp);
         logo->SetToolTip(wxGetOsDescription());
         header->Add(logo, 0, wxTOP | wxRIGHT | wxBOTTOM, 12);
         layout->Add(header, 0, wxEXPAND);
@@ -300,32 +308,6 @@ private:
         };
     }
 
-    bool require_elevation() {
-        if (PlatformOperations::is_elevated()) {
-            return true;
-        }
-        std::string staging_error;
-        const auto staged_config = stage_elevation_config(staging_error);
-        if (!staged_config) {
-            append_log("Elevation configuration staging failed: " + staging_error);
-            const std::string elevation_message =
-                "Could not safely stage the current form for elevation: " + staging_error
-                + "\nSee ~/.config/cmdiqo-installer/installer.log for diagnostics.";
-            wxMessageBox(
-                wxString::FromUTF8(elevation_message.c_str()),
-                "Cmdiqo Agent Setup", wxOK | wxICON_ERROR, this);
-            return false;
-        }
-        const wxString explanation = current_platform() == Platform::linux
-            ? "Installation changes system paths and systemd. Cmdiqo will request permission through your system's pkexec dialog and reopen the native GUI with this form."
-            : "Installation changes Program Files and the Service Control Manager. Cmdiqo will request Administrator permission and reopen the native GUI with this form.";
-        append_log(explanation.ToStdString());
-        if (!PlatformOperations::relaunch_elevated({"--gui", "--elevation-config", staged_config->string()}, Logger{})) {
-            wxMessageBox("Elevation was not granted. Use the CLI fallback from an elevated terminal.", "Cmdiqo Agent Setup", wxOK | wxICON_ERROR, this);
-        }
-        return false;
-    }
-
     void refresh() {
         Config config = load_config(service_.paths());
         if (initial_config_) {
@@ -337,8 +319,9 @@ private:
             } else {
                 std::ifstream input(*initial_config_);
                 std::string document((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+                input.close();
                 std::string error;
-                if (input) {
+                if (!document.empty()) {
                     if (const auto staged = config_from_json(document, error)) {
                         config = *staged;
                         std::error_code remove_error;
@@ -361,18 +344,21 @@ private:
         notify_->SetValue(config.agent_connection_notify);
 
         const auto payload = service_.locate_payload(payload_);
-        const std::string bundled = payload ? service_.bundled_version(*payload) : "payload not found";
+        const std::string bundled = payload ? service_.bundled_version(*payload) : "";
         const auto installed = service_.installed_version();
-        std::string summary = "Platform: " + platform_name(current_platform()) + "\n";
-        summary += "Bundled version: " + bundled + "\n";
-        summary += "Installed version: " + installed.value_or("not installed") + "\n";
-        if (installed && payload) {
-            summary += version_relation_message(compare_versions(*installed, bundled)) + "\n";
-        } else if (!installed) {
-            summary += "Fresh install: configure the Hub and select Install.\n";
+
+        std::string summary;
+        if (!installed || (payload && compare_versions(*installed, bundled) == VersionRelation::older)) {
+            if (!bundled.empty() && bundled != "payload not found") {
+                summary = "New version " + bundled + " can be installed\n";
+            } else {
+                summary = "New version can be installed\n";
+            }
         } else {
-            summary += "Version comparison is unavailable until the expected platform payload is beside this installer.\n";
+            summary = "You're running the latest version\n";
         }
+
+        summary += "Configuration file: " + service_.paths().config_file.string();
 
         state_->SetLabel(wxString::FromUTF8(summary));
         layout_state_summary();
@@ -451,9 +437,6 @@ private:
             wxMessageBox("Enter a valid ws:// or wss:// Hub URL.", "Cmdiqo Agent Setup", wxOK | wxICON_WARNING, this);
             return;
         }
-        if (!require_elevation()) {
-            return;
-        }
         const auto payload = service_.locate_payload(payload_);
         if (!payload) {
             const wxString missing_payload = "The exact platform payload was not found. Put "
@@ -465,10 +448,27 @@ private:
         }
         show_starting_service_status();
         run_background([this, config, payload] {
-            return service_.install_or_upgrade(config, *payload, [this](std::string_view message) {
-                const std::string copy(message);
-                wxTheApp->CallAfter([this, copy] { append_log(copy); });
-            });
+            if (PlatformOperations::is_elevated()) {
+                return service_.install_or_upgrade(config, *payload, [this](std::string_view message) {
+                    const std::string copy(message);
+                    wxTheApp->CallAfter([this, copy] { append_log(copy); });
+                });
+            }
+            std::string staging_error;
+            const auto staged = stage_elevation_config(staging_error);
+            if (!staged) {
+                return OperationResult::failure("Could not stage configuration: " + staging_error);
+            }
+            const std::filesystem::path abs_payload = std::filesystem::absolute(*payload);
+            const std::vector<std::string> args{
+                "--cli", "--install",
+                "--config", staged->string(),
+                "--payload", abs_payload.string()
+            };
+            const auto res = PlatformOperations::run_elevated(args);
+            std::error_code ec;
+            std::filesystem::remove(*staged, ec);
+            return res;
         });
     }
 
@@ -478,20 +478,28 @@ private:
     }
 
     void service_action(const std::string& action) {
-        if (!require_elevation()) {
+        if (action == "start" && PlatformOperations::service_status(service_.paths()) == ServiceStatus::running) {
+            append_log("[OK] Service " + service_.paths().service_name + " is already running.");
+            return;
+        }
+        if (action == "stop" && PlatformOperations::service_status(service_.paths()) == ServiceStatus::stopped) {
+            append_log("[OK] Service " + service_.paths().service_name + " is already stopped.");
             return;
         }
         if (action == "start" || action == "restart") {
             show_starting_service_status();
         }
         run_background([this, action] {
-            if (action == "start") {
-                return PlatformOperations::start_service(service_.paths());
+            if (PlatformOperations::is_elevated()) {
+                if (action == "start") {
+                    return PlatformOperations::start_service(service_.paths());
+                }
+                if (action == "restart") {
+                    return PlatformOperations::restart_service(service_.paths());
+                }
+                return PlatformOperations::stop_service(service_.paths());
             }
-            if (action == "restart") {
-                return PlatformOperations::restart_service(service_.paths());
-            }
-            return PlatformOperations::stop_service(service_.paths());
+            return PlatformOperations::run_elevated({"--cli", "--" + action});
         });
     }
 
@@ -502,14 +510,22 @@ private:
         if (wxMessageBox(message, "Confirm uninstall", wxYES_NO | wxNO_DEFAULT | wxICON_WARNING, this) != wxYES) {
             return;
         }
-        if (!require_elevation()) {
-            return;
-        }
         run_background([this, purge] {
-            return service_.uninstall(purge, [this](std::string_view message) {
-                const std::string copy(message);
-                wxTheApp->CallAfter([this, copy] { append_log(copy); });
-            });
+            if (PlatformOperations::is_elevated()) {
+                return service_.uninstall(purge, [this](std::string_view message) {
+                    const std::string copy(message);
+                    wxTheApp->CallAfter([this, copy] { append_log(copy); });
+                });
+            }
+            std::vector<std::string> args{"--cli", "--uninstall"};
+            if (purge) {
+                args.push_back("--purge");
+            }
+            const auto res = PlatformOperations::run_elevated(args);
+            if (!res.ok) {
+                return res;
+            }
+            return OperationResult::success("Uninstalled service " + service_.paths().service_name + ".");
         });
     }
 

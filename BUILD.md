@@ -506,3 +506,36 @@ The **Build Agent Binaries (Windows & Linux x64)** workflow can also be started 
    - Every `/release-agent` or `/release` run attaches both platform ZIP service packages and raw agent binaries listed in [Distribution Files](#distribution-files).
 2. Or open any completed workflow run under the **Actions** tab:
    - Scroll to **Artifacts** to download build packages directly.
+
+## Universal Clean Rebuild of Builder Images and All Toolchains
+
+When toolchains, vcpkg dependencies (e.g., `CLI11`, `ixwebsocket`, `wxWidgets`, `libzip`), or platform Dockerfiles change, use the following universal command to perform a 100% clean, end-to-end rebuild on the host:
+
+```bash
+nohup bash -c "cd installer.c && ./setup-env.sh --platform all --rebuild-image --push && cd .. && ./build.sh --installer --platform all --clean" > installer.log 2>&1 &
+```
+
+### Why It Is Structured This Way
+
+| Segment | Purpose & Rationale |
+| :--- | :--- |
+| `nohup bash -c "..." > installer.log 2>&1 &` | **Detached Background Execution & Unified Logging:** Rebuilding multi-toolchain Docker images from scratch (compiling wxWidgets, vcpkg ports, etc.) takes 15–30+ minutes. `nohup` prevents terminal disconnects (`SIGHUP`) from killing the job. Wrapping the commands in `bash -c "..."` runs the pipeline as a single background task, redirecting all stdout/stderr to `installer.log`. |
+| `cd installer.c && ./setup-env.sh` | **Environment Setup:** Switches to the native installer directory where Docker builder definitions, overlay triplets, and vcpkg manifests reside. |
+| `--platform all` *(setup-env)* | **Unified Multi-Platform Builder:** Prepares the unified Docker builder container containing both Linux GCC + GTK3 and Windows MinGW-w64 cross-compilers. |
+| `--rebuild-image` | **Forced Layer Cache Invalidation:** Bypasses Docker build cache (`--pull --no-cache`) and recompiles all toolchains and vcpkg packages fresh, ensuring newly added ports (like `CLI11`) are genuinely installed. |
+| `--push` | **Publish to Registry & Local Load:** Exports the freshly built image to the local Docker daemon (`--load`) and simultaneously pushes the tagged images to Docker Hub so CI/CD and other developers can reuse them. |
+| `&& cd ..` | **Safe Sequential Step:** Using `&&` guarantees the agent and installer builds will only proceed if the builder image build and push succeed completely. |
+| `./build.sh --installer --platform all` | **Full Packaging:** Compiles native C++ agents for both `linux64` and `win64`, packages their service ZIPs, and builds both native C++ GUI setup installers. |
+| `--clean` | **Purge Stale Artifacts:** Deletes previous `dist/` outputs and intermediate `out/build/` CMake directories to guarantee an entirely clean, reproducible release. |
+
+### Monitoring the Build Progress
+
+To stream the build output in real time:
+```bash
+tail -f installer.log
+```
+
+To check if the background build process is still running:
+```bash
+ps aux | grep build.sh
+```

@@ -116,7 +116,7 @@ function Build-DockerBuilder {
             $BuildArguments += @("--tag", $AltRemoteTag)
         }
         if ($RebuildImage) {
-            $BuildArguments += "--pull"
+            $BuildArguments += @("--pull", "--no-cache")
         }
         $BuilderInputHash = Get-BuilderInputHash $Dockerfile
         $BuildArguments += @("--build-arg", "BUILDER_INPUT_SHA=$BuilderInputHash", $Root)

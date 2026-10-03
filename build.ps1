@@ -33,6 +33,7 @@ $SkipSign = $false
 $CopyTo = ""
 $Clean = $false
 $SkipAgentBuild = $false
+$RebuildBuilder = $false
 $Push = $false
 $DockerUser = if ($env:DOCKERHUB_USERNAME) { $env:DOCKERHUB_USERNAME } else { "lhotakj" }
 $Platform = "win64"
@@ -61,6 +62,7 @@ for ($index = 0; $index -lt $CliArgs.Count; $index++) {
         "^--target=(.+)$|^-target=(.+)$" { $Target = $argument.Substring($argument.IndexOf("=") + 1); break }
         "^--clean$|^-clean$" { $Clean = $true; break }
         "^--skip-agent-build$|^-skipagentbuild$" { $SkipAgentBuild = $true; break }
+        "^--rebuild-builder$|^-rebuild-builder$|^--rebuild-image$|^-rebuild-image$" { $RebuildBuilder = $true; break }
         "^--skip-sign$|^-skip-sign$|^-skipsign$" { $SkipSign = $true; break }
         "^--copy-to$|^-copy-to$|^-copyto$" { $CopyTo = Get-OptionValue $argument; break }
         "^--copy-to=(.+)$|^-copy-to=(.+)$|^-copyto=(.+)$" { $CopyTo = $argument.Substring($argument.IndexOf("=") + 1); break }
@@ -227,20 +229,35 @@ function Ensure-InstallerBuilderImage {
     # PowerShell 5 must let redirected native stderr reach the exit-code checks.
     $ErrorActionPreference = "Continue"
 
-    # 1. Check local image hash
+    # 1. Check local image
     $localLabels = & docker image inspect --format '{{json .Config.Labels}}' $LocalImage 2>$null
     if ($LASTEXITCODE -eq 0) {
-        $localHash = ($localLabels | ConvertFrom-Json -ErrorAction Stop).'io.cmdiqo.installer-builder.build-input-sha256'
+        $localObj = ($localLabels | ConvertFrom-Json -ErrorAction SilentlyContinue)
+        $localHash = if ($localObj) { $localObj.'io.cmdiqo.installer-builder.build-input-sha256' } else { $null }
         if ($localHash -eq $buildInputHash) {
+            Write-Info "Pre-built builder image ($LocalImage) matches source checksum."
+            return
+        }
+        if ($localHash -and ($localHash -ne "") -and -not $RebuildBuilder) {
+            Write-Info "Found existing local builder image ($LocalImage); reusing without rebuilding."
             return
         }
     }
 
-    # 2. Check remote-tagged image hash
+    # 2. Check remote-tagged image
     $remoteLabels = & docker image inspect --format '{{json .Config.Labels}}' $RemoteImage 2>$null
     if ($LASTEXITCODE -eq 0) {
-        $remoteHash = ($remoteLabels | ConvertFrom-Json -ErrorAction Stop).'io.cmdiqo.installer-builder.build-input-sha256'
+        $remoteObj = ($remoteLabels | ConvertFrom-Json -ErrorAction SilentlyContinue)
+        $remoteHash = if ($remoteObj) { $remoteObj.'io.cmdiqo.installer-builder.build-input-sha256' } else { $null }
         if ($remoteHash -eq $buildInputHash) {
+            & docker tag $RemoteImage $LocalImage 2>$null
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to tag native installer builder $RemoteImage as $LocalImage."
+            }
+            return
+        }
+        if ($remoteHash -and ($remoteHash -ne "") -and -not $RebuildBuilder) {
+            Write-Info "Found existing remote builder image ($RemoteImage); tagging as $LocalImage and reusing."
             & docker tag $RemoteImage $LocalImage 2>$null
             if ($LASTEXITCODE -ne 0) {
                 throw "Failed to tag native installer builder $RemoteImage as $LocalImage."

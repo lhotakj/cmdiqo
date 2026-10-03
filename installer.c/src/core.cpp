@@ -464,6 +464,55 @@ OperationResult save_config(const InstallerPaths& paths, const Config& config) {
     return OperationResult::success("Saved agent configuration.");
 }
 
+Config prompt_config(const Config& initial, std::istream& in, std::ostream& out) {
+    Config config = initial;
+    std::string line;
+
+    out << "Enter Hub WebSocket URL [Default: " << config.hub_url << "]: " << std::flush;
+    if (std::getline(in, line)) {
+        const std::string trimmed = trim(line);
+        if (!trimmed.empty()) {
+            config.hub_url = trimmed;
+        }
+    }
+
+    if (!config.token.empty()) {
+        out << "Enter AGENT_TOKEN shared secret [Default: <keep existing>]: " << std::flush;
+    } else {
+        out << "Enter AGENT_TOKEN shared secret: " << std::flush;
+    }
+    if (std::getline(in, line)) {
+        const std::string trimmed = trim(line);
+        if (!trimmed.empty()) {
+            config.token = trimmed;
+        }
+    }
+
+    out << "Enter agent name [Default: " << config.agent_name << "]: " << std::flush;
+    if (std::getline(in, line)) {
+        const std::string trimmed = trim(line);
+        if (!trimmed.empty()) {
+            config.agent_name = trimmed;
+        }
+    }
+
+    const std::string default_notify = config.agent_connection_notify ? "yes" : "no";
+    out << "Enable Slack notification on agent connect/disconnect? (yes/no) [Default: "
+        << default_notify << "]: " << std::flush;
+    if (std::getline(in, line)) {
+        const std::string trimmed = trim(line);
+        if (!trimmed.empty()) {
+            std::string lower = trimmed;
+            std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            config.agent_connection_notify = (lower == "yes" || lower == "y" || lower == "true" || lower == "1");
+        }
+    }
+
+    return config;
+}
+
 Logger::Logger(std::filesystem::path file_path) : file_path_(std::move(file_path)) {}
 
 void Logger::info(std::string_view message) const {

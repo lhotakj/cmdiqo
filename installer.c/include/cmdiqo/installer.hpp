@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <iosfwd>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -81,6 +82,7 @@ Config load_config(const InstallerPaths& paths);
 OperationResult save_config(const InstallerPaths& paths, const Config& config);
 std::string config_to_json(const Config& config);
 std::optional<Config> config_from_json(std::string_view document, std::string& error);
+Config prompt_config(const Config& initial, std::istream& in, std::ostream& out);
 
 class Logger {
 public:
@@ -107,6 +109,7 @@ public:
     static OperationResult unregister_service(const InstallerPaths& paths, const Logger& logger);
     static OperationResult secure_config_file(const std::filesystem::path& config_file);
     static bool relaunch_elevated(const std::vector<std::string>& arguments, const Logger& logger);
+    static OperationResult run_elevated(const std::vector<std::string>& arguments, const Logger& logger = Logger{});
 };
 
 class InstallerService {
