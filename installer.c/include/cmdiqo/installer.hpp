@@ -76,7 +76,7 @@ bool is_safe_zip_entry(std::string_view name);
 VersionRelation compare_versions(std::string_view left, std::string_view right);
 std::string version_relation_message(VersionRelation relation);
 std::optional<Endpoint> parse_hub_endpoint(std::string_view hub_url);
-OperationResult test_hub_tcp(std::string_view hub_url, int timeout_seconds = 3);
+OperationResult test_hub_tcp(std::string_view hub_url, int timeout_seconds = 2);
 
 Config load_config(const InstallerPaths& paths);
 OperationResult save_config(const InstallerPaths& paths, const Config& config);

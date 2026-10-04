@@ -22,7 +22,9 @@
 #include <windows.h>
 #else
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netdb.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -303,19 +305,58 @@ OperationResult test_hub_tcp(std::string_view hub_url, int timeout_seconds) {
         if (socket_handle == INVALID_SOCKET) {
             continue;
         }
-        DWORD timeout = static_cast<DWORD>(timeout_seconds * 1000);
-        setsockopt(socket_handle, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
-        setsockopt(socket_handle, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
-        connected = connect(socket_handle, candidate->ai_addr, static_cast<int>(candidate->ai_addrlen)) == 0;
+        u_long non_blocking = 1;
+        ioctlsocket(socket_handle, FIONBIO, &non_blocking);
+
+        int res = connect(socket_handle, candidate->ai_addr, static_cast<int>(candidate->ai_addrlen));
+        if (res == 0) {
+            connected = true;
+        } else if (WSAGetLastError() == WSAEWOULDBLOCK) {
+            fd_set write_set;
+            FD_ZERO(&write_set);
+            FD_SET(socket_handle, &write_set);
+            fd_set err_set;
+            FD_ZERO(&err_set);
+            FD_SET(socket_handle, &err_set);
+
+            timeval tv{.tv_sec = timeout_seconds, .tv_usec = 0};
+            int select_res = select(0, nullptr, &write_set, &err_set, &tv);
+            if (select_res > 0 && FD_ISSET(socket_handle, &write_set)) {
+                int sock_err = 0;
+                int sock_err_len = sizeof(sock_err);
+                if (getsockopt(socket_handle, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&sock_err), &sock_err_len) == 0 && sock_err == 0) {
+                    connected = true;
+                }
+            }
+        }
         closesocket(socket_handle);
 #else
         if (socket_handle < 0) {
             continue;
         }
-        timeval timeout{.tv_sec = timeout_seconds, .tv_usec = 0};
-        setsockopt(socket_handle, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
-        setsockopt(socket_handle, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-        connected = connect(socket_handle, candidate->ai_addr, candidate->ai_addrlen) == 0;
+        int flags = fcntl(socket_handle, F_GETFL, 0);
+        if (flags >= 0) {
+            fcntl(socket_handle, F_SETFL, flags | O_NONBLOCK);
+        }
+
+        int res = connect(socket_handle, candidate->ai_addr, candidate->ai_addrlen);
+        if (res == 0) {
+            connected = true;
+        } else if (errno == EINPROGRESS) {
+            fd_set write_set;
+            FD_ZERO(&write_set);
+            FD_SET(socket_handle, &write_set);
+
+            timeval tv{.tv_sec = timeout_seconds, .tv_usec = 0};
+            int select_res = select(socket_handle + 1, nullptr, &write_set, nullptr, &tv);
+            if (select_res > 0 && FD_ISSET(socket_handle, &write_set)) {
+                int sock_err = 0;
+                socklen_t sock_err_len = sizeof(sock_err);
+                if (getsockopt(socket_handle, SOL_SOCKET, SO_ERROR, &sock_err, &sock_err_len) == 0 && sock_err == 0) {
+                    connected = true;
+                }
+            }
+        }
         close(socket_handle);
 #endif
     }

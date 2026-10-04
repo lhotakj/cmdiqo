@@ -2,6 +2,7 @@
 #include "embedded_logos.hpp"
 
 #include <algorithm>
+#include <clocale>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -113,6 +114,24 @@ void append_gui_log(std::string_view message) {
     if (output) {
         output << message << '\n';
     }
+}
+
+wxBitmap load_embedded_png(const unsigned char* data, std::size_t size, int target_size_dip) {
+    if (data == nullptr || size == 0) {
+        return {};
+    }
+    if (wxImage::FindHandler(wxBITMAP_TYPE_PNG) == nullptr) {
+        wxImage::AddHandler(new wxPNGHandler);
+    }
+    wxMemoryInputStream stream(data, size);
+    wxImage image(stream, wxBITMAP_TYPE_PNG);
+    if (!image.IsOk()) {
+        return {};
+    }
+    if (target_size_dip > 0) {
+        image.Rescale(target_size_dip, target_size_dip, wxIMAGE_QUALITY_HIGH);
+    }
+    return wxBitmap(image);
 }
 
 wxBitmap draw_eye_icon(bool show_plain, int dip_w, int dip_h, const wxColour& bg_color, const wxColour& fg_color) {
@@ -507,7 +526,7 @@ public:
         : wxPanel(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE),
           version_text_(version_text) {
         SetBackgroundStyle(wxBG_STYLE_PAINT);
-        SetMinSize(wxSize(-1, FromDIP(66)));
+        SetMinSize(wxSize(-1, FromDIP(74)));
         Bind(wxEVT_PAINT, &HeaderBannerPanel::OnPaint, this);
     }
 
@@ -534,54 +553,38 @@ private:
         gc->SetPen(wxPen(theme::border_panel, 1.0));
         gc->StrokeLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width, rect.y + rect.height - 1);
 
+        const int icon_dip = FromDIP(42);
         const double icon_x = rect.x + FromDIP(14);
-        const double icon_y = rect.y + FromDIP(15);
-        const double icon_size = FromDIP(36);
-        const double hcx = icon_x + icon_size / 2.0;
-        const double hcy = icon_y + icon_size / 2.0;
-        const double r = icon_size / 2.0;
+        const double icon_y = rect.y + (rect.height - icon_dip) / 2.0;
 
-        auto hex_path = gc->CreatePath();
-        for (int i = 0; i < 6; ++i) {
-            const double angle = i * (M_PI / 3.0) - (M_PI / 6.0);
-            const double px = hcx + r * std::cos(angle);
-            const double py = hcy + r * std::sin(angle);
-            if (i == 0) hex_path.MoveToPoint(px, py);
-            else hex_path.AddLineToPoint(px, py);
+        if (!logo_bitmap_.IsOk()) {
+            logo_bitmap_ = load_embedded_png(resources::app_logo.data(), resources::app_logo.size(), icon_dip);
         }
-        hex_path.CloseSubpath();
 
-        auto hex_brush = gc->CreateLinearGradientBrush(
-            icon_x, icon_y, icon_x + icon_size, icon_y + icon_size,
-            theme::cyan_accent, wxColour(0, 119, 182));
-        gc->SetBrush(hex_brush);
-        gc->SetPen(wxPen(theme::cyan_accent, 1.2));
-        gc->DrawPath(hex_path);
+        if (logo_bitmap_.IsOk()) {
+            gc->DrawBitmap(logo_bitmap_, icon_x, icon_y, icon_dip, icon_dip);
+        }
 
-        gc->SetBrush(*wxWHITE_BRUSH);
-        gc->SetPen(*wxTRANSPARENT_PEN);
-        gc->DrawCircle(hcx, hcy, r * 0.35);
-
-        const double text_x = icon_x + icon_size + FromDIP(12);
+        const double text_x = icon_x + icon_dip + FromDIP(14);
         
         wxFont title_font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
         title_font.SetPointSize(title_font.GetPointSize() + 6);
         title_font.SetWeight(wxFONTWEIGHT_BOLD);
         gc->SetFont(title_font, theme::text_white);
-        gc->DrawText("Cmdiqo", text_x, icon_y - FromDIP(1));
+        gc->DrawText("Cmdiqo", text_x, icon_y - FromDIP(2));
 
         double cmdiqo_w, cmdiqo_h;
         gc->GetTextExtent("Cmdiqo", &cmdiqo_w, &cmdiqo_h);
 
         wxFont dot_dev_font = title_font;
         gc->SetFont(dot_dev_font, theme::cyan_accent);
-        gc->DrawText(".dev", text_x + cmdiqo_w, icon_y - FromDIP(1));
+        gc->DrawText(".dev", text_x + cmdiqo_w, icon_y - FromDIP(2));
 
         wxFont sub_font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
         sub_font.SetPointSize(std::max(7, sub_font.GetPointSize() - 2));
         sub_font.SetWeight(wxFONTWEIGHT_BOLD);
         gc->SetFont(sub_font, theme::text_muted);
-        gc->DrawText("LAN REMOTE COMMAND AGENT \xe2\x80\xa2 NATIVE SETUP", text_x, icon_y + FromDIP(20));
+        gc->DrawText(wxString::FromUTF8("LAN REMOTE COMMAND AGENT \xe2\x80\xa2 NATIVE SETUP"), text_x, icon_y + FromDIP(24));
 
         if (!version_text_.empty()) {
             wxFont pill_font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
@@ -608,9 +611,10 @@ private:
 
             const double dot_cx = pill_x + pill_pad_x + FromDIP(4);
             const double dot_cy = pill_y + pill_h / 2.0;
+            const double badge_r = FromDIP(3.5);
             gc->SetBrush(wxBrush(theme::cyan_accent));
             gc->SetPen(*wxTRANSPARENT_PEN);
-            gc->DrawCircle(dot_cx, dot_cy, FromDIP(3.5));
+            gc->DrawEllipse(dot_cx - badge_r, dot_cy - badge_r, badge_r * 2.0, badge_r * 2.0);
 
             gc->SetFont(pill_font, wxColour(200, 225, 255));
             gc->DrawText(version_text_, dot_cx + FromDIP(8), pill_y + (pill_h - vth) / 2.0);
@@ -618,6 +622,7 @@ private:
     }
 
     wxString version_text_;
+    wxBitmap logo_bitmap_;
 };
 
 class GlassContainerPanel final : public wxPanel {
@@ -716,20 +721,21 @@ private:
 
         gc->SetPen(*wxTRANSPARENT_PEN);
         gc->SetBrush(wxBrush(wxColour(255, 95, 86)));
-        gc->DrawCircle(dot_start_x, dot_y, dot_r);
+        gc->DrawEllipse(dot_start_x - dot_r, dot_y - dot_r, dot_r * 2.0, dot_r * 2.0);
 
         gc->SetBrush(wxBrush(wxColour(255, 189, 46)));
-        gc->DrawCircle(dot_start_x + dot_spacing, dot_y, dot_r);
+        gc->DrawEllipse(dot_start_x + dot_spacing - dot_r, dot_y - dot_r, dot_r * 2.0, dot_r * 2.0);
 
         gc->SetBrush(wxBrush(wxColour(39, 201, 63)));
-        gc->DrawCircle(dot_start_x + dot_spacing * 2, dot_y, dot_r);
+        gc->DrawEllipse(dot_start_x + dot_spacing * 2 - dot_r, dot_y - dot_r, dot_r * 2.0, dot_r * 2.0);
 
         wxFont hfont = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
         hfont.SetPointSize(std::max(8, hfont.GetPointSize() - 2));
         gc->SetFont(hfont, theme::text_dim);
+        const wxString term_title = wxString::FromUTF8("bash \xe2\x80\x94 daemon activity & installer log");
         double tw, th;
-        gc->GetTextExtent("bash \xe2\x80\x94 daemon activity & installer log", &tw, &th);
-        gc->DrawText("bash \xe2\x80\x94 daemon activity & installer log", rect.x + (rect.width - tw) / 2.0, rect.y + (bar_h - th) / 2.0);
+        gc->GetTextExtent(term_title, &tw, &th);
+        gc->DrawText(term_title, rect.x + (rect.width - tw) / 2.0, rect.y + (bar_h - th) / 2.0);
     }
 
     wxTextCtrl* log_{nullptr};
@@ -769,12 +775,13 @@ private:
             const double dot_y = rect.y + rect.height / 2.0;
             const double dot_r = FromDIP(4.5);
 
+            const double glow_r = dot_r + FromDIP(2.5);
             gc->SetBrush(wxBrush(wxColour(dot_color_.Red(), dot_color_.Green(), dot_color_.Blue(), 60)));
             gc->SetPen(*wxTRANSPARENT_PEN);
-            gc->DrawCircle(dot_x, dot_y, dot_r + FromDIP(2.5));
+            gc->DrawEllipse(dot_x - glow_r, dot_y - glow_r, glow_r * 2.0, glow_r * 2.0);
 
             gc->SetBrush(wxBrush(dot_color_));
-            gc->DrawCircle(dot_x, dot_y, dot_r);
+            gc->DrawEllipse(dot_x - dot_r, dot_y - dot_r, dot_r * 2.0, dot_r * 2.0);
 
             wxFont font = wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT);
             font.SetPointSize(std::max(8, font.GetPointSize() - 1));
@@ -797,23 +804,28 @@ public:
     InstallerFrame(
         std::optional<std::filesystem::path> payload,
         std::optional<std::filesystem::path> initial_config)
-        : wxFrame(nullptr, wxID_ANY, "Cmdiqo Agent Setup", wxDefaultPosition, wxSize(760, 720)),
+        : wxFrame(nullptr, wxID_ANY, "Cmdiqo Agent Setup", wxDefaultPosition, wxSize(820, 720)),
           service_(),
           payload_(std::move(payload)),
           initial_config_(std::move(initial_config)),
           service_status_timer_(this) {
         SetBackgroundColour(theme::bg_main);
-        SetMinSize(wxSize(680, 620));
+        SetMinSize(wxSize(720, 620));
 
         if (wxImage::FindHandler(wxBITMAP_TYPE_PNG) == nullptr) {
             wxImage::AddHandler(new wxPNGHandler);
         }
-        wxBitmap icon_bmp = platform_logo();
-        if (icon_bmp.IsOk()) {
-            wxIcon frame_icon;
-            frame_icon.CopyFromBitmap(icon_bmp);
-            if (frame_icon.IsOk()) {
-                SetIcon(frame_icon);
+#ifdef _WIN32
+        SetIcon(wxIcon("IDI_APP_ICON"));
+#endif
+        if (!GetIcon().IsOk()) {
+            wxBitmap icon_bmp = platform_logo();
+            if (icon_bmp.IsOk()) {
+                wxIcon frame_icon;
+                frame_icon.CopyFromBitmap(icon_bmp);
+                if (frame_icon.IsOk()) {
+                    SetIcon(frame_icon);
+                }
             }
         }
 
@@ -855,6 +867,9 @@ public:
         add_button(main_panel, installation_buttons, "Update config", ButtonVariant::Accent, [this] { update_config(); });
         add_button(main_panel, installation_buttons, "Test Hub TCP", ButtonVariant::Secondary, [this] { test_hub(); });
         add_button(main_panel, installation_buttons, "Refresh State", ButtonVariant::Secondary, [this] { refresh(true); });
+        add_button(main_panel, installation_buttons, wxString::FromUTF8("View documentation \xe2\x86\x97"), ButtonVariant::Secondary, [] {
+            wxLaunchDefaultBrowser("https://www.cmdiqo.dev/#config");
+        });
         layout->Add(installation_buttons, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(14));
 
         auto* service_buttons = new wxBoxSizer(wxHORIZONTAL);
@@ -894,20 +909,7 @@ public:
 
 private:
     wxBitmap platform_logo() const {
-        const unsigned char* data = resources::linux_logo.data();
-        std::size_t size = resources::linux_logo.size();
-        if (current_platform() == Platform::windows) {
-            data = resources::win_logo.data();
-            size = resources::win_logo.size();
-        }
-        wxMemoryInputStream stream(data, size);
-        wxImage image(stream, wxBITMAP_TYPE_PNG);
-        if (!image.IsOk()) {
-            return {};
-        }
-        const int logo_size = FromDIP(48);
-        image.Rescale(logo_size, logo_size, wxIMAGE_QUALITY_HIGH);
-        return wxBitmap(image);
+        return load_embedded_png(resources::app_logo.data(), resources::app_logo.size(), FromDIP(48));
     }
 
     static void add_field(wxWindow* parent, wxFlexGridSizer* form, const wxString& label, wxWindow* control) {
@@ -961,8 +963,7 @@ private:
     void layout_state_summary() {
         if (state_summary_ == nullptr) return;
         wxWindow* parent = state_summary_->GetParent();
-        const int available_width = parent->GetClientSize().GetWidth() - FromDIP(28);
-        state_summary_->Wrap(std::max(FromDIP(250), available_width));
+        if (parent == nullptr) return;
         parent->Layout();
     }
 
@@ -1341,6 +1342,7 @@ int run_gui(
     char** argv,
     const std::optional<std::filesystem::path>& payload,
     const std::optional<std::filesystem::path>& initial_config) {
+    std::setlocale(LC_ALL, "");
     if (current_platform() == Platform::linux && !PlatformOperations::has_graphical_session()) {
         std::cerr << "No graphical session detected; run without --gui for CLI mode, or start an X/Wayland session (or use X forwarding / Xvfb) to use the GUI." << std::endl;
         return 1;

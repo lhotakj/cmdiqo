@@ -1,8 +1,9 @@
-#define wxUSE_NO_MANIFEST 1
+#include <windows.h>
+
 #define IDI_APP_ICON 101
+#define CREATEPROCESS_MANIFEST_RESOURCE_ID 1
+#define RT_MANIFEST 24
 
 IDI_APP_ICON ICON "cmdiqo-agent-setup.ico"
 
-#include "wx/msw/wx.rc"
-
-1 RT_MANIFEST "cmdiqo-agent-setup.manifest"
+CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "cmdiqo-agent-setup.manifest"

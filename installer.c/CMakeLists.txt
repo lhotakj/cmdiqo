@@ -1,10 +1,45 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(cmdiqo_native_installer VERSION 0.9.0 LANGUAGES CXX C)
+# Dynamic Version Resolution from version.txt
+set(VERSION_FILE_CANDIDATE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../version.txt")
+set(VERSION_FILE_CANDIDATE_LOCAL "${CMAKE_CURRENT_SOURCE_DIR}/version.txt")
+
+if(EXISTS "${VERSION_FILE_CANDIDATE_ROOT}")
+    set(VERSION_FILE_PATH "${VERSION_FILE_CANDIDATE_ROOT}")
+elseif(EXISTS "${VERSION_FILE_CANDIDATE_LOCAL}")
+    set(VERSION_FILE_PATH "${VERSION_FILE_CANDIDATE_LOCAL}")
+else()
+    set(VERSION_FILE_PATH "")
+endif()
+
+if(VERSION_FILE_PATH)
+    file(READ "${VERSION_FILE_PATH}" RAW_VERSION_FILE_CONTENT)
+    string(STRIP "${RAW_VERSION_FILE_CONTENT}" RESOLVED_FILE_VERSION)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${VERSION_FILE_PATH}")
+else()
+    set(RESOLVED_FILE_VERSION "1.0.0")
+endif()
+
+project(cmdiqo_native_installer VERSION ${RESOLVED_FILE_VERSION} LANGUAGES CXX C)
 
 include(CTest)
 
-set(CMDIQO_BUILD_VERSION "${PROJECT_VERSION}" CACHE STRING "Cmdiqo build version embedded in the installer")
+if(NOT CMDIQO_BUILD_VERSION)
+    set(CMDIQO_BUILD_VERSION "${PROJECT_VERSION}")
+endif()
+set(CMDIQO_INSTALLER_VERSION "${CMDIQO_BUILD_VERSION}")
+
+# Resolve numeric tuple for Windows Resource File (major,minor,patch,build)
+string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)" VERSION_PARSED "${CMDIQO_BUILD_VERSION}")
+if(CMAKE_MATCH_1 AND CMAKE_MATCH_2 AND CMAKE_MATCH_3)
+    set(CMDIQO_RC_FILEVERSION "${CMAKE_MATCH_1},${CMAKE_MATCH_2},${CMAKE_MATCH_3},0")
+    set(CMDIQO_RC_PRODUCTVERSION "${CMAKE_MATCH_1},${CMAKE_MATCH_2},${CMAKE_MATCH_3},0")
+else()
+    set(CMDIQO_RC_FILEVERSION "1,0,0,0")
+    set(CMDIQO_RC_PRODUCTVERSION "1,0,0,0")
+endif()
+
+string(TIMESTAMP CMDIQO_COPYRIGHT_YEAR "%Y")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -49,7 +84,7 @@ endif()
 
 file(WRITE "${CMDIQO_EMBEDDED_LOGOS_HEADER}"
     "#pragma once\n\n#include <array>\n\nnamespace cmdiqo::installer::resources {\n")
-foreach(logo IN ITEMS win linux)
+foreach(logo IN ITEMS win linux app)
     set(logo_path "${CMAKE_CURRENT_SOURCE_DIR}/src/bitmaps/${logo}.png")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${logo_path}")
     file(READ "${logo_path}" logo_hex HEX)
@@ -99,7 +134,18 @@ target_include_directories(cmdiqo-agent-setup PRIVATE "${CMDIQO_EMBEDDED_RESOURC
 
 if(WIN32)
     enable_language(RC)
-    target_sources(cmdiqo-agent-setup PRIVATE resources/cmdiqo-agent-setup.rc)
+
+    set(CMDIQO_INSTALLER_ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/resources/cmdiqo-agent-setup.ico")
+    set(CMDIQO_INSTALLER_MANIFEST_PATH "${CMAKE_CURRENT_SOURCE_DIR}/resources/cmdiqo-agent-setup.manifest")
+    set(CMDIQO_GENERATED_RC "${CMAKE_CURRENT_BINARY_DIR}/cmdiqo-agent-setup.rc")
+
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/cmdiqo-agent-setup.rc.in"
+        "${CMDIQO_GENERATED_RC}"
+        @ONLY
+    )
+
+    target_sources(cmdiqo-agent-setup PRIVATE "${CMDIQO_GENERATED_RC}")
 endif()
 
 set_target_properties(cmdiqo-agent-setup PROPERTIES WIN32_EXECUTABLE FALSE)
