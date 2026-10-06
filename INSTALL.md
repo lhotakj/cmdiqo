@@ -461,23 +461,23 @@ To verify and ensure the `.exe` is authentic and safe:
    ```
 3. Run the installer script, supplying your server IP, token, and a name for this PC:
    ```powershell
-   .\install.ps1 -HubUrl "ws://192.168.1.10:8765" -Token "your-random-agent-token-here" -Name "MY-WINDOWS-PC"
+   .\install-service.ps1 -HubUrl "ws://192.168.1.10:8765" -Token "your-random-agent-token-here" -Name "MY-WINDOWS-PC"
    ```
 
 > [!TIP]
-> The ZIP contains `cmdiqo-agent.exe` beside `install.ps1`, so the installer
+> The ZIP contains `cmdiqo-agent.exe` beside `install-service.ps1`, so the installer
 > detects it automatically. You can also specify
 > `-BinaryPath "C:\path\to\cmdiqo-agent.exe"` if needed.
 >
 > **Alternative: Native Windows Setup Application (`cmdiqo-agent-windows-x64-setup.exe`)**:
-> You can also launch the native graphical setup wizard directly (keep `cmdiqo-agent-windows-x64.zip` in the same directory):
+> You can also launch the native graphical setup wizard directly (self-contained executable with embedded agent payload):
 > - Double-click `cmdiqo-agent-windows-x64-setup.exe`.
 > - Configure your Hub URL, Agent Token, and Machine Name.
 > - Click **Install Service** (runs with standard Windows UAC elevation).
 
 #### What the installer sets up automatically:
 - **Real Windows Service (`CmdiqoAgent`)**: Registered directly in Windows Service Control Manager (SCM). Visible in `services.msc`.
-- **Pure Python & PowerShell Engine**: Uses Python's native Win32 service dispatcher (`agent/service_windows.py` using standard library `ctypes`) invoked via `cmdiqo-agent.exe --service` (zero compiler steps, zero external wrappers).
+- **Native C++ Execution Engine**: High-performance native service dispatcher invoked via `cmdiqo-agent.exe --service` (ultra-low memory footprint <5 MB, Win32 Job Objects for instant process tree isolation).
 - **Accessible Config in `C:\ProgramData\Cmdiqo\Agent\config.json`**: Grants Full Control to Administrators and the current user (plus Modify to Users) so you can freely view and edit settings in Notepad, VS Code, or any shell without UAC access issues.
 - **Automatic Self-Healing**: Configures SCM failure recovery to automatically restart the service if it ever terminates.
 - **Log Redirection**: Redirects stdout/stderr to `C:\ProgramData\Cmdiqo\Agent\logs\service.log`.

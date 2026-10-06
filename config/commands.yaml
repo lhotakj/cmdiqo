@@ -356,3 +356,116 @@ commands:
         - router.discord.gg
         - gateway.discord.gg
         - status.discord.com
+
+  # ---- Application Execution Blocker (OS Agnostic) -------------------------
+  - name: host-blockapp
+    trigger: "/host {host} blockapp {app} {action}"
+    description: "Block or unblock applications from running on Windows or Linux (on | off | status)"
+    details: "Blocks execution of specified games, launchers, and apps on target host. On Windows, intercepts process creation via IFEO (Image File Execution Options) and AppX package status, terminating active processes. On Linux, revokes display and network sockets via system-wide Flatpak overrides and terminates running processes."
+    examples:
+      - "/host PC-KIDS blockapp roblox on"
+      - "/host PC-KIDS blockapp steam on"
+      - "/host PC-KIDS blockapp roblox off"
+      - "/host PC-KIDS blockapp steam status"
+      - "/host PC-KIDS blockapp all on"
+      - "/host PC-KIDS blockapp all status"
+    command:
+      python: "commands.appblock:manage_appblock"
+    config:
+      apps:
+        roblox:
+          name: "Roblox"
+          description: "Roblox Player, Studio, Bloxstrap & Linux wrappers"
+          windows:
+            executables:
+              - "RobloxPlayerBeta.exe"
+              - "RobloxPlayerLauncher.exe"
+              - "RobloxStudioBeta.exe"
+              - "Bloxstrap.exe"
+              - "Fishstrap.exe"
+            appx_packages:
+              - "ROBLOXCORPORATION.ROBLOX"
+          linux:
+            flatpaks:
+              - "org.sober.Sober"
+              - "org.vinegarhq.Vinegar"
+            process_names:
+              - "sober"
+              - "vinegar"
+              - "grapejuice"
+              - "RobloxPlayerBeta.exe"
+
+        steam:
+          name: "Steam"
+          description: "Steam Client & Launchers"
+          windows:
+            executables:
+              - "steam.exe"
+              - "steamservice.exe"
+              - "steamwebhelper.exe"
+          linux:
+            flatpaks:
+              - "com.valvesoftware.Steam"
+            process_names:
+              - "steam"
+              - "steamwebhelper"
+
+        epic:
+          name: "Epic Games Launcher"
+          description: "Epic Games Store & Launcher"
+          windows:
+            executables:
+              - "EpicGamesLauncher.exe"
+              - "UnrealVersionSelector.exe"
+          linux:
+            flatpaks:
+              - "com.heroicgameslauncher.hgl"
+              - "com.usebottles.bottles"
+            process_names:
+              - "heroic"
+              - "bottles"
+
+        discord:
+          name: "Discord"
+          description: "Discord Desktop Client"
+          windows:
+            executables:
+              - "Discord.exe"
+              - "Update.exe"
+          linux:
+            flatpaks:
+              - "com.discordapp.Discord"
+              - "dev.vencord.Vesktop"
+            process_names:
+              - "Discord"
+              - "vesktop"
+
+        minecraft:
+          name: "Minecraft"
+          description: "Minecraft Java & Bedrock Launchers"
+          windows:
+            executables:
+              - "Minecraft.exe"
+              - "MinecraftLauncher.exe"
+              - "PrismLauncher.exe"
+              - "CurseForge.exe"
+            appx_packages:
+              - "Microsoft.4297207D2250C"
+          linux:
+            flatpaks:
+              - "com.mojang.Minecraft"
+              - "org.prismlauncher.PrismLauncher"
+            process_names:
+              - "minecraft-launcher"
+              - "prismlauncher"
+
+  - name: host-appblock
+    trigger: "/host {host} appblock {app} {action}"
+    description: "Alias for /host {host} blockapp {app} {action}"
+    details: "Alias for /host {host} blockapp {app} {action}. Blocks or unblocks application execution on target host."
+    examples:
+      - "/host PC-KIDS appblock roblox on"
+      - "/host PC-KIDS appblock all status"
+    command:
+      python: "commands.appblock:manage_appblock"
+

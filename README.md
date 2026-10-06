@@ -56,14 +56,15 @@ nothing to expose, TLS handled for you. Ideal for a home server.
 ├── requirements.txt
 ├── build.ps1                       # Windows agent, native setup, and bot build script
 ├── build.sh                        # Linux agent, native setup, and bot build script
-├── installer.c/                    # native C++ setup application; released by --installer
+├── agent.c/                        # native C++20 standalone agent (Windows & Linux)
+├── installer.c/                    # native C++ setup application (GUI & CLI installer)
 ├── bot/
 │   ├── app.py                      # Slack app, dispatch, auth
 │   ├── hub.py                      # WebSocket hub for remote agents
 │   └── commands/                   # modular command handlers
 ├── config/
 │   └── commands.yaml               # <-- YOUR commands live here
-├── agent/
+├── agent/                          # legacy Python agent reference implementation
 │   ├── agent.py                    # tiny Python agent for LAN hosts (Win/Linux)
 │   ├── install-service.ps1         # Windows service installer
 │   └── install-service.sh          # Linux systemd service installer
@@ -155,6 +156,7 @@ Edit `config/commands.yaml` to define your commands and aliases (see **Adding yo
 | `/host <host> parental on`         | Remote host (Linux/Win) | Blocks configured domains in hosts file & flushes DNS    |
 | `/host <host> parental off`        | Remote host (Linux/Win) | Unblocks configured domains in hosts file & flushes DNS  |
 | `/host <host> parental status`     | Remote host (Linux/Win) | Displays active parental blocking status & domain count  |
+| `/host <host> blockapp <app> <on\|off\|status>` | Remote host (Linux/Win) | Blocks/unblocks apps via IFEO, AppX & Flatpak (`appblock` alias) |
 | `/wol <target>`                    | *(alias)*               | Auto-translates to `/lan wake <target>`                  |
 | `/home <command>`                  | *(alias)*               | Auto-translates to `/host home <command>`                |
 | `/help [topic]`                    | Bot App                 | Interactive manual with nested topics (`lan`, `docker`...)|

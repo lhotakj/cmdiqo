@@ -122,6 +122,15 @@ def test_load_commands_valid_file():
     assert "host-user" in specs_by_name
     assert specs_by_name["host-user"]["trigger"] == "/host {host} user {user} {action}"
 
+    # Verify appblock command with apps config
+    assert "host-blockapp" in specs_by_name
+    blockapp_spec = specs_by_name["host-blockapp"]
+    assert blockapp_spec["command"]["python"] == "commands.appblock:manage_appblock"
+    assert isinstance(blockapp_spec.get("config"), dict)
+    assert "apps" in blockapp_spec["config"]
+    assert "roblox" in blockapp_spec["config"]["apps"]
+    assert "host-appblock" in specs_by_name
+
 
 def test_load_commands_nonexistent_file():
     commands = load_commands("config/nonexistent_commands.yaml")

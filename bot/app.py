@@ -137,6 +137,7 @@ class BotConfig:
     def from_env(cls) -> BotConfig:
         """Load configuration cleanly from environment variables and config files without import-time side effects."""
         config_notify = False
+        config_notify_found = False
         for cfg_file in ("/config/config.json", "config.json", "config/config.json", os.getenv("CONFIG_FILE", "")):
             if cfg_file and os.path.exists(cfg_file):
                 try:
@@ -145,6 +146,7 @@ class BotConfig:
                         if isinstance(data, dict) and "agent_connection_notify" in data:
                             val = data["agent_connection_notify"]
                             config_notify = str(val).lower() in ("true", "1", "yes", "on")
+                            config_notify_found = True
                 except (OSError, json.JSONDecodeError):
                     pass
 
@@ -152,7 +154,7 @@ class BotConfig:
         if env_notify is not None:
             agent_notify = env_notify.strip().lower() not in ("false", "0", "no", "off")
         else:
-            agent_notify = config_notify if "agent_connection_notify" in locals() else True
+            agent_notify = config_notify if config_notify_found else True
 
         return cls(
             commands_config_path=os.getenv("COMMANDS_CONFIG", DEFAULT_COMMANDS_CONFIG),
@@ -639,6 +641,10 @@ def help_text(
     req_topic = (topic or prefix or "").strip().lower()
     if req_topic.startswith("/"):
         req_topic = req_topic[1:].strip()
+    if req_topic.endswith(" help"):
+        req_topic = req_topic[:-5].strip()
+    elif req_topic.endswith(" ?"):
+        req_topic = req_topic[:-2].strip()
 
     all_specs: list[dict[str, Any]] = [c["spec"] for c in commands] + BUILTIN_COMMANDS
 
@@ -839,6 +845,15 @@ async def handle_command(
         )
         return
 
+    # Direct commands or category queries with trailing "help" or "?"
+    # (e.g. "/lan help", "lan help", "/host help", "host help", "/home help", "/wol help", "/docker help")
+    words = text.split()
+    if len(words) >= 2 and words[-1].lower() in ("help", "?"):
+        sub_topic = " ".join(words[:-1]).lstrip("/").strip()
+        if sub_topic:
+            await reply_help(post, help_text(commands, topic=sub_topic, aliases=aliases))
+            return
+
     # Direct category / root inquiries with no arguments
     if text.lower() in ("/lan", "lan"):
         await reply_help(post, help_text(commands, topic="lan", aliases=aliases))
@@ -851,6 +866,17 @@ async def handle_command(
         return
     if text.lower() in ("/wol", "wol"):
         await reply_help(post, help_text(commands, topic="wol", aliases=aliases))
+        return
+    if text.lower() in (
+        "/docker", "docker",
+        "/services", "services",
+        "/windows", "windows",
+        "/system", "system",
+        "/parental", "parental",
+        "/blockapp", "blockapp",
+        "/appblock", "appblock",
+    ):
+        await reply_help(post, help_text(commands, topic=text.lstrip("/").lower(), aliases=aliases))
         return
 
     # Translate triggers matching configured aliases (e.g. /home -> /host home)

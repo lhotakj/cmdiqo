@@ -651,6 +651,62 @@ async def test_handle_command_help_nested():
 
 
 @pytest.mark.asyncio
+async def test_handle_command_trailing_help():
+    from bot.app import load_aliases, load_commands
+
+    commands = load_commands("config/commands.yaml")
+    aliases = load_aliases("config/commands.yaml")
+    post_mock = AsyncMock()
+
+    # Test /lan help
+    await handle_command("/lan help", "U1", "C1", post_mock, commands=commands, aliases=aliases)
+    assert post_mock.await_count == 1
+    lan_help = post_mock.await_args[0][0]
+    assert "*Cmdiqo Help: `lan`*" in lan_help
+    assert "/lan devices list" in lan_help
+
+    # Test plain 'lan help' without slash
+    post_mock.reset_mock()
+    await handle_command("lan help", "U1", "C1", post_mock, commands=commands, aliases=aliases)
+    assert post_mock.await_count == 1
+    assert "*Cmdiqo Help: `lan`*" in post_mock.await_args[0][0]
+
+    # Test /host help
+    post_mock.reset_mock()
+    await handle_command("/host help", "U1", "C1", post_mock, commands=commands, aliases=aliases)
+    assert post_mock.await_count >= 1
+    host_help = "".join(call[0][0] for call in post_mock.await_args_list)
+    assert "*Cmdiqo Help: `host`*" in host_help
+    assert "/host {host} uptime" in host_help
+
+    # Test /home help
+    post_mock.reset_mock()
+    await handle_command("/home help", "U1", "C1", post_mock, commands=commands, aliases=aliases)
+    assert post_mock.await_count >= 1
+    home_help = "".join(call[0][0] for call in post_mock.await_args_list)
+    assert "*Cmdiqo Help: `home`*" in home_help
+    assert "*Matching Aliases:*" in home_help
+
+    # Test /docker help
+    post_mock.reset_mock()
+    await handle_command("/docker help", "U1", "C1", post_mock, commands=commands, aliases=aliases)
+    assert post_mock.await_count == 1
+    assert "*Cmdiqo Help: `docker`*" in post_mock.await_args[0][0]
+
+    # Test question mark /lan ?
+    post_mock.reset_mock()
+    await handle_command("/lan ?", "U1", "C1", post_mock, commands=commands, aliases=aliases)
+    assert post_mock.await_count == 1
+    assert "*Cmdiqo Help: `lan`*" in post_mock.await_args[0][0]
+
+    # Test direct category without slash: 'docker'
+    post_mock.reset_mock()
+    await handle_command("docker", "U1", "C1", post_mock, commands=commands, aliases=aliases)
+    assert post_mock.await_count == 1
+    assert "*Cmdiqo Help: `docker`*" in post_mock.await_args[0][0]
+
+
+@pytest.mark.asyncio
 async def test_reply_help_chunking():
     from bot.app import reply_help
 
