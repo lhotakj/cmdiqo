@@ -228,4 +228,18 @@ RUN mkdir -p /tmp/vcpkg-binary-cache \
     && find "${VCPKG_INSTALLED_DIR_WINDOWS}" -type d -exec chmod a+rwx {} + \
     && chmod -R a+rwX "${VCPKG_INSTALLED_DIR_WINDOWS}/vcpkg"
 
+RUN mkdir -p /tmp/cmdiqo-manifest-arm64 /tmp/vcpkg-binary-cache \
+    && printf '{"name":"cmdiqo-arm64","version-string":"1.0.0","dependencies":["catch2","cli11","ixwebsocket","libzip","nlohmann-json"]}\n' > /tmp/cmdiqo-manifest-arm64/vcpkg.json \
+    && VCPKG_DEFAULT_BINARY_CACHE=/tmp/vcpkg-binary-cache /opt/vcpkg/vcpkg install \
+        --x-manifest-root=/tmp/cmdiqo-manifest-arm64 \
+        --triplet=arm64-linux-release \
+        --x-install-root="${VCPKG_INSTALLED_DIR_LINUX_ARM64}" \
+        --x-buildtrees-root=/tmp/vcpkg-buildtrees \
+        --x-packages-root=/tmp/vcpkg-packages \
+        --downloads-root=/tmp/vcpkg-downloads \
+    && rm -rf /tmp/vcpkg-binary-cache /tmp/vcpkg-buildtrees /tmp/vcpkg-downloads /tmp/vcpkg-packages /tmp/cmdiqo-manifest-arm64 \
+    && install --directory --mode=0777 "${VCPKG_INSTALLED_DIR_LINUX_ARM64}/vcpkg" \
+    && find "${VCPKG_INSTALLED_DIR_LINUX_ARM64}" -type d -exec chmod a+rwx {} + \
+    && chmod -R a+rwX "${VCPKG_INSTALLED_DIR_LINUX_ARM64}/vcpkg"
+
 WORKDIR /workspace

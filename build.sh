@@ -633,7 +633,7 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
     fi
 fi
 
-if [[ "$BUILD_AGENT" = true || "$BUILD_INSTALLER" = true ]]; then
+if [[ "$BUILD_AGENT" = true || "$BUILD_INSTALLER" = true || "$REBUILD_BUILDER" = true ]]; then
     mkdir -p "$DIST_DIR"
     ensure_installer_builder_image all cmdiqo-installer-builder:all \
         "${DOCKER_USERNAME}/cmdiqo-installer-builder:all" "$ROOT_DIR/installer.c"
