@@ -27,6 +27,31 @@ def test_update_versions_local_hex_timestamp(tmp_path):
         assert version == f"{short}.devel+6A9C0B2D"
 
 
+def test_update_versions_github_run_number():
+    base = get_base_version()
+    short = ".".join(base.split(".")[:2])
+    with patch.dict(os.environ, {"GITHUB_RUN_NUMBER": "42"}, clear=True):
+        version = update_versions()
+        assert version == f"{short}.42"
+
+
+def test_update_versions_build_id():
+    base = get_base_version()
+    short = ".".join(base.split(".")[:2])
+    with patch.dict(os.environ, {"BUILD_ID": "105"}, clear=True):
+        version = update_versions()
+        assert version == f"{short}.105"
+
+
+def test_update_versions_force_dev_with_run_number():
+    ts = 1788611373
+    base = get_base_version()
+    short = ".".join(base.split(".")[:2])
+    with patch.dict(os.environ, {"GITHUB_RUN_NUMBER": "42"}, clear=True):
+        version = update_versions(timestamp=ts, force_dev=True)
+        assert version == f"{short}.devel+6A9C0B2D"
+
+
 def test_update_versions_github_actions():
     base = get_base_version()
     short = ".".join(base.split(".")[:2])

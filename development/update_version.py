@@ -93,6 +93,7 @@ VSVersionInfo(
 def update_versions(
     override_version: str | None = None,
     timestamp: int | None = None,
+    force_dev: bool = False,
     silent: bool = False,
 ) -> str:
     """Resolve build version and propagate to internal Python modules and PE metadata."""
@@ -101,6 +102,10 @@ def update_versions(
     major = parts[0] if len(parts) > 0 else "1"
     minor = parts[1] if len(parts) > 1 else "0"
 
+    github_run_number = (
+        os.environ.get("GITHUB_RUN_NUMBER", "").strip()
+        or os.environ.get("BUILD_ID", "").strip()
+    )
     github_sha = os.environ.get("GITHUB_SHA", "").strip()
 
     if override_version:
@@ -125,6 +130,17 @@ def update_versions(
             while len(digits) < 4:
                 digits.append(0)
             pe_tuple = (digits[0], digits[1], digits[2], digits[3])
+    elif force_dev:
+        ts = int(time.time()) if timestamp is None else timestamp
+        hex_ts = f"{ts:X}"
+        version = f"{major}.{minor}.devel+{hex_ts}"
+        pe_tuple = (int(major), int(minor), ts & 0xFFFF, 0)
+    elif github_run_number:
+        # In GitHub Actions / CI, the third number (patch) is the run number
+        version = f"{major}.{minor}.{github_run_number}"
+        patch_digits = re.sub(r"\D", "", github_run_number)
+        patch_val = int(patch_digits) & 0xFFFF if patch_digits else 0
+        pe_tuple = (int(major), int(minor), patch_val, 0)
     elif github_sha:
         short_sha = github_sha[:12]
         version = f"{major}.{minor}.{short_sha}"
@@ -183,6 +199,7 @@ def main() -> None:
 
     version = update_versions(
         override_version=args.version,
+        force_dev=args.dev,
         silent=args.print_version,
     )
     if args.print_version:

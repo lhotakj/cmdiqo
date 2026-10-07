@@ -77,7 +77,21 @@ def evaluate_release(message: str | None = None) -> ReleaseDecision:
 
         release_agent = dispatch_target in ("all", "installer", "agent")
         release_bot = dispatch_target in ("all", "bot") and dispatch_push_docker
-        version = dispatch_version.lstrip("vV") if dispatch_version else get_base_version()
+        if dispatch_version:
+            version = dispatch_version.lstrip("vV")
+        else:
+            base = get_base_version()
+            run_number = (
+                os.environ.get("GITHUB_RUN_NUMBER", "").strip()
+                or os.environ.get("BUILD_ID", "").strip()
+            )
+            if run_number:
+                parts = base.split(".")
+                major = parts[0] if len(parts) > 0 else "1"
+                minor = parts[1] if len(parts) > 1 else "0"
+                version = f"{major}.{minor}.{run_number}"
+            else:
+                version = base
         tag = f"v{version}"
         parts = version.split(".")
         major = parts[0] if len(parts) > 0 else "1"
@@ -117,7 +131,18 @@ def evaluate_release(message: str | None = None) -> ReleaseDecision:
     if m:
         version = m.group(1).strip().lstrip("vV")
     else:
-        version = get_base_version()
+        base = get_base_version()
+        run_number = (
+            os.environ.get("GITHUB_RUN_NUMBER", "").strip()
+            or os.environ.get("BUILD_ID", "").strip()
+        )
+        if run_number:
+            parts = base.split(".")
+            major = parts[0] if len(parts) > 0 else "1"
+            minor = parts[1] if len(parts) > 1 else "0"
+            version = f"{major}.{minor}.{run_number}"
+        else:
+            version = base
 
     tag = f"v{version}"
     parts = version.split(".")

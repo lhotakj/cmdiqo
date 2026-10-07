@@ -85,25 +85,25 @@ development/update_version.py
 ### Version Resolution Rules:
 
 1. **Base Version (`version.txt`):**
-   Defines the `<major>.<minor>.<patch>` baseline (e.g., `1.0.0`).
+   Defines the `<major>.<minor>` baseline (e.g., `0.10.0`).
 
 2. **CI Builds (GitHub Actions):**
-   - The third component is the first 12 characters of `GITHUB_SHA`:
-     $$\text{VERSION} = \langle\text{major}\rangle.\langle\text{minor}\rangle.\langle\text{SHORT\_GIT\_SHA}\rangle$$
-     *(Example: `1.0.a1b2c3d4e5f6`)*.
+   - The third component (patch number) is the GitHub Actions workflow run number (`GITHUB_RUN_NUMBER` or `BUILD_ID`):
+     $$\text{VERSION} = \langle\text{major}\rangle.\langle\text{minor}\rangle.\langle\text{GITHUB\_RUN\_NUMBER}\rangle$$
+     *(Example: `0.10.42` for GitHub Actions run #42)*.
 
 3. **Local Builds (Developer Machine):**
    - The build system uses `devel+` followed by the uppercase hexadecimal Unix
      timestamp:
      $$\text{VERSION} = \langle\text{major}\rangle.\langle\text{minor}\rangle.\text{devel}+\langle\text{HEX\_TIMESTAMP}\rangle$$
      *(Example: timestamp `1788611373` becomes
-     `1.0.devel+6A9C0B2D`)*.
+     `0.10.devel+6A9C0B2D`)*.
 
 4. **Windows PE Executable Metadata (`version_info.txt`):**
-   - Windows PE binary headers require fixed 16-bit unsigned integers (`0`–`65535`) in `filevers=(major, minor, patch, build)`. For local builds, the lower 16 bits of the timestamp (`ts & 0xFFFF`) populate the binary tuple. For CI builds, the lower 16 bits of the short SHA populate it. The full build version is written to `FileVersion` and `ProductVersion`.
+   - Windows PE binary headers require fixed 16-bit unsigned integers (`0`–`65535`) in `filevers=(major, minor, patch, build)`. For local builds, the lower 16 bits of the timestamp (`ts & 0xFFFF`) populate the binary tuple. For CI builds, the run number (`int(GITHUB_RUN_NUMBER) & 0xFFFF`) populates it. The full build version is written to `FileVersion` and `ProductVersion`.
    - Right-clicking `cmdiqo-agent.exe` $\rightarrow$ Properties $\rightarrow$ Details shows:
-     - **File version:** `1.0.devel+6A9C0B2D` (or `1.0.a1b2c3d4e5f6` in CI)
-     - **Product version:** `1.0.devel+6A9C0B2D` (or `1.0.a1b2c3d4e5f6` in CI)
+     - **File version:** `0.10.devel+6A9C0B2D` (or `0.10.42` in CI)
+     - **Product version:** `0.10.devel+6A9C0B2D` (or `0.10.42` in CI)
      - **Product name:** `Cmdiqo Agent`
      - **Legal copyright:** `Copyright (c) 2026 Jaroslav Lhotak. Verified GitHub build.`
 

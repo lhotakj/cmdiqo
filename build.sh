@@ -28,6 +28,7 @@ Build Targets:
 
 Versioning:
   -v, --version <str>  Override version string (e.g. '1.2.0')
+  --build-id <id>      Override patch/build number (defaults to $GITHUB_RUN_NUMBER in CI)
   --dev                Tag version as development build (<major>.<minor>.devel+<HEX>)
 
 Platform Selection:
@@ -99,6 +100,8 @@ SKIP_SIGN=false
 REBUILD_BUILDER=false
 COPY_TO=""
 VERSION_OVERRIDE=""
+BUILD_ID="${BUILD_ID:-${GITHUB_RUN_NUMBER:-}}"
+export BUILD_ID
 DOCKER_USERNAME="${DOCKERHUB_USER:-${DOCKERHUB_USERNAME:-lhotakj}}"
 PLATFORM="linux64"
 HOST_SYSTEM="$(uname -s)"
@@ -172,6 +175,8 @@ while [[ $# -gt 0 ]]; do
         --dev) DEV_FLAG=true; shift ;;
         --version|-v) require_option_value "$@"; VERSION_OVERRIDE="$2"; shift 2 ;;
         --version=*) require_option_value --version "${1#*=}"; VERSION_OVERRIDE="${1#*=}"; shift ;;
+        --build-id) require_option_value "$@"; BUILD_ID="$2"; export BUILD_ID; shift 2 ;;
+        --build-id=*) require_option_value --build-id "${1#*=}"; BUILD_ID="${1#*=}"; export BUILD_ID; shift ;;
         -h|--help) show_help; exit 0 ;;
         *) error "Unknown argument '$1'. Run with --help for available options."; exit 1 ;;
     esac

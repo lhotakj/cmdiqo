@@ -30,12 +30,9 @@ jobs:
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME || 'lhotakj' }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_RUN_NUMBER: ${{ github.run_number }}
+      BUILD_ID: ${{ github.run_number }}
     steps:
-      - name: Free runner disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
-          docker image prune --all --force || true
-
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -55,6 +52,8 @@ jobs:
           DISPATCH_TARGET: "all"
           DISPATCH_RELEASE: ${{ inputs.release }}
           DISPATCH_PUSH_DOCKER: ${{ inputs.push_docker }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          BUILD_ID: ${{ github.run_number }}
         run: python development/check_release.py
 
       - name: Set up QEMU (multi-arch Docker)

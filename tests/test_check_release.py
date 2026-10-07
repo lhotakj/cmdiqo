@@ -106,3 +106,29 @@ def test_workflow_dispatch_evaluation(monkeypatch):
     assert decision.release_bot is True
     assert decision.version == "0.11.0"
     assert decision.tag == "v0.11.0"
+
+
+def test_release_uses_github_run_number(monkeypatch):
+    base = get_base_version()
+    parts = base.split(".")
+    short = f"{parts[0]}.{parts[1]}"
+    monkeypatch.setenv("GITHUB_RUN_NUMBER", "42")
+    decision = evaluate_release(message="feat: new feature /release")
+    assert decision.is_release is True
+    assert decision.version == f"{short}.42"
+    assert decision.tag == f"v{short}.42"
+
+
+def test_workflow_dispatch_uses_github_run_number(monkeypatch):
+    base = get_base_version()
+    parts = base.split(".")
+    short = f"{parts[0]}.{parts[1]}"
+    monkeypatch.setenv("EVENT_NAME", "workflow_dispatch")
+    monkeypatch.setenv("DISPATCH_TARGET", "all")
+    monkeypatch.setenv("DISPATCH_VERSION", "")
+    monkeypatch.setenv("DISPATCH_PUSH_DOCKER", "true")
+    monkeypatch.setenv("GITHUB_RUN_NUMBER", "88")
+    decision = evaluate_release()
+    assert decision.is_release is True
+    assert decision.version == f"{short}.88"
+    assert decision.tag == f"v{short}.88"
