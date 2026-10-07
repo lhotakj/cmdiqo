@@ -698,6 +698,13 @@ if [[ "$BUILD_BOT" = true ]]; then
 
     if [[ "$PUSH_DOCKER" = true ]]; then
         info "Building and pushing multi-arch images (${TAG_FULL}) via buildx ..."
+        if ! docker_cli buildx inspect 2>/dev/null | grep -q "Driver:.*docker-container"; then
+            if ! docker_cli buildx inspect cmdiqo-builder >/dev/null 2>&1; then
+                docker_cli buildx create --name cmdiqo-builder --driver docker-container --use >/dev/null 2>&1 || true
+            else
+                docker_cli buildx use cmdiqo-builder >/dev/null 2>&1 || true
+            fi
+        fi
         docker_cli buildx build \
             --platform linux/amd64,linux/arm64 \
             --no-cache \
