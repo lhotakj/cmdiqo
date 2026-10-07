@@ -23,20 +23,23 @@ permissions:
   packages: write
 
 jobs:
-  check-release:
-    name: Check Release Trigger & Version
+  build-and-release:
+    name: Build All Apps & Docker (Release on /release)
     runs-on: ubuntu-24.04
-    outputs:
-      is_release: ${{ steps.check.outputs.is_release }}
-      release_agent: ${{ steps.check.outputs.release_agent }}
-      release_bot: ${{ steps.check.outputs.release_bot }}
-      version: ${{ steps.check.outputs.version }}
-      short_version: ${{ steps.check.outputs.short_version }}
-      tag: ${{ steps.check.outputs.tag }}
-      trigger_reason: ${{ steps.check.outputs.trigger_reason }}
+    env:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME || 'lhotakj' }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          docker image prune --all --force || true
+
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -52,42 +55,7 @@ jobs:
           DISPATCH_TARGET: "all"
           DISPATCH_RELEASE: ${{ inputs.release }}
           DISPATCH_PUSH_DOCKER: ${{ inputs.push_docker }}
-        run: |
-          python development/check_release.py
-
-  build-and-release:
-    name: Build All Apps & Docker (Release on /release)
-    needs: [check-release]
-    runs-on: ubuntu-24.04
-    env:
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME || 'lhotakj' }}
-    steps:
-      - name: Free runner disk space
-        run: |
-          echo "=== Disk space before cleanup ==="
-          df -h
-          sudo rm -rf \
-            /usr/share/dotnet \
-            /usr/local/lib/android \
-            /opt/ghc \
-            /opt/hostedtoolcache/CodeQL \
-            /usr/share/swift \
-            /usr/local/share/powershell \
-            || true
-          sudo docker image prune --all --force || true
-          echo "=== Disk space after cleanup ==="
-          df -h
-
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+        run: python development/check_release.py
 
       - name: Set up QEMU (multi-arch Docker)
         uses: docker/setup-qemu-action@v3
@@ -96,31 +64,27 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
-        if: env.DOCKERHUB_TOKEN != '' && (needs.check-release.outputs.release_bot == 'true' || (github.event_name == 'workflow_dispatch' && inputs.push_docker))
+        if: env.DOCKERHUB_TOKEN != '' && (steps.check.outputs.release_bot == 'true' || (github.event_name == 'workflow_dispatch' && inputs.push_docker))
         uses: docker/login-action@v3
         with:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ env.DOCKERHUB_TOKEN }}
 
       - name: Synchronize build version
-        run: |
-          python development/update_version.py --version ${{ needs.check-release.outputs.version }}
+        run: python development/update_version.py --version ${{ steps.check.outputs.version }}
 
       - name: Execute build.sh
         shell: bash
         env:
-          VERSION: ${{ needs.check-release.outputs.version }}
-          DOCKER_USER: ${{ env.DOCKERHUB_USERNAME }}
-          IS_RELEASE: ${{ needs.check-release.outputs.is_release }}
-          PUSH_DOCKER: ${{ inputs.push_docker || needs.check-release.outputs.is_release }}
+          VERSION: ${{ steps.check.outputs.version }}
+          IS_RELEASE: ${{ steps.check.outputs.is_release }}
+          PUSH_DOCKER: ${{ inputs.push_docker || steps.check.outputs.release_bot == 'true' }}
         run: |
           BUILD_ARGS=("--clean" "-v" "$VERSION" "--all" "--platform" "all" "--installer")
-
           if [ "$PUSH_DOCKER" = "true" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
             echo "[+] Enabling Docker image publishing to Docker Hub..."
-            BUILD_ARGS+=("--push" "--docker-user" "$DOCKER_USER")
+            BUILD_ARGS+=("--push" "--docker-user" "$DOCKERHUB_USERNAME")
           fi
-
           echo "[*] Invoking: ./build.sh ${BUILD_ARGS[*]}"
           ./build.sh "${BUILD_ARGS[@]}"
 
@@ -129,85 +93,47 @@ jobs:
         run: |
           echo "=== Distribution directory contents ==="
           ls -la dist/
-
-          echo "[*] Verifying native agent binaries and installer packages..."
-          test -f dist/cmdiqo-agent
-          test -f dist/cmdiqo-agent.exe
-          test -f dist/cmdiqo-agent-linux-x64.zip
-          test -f dist/cmdiqo-agent-windows-x64.zip
-          test -f dist/cmdiqo-agent-linux-x64-setup
-          test -f dist/cmdiqo-agent-windows-x64-setup.exe
+          for f in cmdiqo-agent cmdiqo-agent.exe cmdiqo-agent-linux-x64.zip cmdiqo-agent-windows-x64.zip cmdiqo-agent-linux-x64-setup cmdiqo-agent-windows-x64-setup.exe; do
+            test -f "dist/$f" || { echo "[-] Missing dist/$f"; exit 1; }
+          done
           echo "[+] All Linux and Windows native agent binaries and setups verified successfully!"
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: cmdiqo-artifacts-${{ needs.check-release.outputs.version }}
-          path: |
-            dist/cmdiqo-agent
-            dist/cmdiqo-agent.exe
-            dist/cmdiqo-agent-linux-x64.zip
-            dist/cmdiqo-agent-windows-x64.zip
-            dist/cmdiqo-agent-linux-x64-setup
-            dist/cmdiqo-agent-windows-x64-setup.exe
-            dist/cmdiqo-agent.cer
+          name: cmdiqo-artifacts-${{ steps.check.outputs.version }}
+          path: dist/cmdiqo-agent*
           retention-days: 90
           if-no-files-found: warn
 
       - name: Generate Release Summary
         shell: bash
         env:
-          VERSION: ${{ needs.check-release.outputs.version }}
-          DOCKER_USER: ${{ env.DOCKERHUB_USERNAME }}
+          VERSION: ${{ steps.check.outputs.version }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           python development/generate_release_summary.py \
             -v "$VERSION" \
             --dist dist \
-            --docker-user "$DOCKER_USER" \
+            --docker-user "$DOCKERHUB_USERNAME" \
             --commit-message "$COMMIT_MESSAGE" \
             -o dist/release-notes.md \
             --summary-file "$GITHUB_STEP_SUMMARY"
 
       - name: Publish GitHub Release
-        if: needs.check-release.outputs.is_release == 'true'
+        if: steps.check.outputs.is_release == 'true'
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.check-release.outputs.tag }}
-          VERSION: ${{ needs.check-release.outputs.version }}
+          TAG: ${{ steps.check.outputs.tag }}
         run: |
-          echo "[*] Target GitHub Release: $TAG (version $VERSION)"
-          shopt -s nullglob
-          RELEASE_FILES=()
-          CANDIDATES=(
-            dist/cmdiqo-agent
-            dist/cmdiqo-agent.exe
-            dist/cmdiqo-agent-linux-x64.zip
-            dist/cmdiqo-agent-windows-x64.zip
-            dist/cmdiqo-agent-linux-x64-setup
-            dist/cmdiqo-agent-windows-x64-setup.exe
-            dist/cmdiqo-agent.cer
-          )
-          for f in "${CANDIDATES[@]}"; do
-            if [ -f "$f" ]; then
-              RELEASE_FILES+=("$f")
-            fi
-          done
-
+          echo "[*] Target GitHub Release: $TAG"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "[+] Release $TAG already exists on GitHub."
-            if [ ${#RELEASE_FILES[@]} -gt 0 ]; then
-              echo "[+] Uploading release assets..."
-              gh release upload "$TAG" "${RELEASE_FILES[@]}" --clobber
-            fi
-            if [ -f dist/release-notes.md ]; then
-              echo "[+] Updating release notes..."
-              gh release edit "$TAG" --notes-file dist/release-notes.md
-            fi
+            echo "[+] Release $TAG already exists on GitHub. Updating..."
+            gh release upload "$TAG" dist/cmdiqo-agent* --clobber
+            gh release edit "$TAG" --notes-file dist/release-notes.md
           else
             echo "[+] Creating new release $TAG on GitHub with release notes..."
-            gh release create "$TAG" "${RELEASE_FILES[@]}" \
+            gh release create "$TAG" dist/cmdiqo-agent* \
               --title "Release $TAG" \
               --notes-file dist/release-notes.md
           fi
