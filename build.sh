@@ -379,6 +379,11 @@ print(digest.hexdigest())
         --target "$target_stage" \
         --build-arg "BUILDER_INPUT_SHA=$build_input_hash" \
         "$DOCKER_VOLUME_ROOT/installer.c"
+
+    if [[ "$PUSH_DOCKER" = true ]]; then
+        info "Pushing builder image ($remote_image) to Docker Hub..."
+        docker_cli push "$remote_image"
+    fi
 }
 
 package_agent_zip() {

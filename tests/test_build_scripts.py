@@ -241,6 +241,7 @@ case "${1:-}" in
         printf '%s' "${MOCK_PULL_HASH:-<no value>}" > "$MOCK_WORKSPACE/pulled-hash"
         ;;
     tag) exit "${MOCK_TAG_STATUS:-0}" ;;
+    push) exit "${MOCK_PUSH_STATUS:-0}" ;;
     build|buildx) exit "${MOCK_BUILD_STATUS:-0}" ;;
     run)
         if [[ "${MOCK_RUN_STATUS:-0}" != 0 ]]; then exit "$MOCK_RUN_STATUS"; fi
