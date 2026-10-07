@@ -373,7 +373,7 @@ def test_combined_installer_reuses_one_image_and_preserves_zips(
         "--installer", "--skip-agent-build", "--platform", "all", "--clean"
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert len([call for call in build.calls("docker") if call[1] == "run"]) == 2
+    assert len([call for call in build.calls("docker") if call[1] == "run"]) == 3
     assert (
         len(
             [
@@ -386,6 +386,7 @@ def test_combined_installer_reuses_one_image_and_preserves_zips(
     )
     assert all(path.read_bytes() == content for path, content in payloads.items())
     assert (build.root / "dist" / "cmdiqo-agent-linux-x64-setup").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-arm64-setup").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-windows-x64-setup.exe").is_file()
 
 
@@ -523,9 +524,60 @@ def test_agent_builds_all_platforms(
     assert result.returncode == 0, result.stdout + result.stderr
     assert (build.root / "dist" / "cmdiqo-agent").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-linux-x64.zip").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-arm64").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-arm64.zip").is_file()
     assert (build.root / "dist" / "cmdiqo-agent.exe").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-windows-x64.zip").is_file()
-    assert len([call for call in build.calls("docker") if call[1] == "run"]) == 2
+    assert len([call for call in build.calls("docker") if call[1] == "run"]) == 3
+
+
+def test_build_all_target_and_platform(
+    build: BuildHarness,
+) -> None:
+    result = build.run("--build-all")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (build.root / "dist" / "cmdiqo-agent").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-x64.zip").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-x64-setup").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-arm64").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-arm64.zip").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-arm64-setup").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent.exe").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-windows-x64.zip").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-windows-x64-setup.exe").is_file()
+    assert len([call for call in build.calls("docker") if call[1] == "run"]) == 6
+    docker_build = next(
+        call for call in build.calls("docker") if call[1:3] == ["buildx", "build"]
+    )
+    assert "--load" in docker_build
+
+
+def test_push_all_rebuilds_and_pushes(
+    build: BuildHarness,
+) -> None:
+    result = build.run("--push-all")
+    assert result.returncode == 0, result.stdout + result.stderr
+    builder_build = next(
+        call
+        for call in build.calls("docker")
+        if call[1:3] == ["buildx", "build"] and "--target" in call
+    )
+    assert builder_build[builder_build.index("--target") + 1] == "all"
+    assert [
+        "docker",
+        "push",
+        "lhotakj/cmdiqo-installer-builder:all",
+    ] in build.calls()
+    bot_build = next(
+        call
+        for call in build.calls("docker")
+        if call[1:3] == ["buildx", "build"] and "--target" not in call
+    )
+    assert "--push" in bot_build
+    assert bot_build[bot_build.index("--platform") + 1] == "linux/amd64,linux/arm64"
+    assert (build.root / "dist" / "cmdiqo-agent-linux-x64-setup").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-arm64-setup").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-windows-x64-setup.exe").is_file()
 
 
 def test_missing_prebuilt_dependency_root_is_reported(build: BuildHarness) -> None:

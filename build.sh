@@ -24,6 +24,7 @@ Build Targets:
   --installer, -i      Build the agent binary, ZIP package, and native setup executable
   --bot, -b, --docker  Build Docker container image for cmdiqo-bot
   --all                Build the agent package, native installer, and bot container
+  --build-all          Build all components for ALL platforms (linux64, linux-arm64, win64)
   --target <string>    Explicit target: 'agent', 'installer', 'bot', or 'all'
 
 Versioning:
@@ -45,6 +46,7 @@ Compilation & Packaging:
 
 Docker Options:
   --push               Build and push multi-arch Docker images to registry (linux/amd64,linux/arm64)
+  --push-all           Rebuild builder image, compile all platforms, and push all images
   --docker-user <usr>  Docker Hub namespace (default: $DOCKERHUB_USER,
                        $DOCKERHUB_USERNAME, or 'lhotakj')
 
@@ -56,10 +58,12 @@ Examples:
   ./build.sh --platform linux-arm64               # Build Linux ARM64 agent binary and ZIP package
   ./build.sh --installer                          # Build Linux agent package and native installer
   ./build.sh --installer --platform linux-arm64   # Build Linux ARM64 agent package and native setup
+  ./build.sh --build-all                          # Build all components for ALL platforms
+  ./build.sh --push-all                           # Build and push everything (builder + all platforms + bot)
   ./build.sh --installer --platform win64 --skip-agent-build
                                                    # Cross-build setup using an existing Windows ZIP
   ./build.sh --installer --platform all --skip-agent-build
-                                                   # Rebuild both setups using existing platform ZIPs
+                                                   # Rebuild all setups using existing platform ZIPs
   ./build.sh --installer --skip-agent-build       # Rebuild only the native installer
   ./build.sh --bot                                # Build bot Docker container
   ./build.sh --all --clean                        # Clean and build agent package, native installer, and bot
@@ -143,6 +147,13 @@ while [[ $# -gt 0 ]]; do
             BUILD_BOT=true
             shift
             ;;
+        --build-all)
+            BUILD_AGENT=true
+            BUILD_INSTALLER=true
+            BUILD_BOT=true
+            PLATFORM="all"
+            shift
+            ;;
         --target)
             require_option_value "$@"
             TARGET_ARG="$(echo "$2" | tr '[:upper:]' '[:lower:]')"
@@ -173,6 +184,15 @@ while [[ $# -gt 0 ]]; do
         --copy-to=*) require_option_value --copy-to "${1#*=}"; COPY_TO="${1#*=}"; shift ;;
         --skip-sign) SKIP_SIGN=true; shift ;;
         --push) PUSH_DOCKER=true; BUILD_BOT=true; shift ;;
+        --push-all)
+            BUILD_AGENT=true
+            BUILD_INSTALLER=true
+            BUILD_BOT=true
+            PLATFORM="all"
+            REBUILD_BUILDER=true
+            PUSH_DOCKER=true
+            shift
+            ;;
         --docker-user) require_option_value "$@"; DOCKER_USERNAME="$2"; shift 2 ;;
         --docker-user=*) require_option_value --docker-user "${1#*=}"; DOCKER_USERNAME="${1#*=}"; shift ;;
         --dev) DEV_FLAG=true; shift ;;
@@ -203,7 +223,7 @@ BUILD_WIN=false
 if [[ "$PLATFORM" == "linux64" || "$PLATFORM" == "all" ]]; then
     BUILD_LINUX=true
 fi
-if [[ "$PLATFORM" == "linux-arm64" ]]; then
+if [[ "$PLATFORM" == "linux-arm64" || "$PLATFORM" == "all" ]]; then
     BUILD_LINUX_ARM64=true
 fi
 if [[ "$PLATFORM" == "win64" || "$PLATFORM" == "all" ]]; then
@@ -327,47 +347,45 @@ print(digest.hexdigest())
 ' "$installer_root")"
 
     # 1. Check if local image exists
-    if docker_cli image inspect "$local_image" >/dev/null 2>&1; then
+    if [[ "$REBUILD_BUILDER" != true ]] && docker_cli image inspect "$local_image" >/dev/null 2>&1; then
         local current_hash
         current_hash="$(docker_cli image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' "$local_image")"
         if [[ "$current_hash" == "$build_input_hash" ]]; then
             info "Pre-built builder image ($local_image) matches source checksum."
             return 0
         fi
-        if [[ "$REBUILD_BUILDER" != true ]]; then
-            info "Found existing local builder image ($local_image); reusing without rebuilding."
-            return 0
-        fi
+        info "Found existing local builder image ($local_image); reusing without rebuilding."
+        return 0
     fi
 
     # 2. Check if remote-tagged image exists locally before pulling
-    if docker_cli image inspect "$remote_image" >/dev/null 2>&1; then
+    if [[ "$REBUILD_BUILDER" != true ]] && docker_cli image inspect "$remote_image" >/dev/null 2>&1; then
         local remote_hash
         remote_hash="$(docker_cli image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' "$remote_image")"
         if [[ "$remote_hash" == "$build_input_hash" ]]; then
             docker_cli tag "$remote_image" "$local_image"
             return 0
         fi
-        if [[ "$REBUILD_BUILDER" != true ]]; then
-            info "Found existing remote builder image ($remote_image); tagging as $local_image and reusing."
-            docker_cli tag "$remote_image" "$local_image"
-            return 0
-        fi
+        info "Found existing remote builder image ($remote_image); tagging as $local_image and reusing."
+        docker_cli tag "$remote_image" "$local_image"
+        return 0
     fi
 
     # 3. Try pulling pre-built image from Docker Hub
-    info "Attempting to pull pre-built builder image ($remote_image) from Docker Hub..."
-    if docker_cli pull "$remote_image"; then
-        local pulled_hash
-        pulled_hash="$(docker_cli image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' "$remote_image")"
-        if [[ "$pulled_hash" == "$build_input_hash" ]]; then
-            info "Pre-built builder image ($remote_image) is ready."
-            docker_cli tag "$remote_image" "$local_image"
-            return 0
+    if [[ "$REBUILD_BUILDER" != true ]]; then
+        info "Attempting to pull pre-built builder image ($remote_image) from Docker Hub..."
+        if docker_cli pull "$remote_image"; then
+            local pulled_hash
+            pulled_hash="$(docker_cli image inspect --format '{{ index .Config.Labels "io.cmdiqo.installer-builder.build-input-sha256" }}' "$remote_image")"
+            if [[ "$pulled_hash" == "$build_input_hash" ]]; then
+                info "Pre-built builder image ($remote_image) is ready."
+                docker_cli tag "$remote_image" "$local_image"
+                return 0
+            fi
+            warn "Pulled builder image does not match the Dockerfile, manifest, and triplets; rebuilding locally."
+        else
+            warn "Pre-built builder image is unavailable; rebuilding locally."
         fi
-        warn "Pulled builder image does not match the Dockerfile, manifest, and triplets; rebuilding locally."
-    else
-        warn "Pre-built builder image is unavailable; rebuilding locally."
     fi
 
     # 4. Fallback: Build image locally

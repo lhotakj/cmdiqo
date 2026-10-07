@@ -47,8 +47,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(libzip CONFIG REQUIRED)
-find_package(wxWidgets CONFIG REQUIRED)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
+find_package(wxWidgets CONFIG)
+if(wxWidgets_FOUND)
+    set(CMDIQO_ENABLE_GUI 1)
+else()
+    set(CMDIQO_ENABLE_GUI 0)
+    message(STATUS "wxWidgets not found; building CLI-only installer")
+endif()
 
 set(CMDIQO_EMBEDDED_RESOURCES_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(CMDIQO_EMBEDDED_LOGOS_HEADER "${CMDIQO_EMBEDDED_RESOURCES_DIR}/embedded_logos.hpp")
@@ -121,15 +127,17 @@ if(WIN32)
 endif()
 
 add_executable(cmdiqo-agent-setup
-    src/gui.cpp
     src/main.cpp
 )
 target_link_libraries(cmdiqo-agent-setup
     PRIVATE
         cmdiqo_installer_core
-        wx::core
-        wx::base
 )
+target_compile_definitions(cmdiqo-agent-setup PRIVATE CMDIQO_ENABLE_GUI=${CMDIQO_ENABLE_GUI})
+if(CMDIQO_ENABLE_GUI)
+    target_sources(cmdiqo-agent-setup PRIVATE src/gui.cpp)
+    target_link_libraries(cmdiqo-agent-setup PRIVATE wx::core wx::base)
+endif()
 target_include_directories(cmdiqo-agent-setup PRIVATE "${CMDIQO_EMBEDDED_RESOURCES_DIR}")
 
 if(WIN32)
