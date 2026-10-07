@@ -1,0 +1,210 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 0.10.0, defaults to version.txt)"
+        required: false
+        type: string
+      target:
+        description: "Build target: all, installer, bot"
+        type: choice
+        options:
+          - all
+          - installer
+          - bot
+        default: all
+      push_docker:
+        description: "Push container images to Docker Hub"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  check-release:
+    name: Check Commit or Dispatch for Release Trigger
+    runs-on: ubuntu-24.04
+    outputs:
+      release_agent: ${{ steps.check.outputs.release_agent }}
+      release_bot: ${{ steps.check.outputs.release_bot }}
+      is_release: ${{ steps.check.outputs.is_release }}
+      version: ${{ steps.check.outputs.version }}
+      short_version: ${{ steps.check.outputs.short_version }}
+      tag: ${{ steps.check.outputs.tag }}
+      trigger_reason: ${{ steps.check.outputs.trigger_reason }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Parse release trigger
+        id: check
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_VERSION: ${{ inputs.version }}
+          DISPATCH_TARGET: ${{ inputs.target }}
+          DISPATCH_PUSH_DOCKER: ${{ inputs.push_docker }}
+        run: |
+          python development/check_release.py
+
+  build-and-release:
+    name: Build & Release (Linux & Windows Artifacts, Docker Multi-Arch)
+    needs: [check-release]
+    if: needs.check-release.outputs.is_release == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Free runner disk space
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /opt/hostedtoolcache/CodeQL \
+            /usr/share/swift \
+            /usr/local/share/powershell \
+            || true
+          sudo docker image prune --all --force || true
+          echo "=== Disk space after cleanup ==="
+          df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up QEMU (multi-arch Docker)
+        if: needs.check-release.outputs.release_bot == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        if: needs.check-release.outputs.release_bot == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME || 'lhotakj' }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Synchronize build version
+        run: |
+          python development/update_version.py --version ${{ needs.check-release.outputs.version }}
+
+      - name: Execute build.sh
+        shell: bash
+        env:
+          VERSION: ${{ needs.check-release.outputs.version }}
+          DOCKER_USER: ${{ secrets.DOCKERHUB_USERNAME || 'lhotakj' }}
+          RELEASE_AGENT: ${{ needs.check-release.outputs.release_agent }}
+          RELEASE_BOT: ${{ needs.check-release.outputs.release_bot }}
+        run: |
+          BUILD_ARGS=("--clean" "-v" "$VERSION")
+
+          if [ "$RELEASE_AGENT" = "true" ] && [ "$RELEASE_BOT" = "true" ]; then
+            echo "[+] Executing full release build (--all --platform all --installer --push)..."
+            BUILD_ARGS+=("--all" "--platform" "all" "--installer" "--push" "--docker-user" "$DOCKER_USER")
+          elif [ "$RELEASE_AGENT" = "true" ]; then
+            echo "[+] Executing agent & installer release build (--installer --platform all)..."
+            BUILD_ARGS+=("--installer" "--platform" "all")
+          elif [ "$RELEASE_BOT" = "true" ]; then
+            echo "[+] Executing bot container release build (--bot --push)..."
+            BUILD_ARGS+=("--bot" "--push" "--docker-user" "$DOCKER_USER")
+          fi
+
+          echo "[*] Invoking: ./build.sh ${BUILD_ARGS[*]}"
+          ./build.sh "${BUILD_ARGS[@]}"
+
+      - name: Verify distribution artifacts
+        shell: bash
+        run: |
+          echo "=== Distribution directory contents ==="
+          ls -la dist/
+
+          if [ "${{ needs.check-release.outputs.release_agent }}" = "true" ]; then
+            echo "[*] Verifying native agent binaries and installer packages..."
+            test -f dist/cmdiqo-agent
+            test -f dist/cmdiqo-agent.exe
+            test -f dist/cmdiqo-agent-linux-x64.zip
+            test -f dist/cmdiqo-agent-windows-x64.zip
+            test -f dist/cmdiqo-agent-linux-x64-setup
+            test -f dist/cmdiqo-agent-windows-x64-setup.exe
+            echo "[+] All Linux and Windows native agent binaries and setups verified successfully!"
+          fi
+
+      - name: Upload Release Artifacts Storage
+        if: needs.check-release.outputs.release_agent == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cmdiqo-release-artifacts-${{ needs.check-release.outputs.version }}
+          path: |
+            dist/cmdiqo-agent
+            dist/cmdiqo-agent.exe
+            dist/cmdiqo-agent-linux-x64.zip
+            dist/cmdiqo-agent-windows-x64.zip
+            dist/cmdiqo-agent-linux-x64-setup
+            dist/cmdiqo-agent-windows-x64-setup.exe
+            dist/cmdiqo-agent.cer
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.check-release.outputs.tag }}
+          VERSION: ${{ needs.check-release.outputs.version }}
+        run: |
+          echo "[*] Target GitHub Release: $TAG (version $VERSION)"
+          shopt -s nullglob
+          RELEASE_FILES=()
+          CANDIDATES=(
+            dist/cmdiqo-agent
+            dist/cmdiqo-agent.exe
+            dist/cmdiqo-agent-linux-x64.zip
+            dist/cmdiqo-agent-windows-x64.zip
+            dist/cmdiqo-agent-linux-x64-setup
+            dist/cmdiqo-agent-windows-x64-setup.exe
+            dist/cmdiqo-agent.cer
+          )
+          for f in "${CANDIDATES[@]}"; do
+            if [ -f "$f" ]; then
+              RELEASE_FILES+=("$f")
+            fi
+          done
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "[+] Release $TAG already exists on GitHub."
+            if [ ${#RELEASE_FILES[@]} -gt 0 ]; then
+              echo "[+] Uploading release assets..."
+              gh release upload "$TAG" "${RELEASE_FILES[@]}" --clobber
+            fi
+          else
+            echo "[+] Creating new release $TAG on GitHub..."
+            if [ ${#RELEASE_FILES[@]} -gt 0 ]; then
+              gh release create "$TAG" "${RELEASE_FILES[@]}" \
+                --title "Release $TAG" \
+                --generate-notes
+            else
+              gh release create "$TAG" \
+                --title "Release $TAG" \
+                --generate-notes
+            fi
+          fi

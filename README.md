@@ -493,14 +493,14 @@ agent ZIP in `dist/`, then run
 can build the agent with native Windows Python; PowerShell supports a complete
 two-platform build with `.\build.ps1 -Installer -Platform all`.
 
-#### 3. Automated CI Builds via GitHub Actions (Direct Download)
-The repository includes [`.github/workflows/build-agent.yml`](.github/workflows/build-agent.yml). Select **Actions → Build Agent Binaries (Windows & Linux x64) → Run workflow** to create downloadable artifacts without a release:
+#### 3. Automated CI Builds via GitHub Actions (Direct Download & Release)
+The repository includes [`.github/workflows/release.yml`](.github/workflows/release.yml). Select **Actions → Build & Release → Run workflow** or push with `/release` on `main`:
 1. Go to your GitHub repository and click the **Actions** tab.
-2. Select the latest **Build Agent Binaries** workflow run.
-3. Scroll down to the **Artifacts** section at the bottom of the summary page.
-4. Download `cmdiqo-agent-windows-x64` or `cmdiqo-agent-linux-x64`. Each contains the platform ZIP service package and raw agent binary.
+2. Select the latest **Build & Release** workflow run.
+3. Download artifacts from the **Artifacts** section at the bottom of the summary page, or download directly from the tagged GitHub Release.
+4. Includes Linux and Windows native agents, service ZIP packages, and GUI installers.
 
-Commit `/release-agent` or `/release` on `main` to publish the same four files to a GitHub Release: two ZIP service packages and two raw agent binaries. CI verifies every ZIP includes its platform binary and command-line service installation scripts before upload.
+Commit `/release` (or `/release-agent`, `/release-bot`, with optional version like `/release 0.10.0`) on `main` to build all artifacts via `build.sh` and publish them to a GitHub Release and Docker Hub. CI verifies every ZIP and binary before upload.
 
 ---
 
@@ -606,9 +606,9 @@ Typing `/home docker ps` translates via alias to `/host home docker ps` and quer
 
 ## 5. Publishing to Docker Hub with GitHub Actions
 
-The included workflow `.github/workflows/docker-publish.yml` builds a
-multi-arch image (`linux/amd64` + `linux/arm64`) and pushes it on every push
-to `main` and every `v*` tag.
+The unified workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) utilizes `build.sh` to build
+multi-arch images (`linux/amd64` + `linux/arm64`) and pushes to Docker Hub whenever a commit on
+`main` includes `/release` (or `/release-bot`), or upon manual **workflow_dispatch**.
 
 1. Create a Docker Hub access token: <https://app.docker.com/settings/security>
    → **New Access Token**.
@@ -616,8 +616,8 @@ to `main` and every `v*` tag.
    repository secret*, add:
    - `DOCKERHUB_USERNAME` — your Docker Hub username
    - `DOCKERHUB_TOKEN` — the access token
-3. Push to `main`. The image appears as
-   `<your-user>/cmdiqo-bot:latest`.
+3. Push with `/release` on `main`. The multi-arch image appears as
+   `<your-user>/cmdiqo-bot:latest`, tagged with the release version.
    Push a tag like `v1.0.0` to also get `:1.0.0` and `:1.0`.
 4. Set `DOCKERHUB_USER` in `.env` (or hardcode your user in
    `docker-compose.yml`) so `docker compose pull` fetches your image instead of

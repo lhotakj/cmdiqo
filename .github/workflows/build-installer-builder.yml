@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "installer.c/**"
+      - "installer.c/Dockerfile"
       - ".github/workflows/build-installer-builder.yml"
   workflow_dispatch:
     inputs:

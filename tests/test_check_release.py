@@ -76,3 +76,33 @@ Triggering release:
     assert decision.release_agent is True
     assert decision.release_bot is True
     assert decision.is_release is True
+
+
+def test_release_typo_tolerance():
+    decision = evaluate_release(message="chore: release version /reelase 0.10.0")
+    assert decision.release_agent is True
+    assert decision.release_bot is True
+    assert decision.is_release is True
+    assert decision.version == "0.10.0"
+    assert decision.tag == "v0.10.0"
+
+
+def test_release_with_colon():
+    decision = evaluate_release(message="chore: release version /release: 0.10.0")
+    assert decision.release_agent is True
+    assert decision.release_bot is True
+    assert decision.is_release is True
+    assert decision.version == "0.10.0"
+
+
+def test_workflow_dispatch_evaluation(monkeypatch):
+    monkeypatch.setenv("EVENT_NAME", "workflow_dispatch")
+    monkeypatch.setenv("DISPATCH_TARGET", "all")
+    monkeypatch.setenv("DISPATCH_VERSION", "0.11.0")
+    monkeypatch.setenv("DISPATCH_PUSH_DOCKER", "true")
+    decision = evaluate_release()
+    assert decision.is_release is True
+    assert decision.release_agent is True
+    assert decision.release_bot is True
+    assert decision.version == "0.11.0"
+    assert decision.tag == "v0.11.0"

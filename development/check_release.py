@@ -67,12 +67,37 @@ class ReleaseDecision:
 
 
 def evaluate_release(message: str | None = None) -> ReleaseDecision:
-    """Parse commit message and determine release triggers strictly from message text."""
+    """Parse commit message and determine release triggers strictly from message text or workflow_dispatch."""
+    event_name = os.environ.get("EVENT_NAME", "").strip().lower()
+    if event_name == "workflow_dispatch":
+        dispatch_target = os.environ.get("DISPATCH_TARGET", "all").strip().lower()
+        dispatch_push_docker = os.environ.get("DISPATCH_PUSH_DOCKER", "true").strip().lower() != "false"
+        dispatch_version = os.environ.get("DISPATCH_VERSION", "").strip()
+
+        release_agent = dispatch_target in ("all", "installer", "agent")
+        release_bot = dispatch_target in ("all", "bot") and dispatch_push_docker
+        version = dispatch_version.lstrip("vV") if dispatch_version else get_base_version()
+        tag = f"v{version}"
+        parts = version.split(".")
+        major = parts[0] if len(parts) > 0 else "1"
+        minor = parts[1] if len(parts) > 1 else "0"
+        short_version = f"{major}.{minor}"
+
+        return ReleaseDecision(
+            release_agent=release_agent,
+            release_bot=release_bot,
+            is_release=True,
+            version=version,
+            short_version=short_version,
+            tag=tag,
+            trigger_reason=f"manual workflow_dispatch (target: {dispatch_target})",
+        )
+
     msg = message if message is not None else get_commit_message()
 
-    has_release_agent = bool(re.search(r"/release-agent\b", msg, re.IGNORECASE))
-    has_release_bot = bool(re.search(r"/release-bot\b", msg, re.IGNORECASE))
-    has_release_all = bool(re.search(r"/release\b(?!-agent|-bot)", msg, re.IGNORECASE))
+    has_release_agent = bool(re.search(r"/(?:release|reelase)-agent\b", msg, re.IGNORECASE))
+    has_release_bot = bool(re.search(r"/(?:release|reelase)-bot\b", msg, re.IGNORECASE))
+    has_release_all = bool(re.search(r"/(?:release|reelase)\b(?!-agent|-bot)", msg, re.IGNORECASE))
 
     trigger_reasons: list[str] = []
     if has_release_all:
@@ -87,7 +112,7 @@ def evaluate_release(message: str | None = None) -> ReleaseDecision:
     is_release = release_agent or release_bot
 
     # Extract explicit version if specified in commit message (e.g. /release v1.1.0 or /release-bot 1.1.0)
-    m = re.search(r"/release(?:-agent|-bot)?\s+([vV]?\d+\.\d+(?:\.\d+)?\S*)", msg)
+    m = re.search(r"/(?:release|reelase)(?:-agent|-bot)?(?:\s+|:\s*)([vV]?\d+\.\d+(?:\.\d+)?\S*)", msg, re.IGNORECASE)
     if m:
         version = m.group(1).strip().lstrip("vV")
     else:

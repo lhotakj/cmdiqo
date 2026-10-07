@@ -54,8 +54,8 @@ All build and maintenance scripts are organized across the repository:
 - `build.sh --clean --target installer` defaults to Linux x64 on Unix and Windows x64 on Git Bash. Docker installer builds use `cmdiqo-installer-builder:all` for native GTK3/Linux and cross-compiled wxMSW/Windows setups; Linux agent builds use Debian trixie.
 - `build.ps1 -Clean -Platform win64 -Target Installer` produces the Windows PE agent, service ZIP, and native self-contained wxWidgets installer: `cmdiqo-agent.exe`, `cmdiqo-agent-windows-x64.zip`, and `cmdiqo-agent-windows-x64-setup.exe`. `-Platform all` builds both platforms using native Windows Python and Docker.
 - From Unix, `build.sh --installer --platform win64 --skip-agent-build` cross-compiles the Windows C++ setup using an existing Windows-built agent binary. `--platform all --skip-agent-build` rebuilds both setups from their existing binaries.
-- Never attempt to produce a Windows PE file with Linux PyInstaller. The `.github/workflows/build-agent.yml` Windows matrix runner is the supported automated Windows build path.
-- A manual **Build Agent Binaries (Windows & Linux x64)** workflow run uploads both platform artifact sets for 90 days. `/release-agent` and `/release` also publish the two ZIP service packages, two raw agent binaries, and two GUI installers to the GitHub Release.
+- Both Windows and Linux native C++ agents and setup executables are built inside Docker containers via MinGW cross-compilation on Linux (Ubuntu 24.04). No Windows runner is required.
+- The unified workflow `.github/workflows/release.yml` utilizes `build.sh` on Linux with all options to build and publish both platform packages, native installers, Docker multi-arch images, and GitHub Releases when commit messages contain `/release`.
 
 ### Dynamic Versioning Rules:
 - **CI Builds (GitHub Actions):** Derived dynamically as `<major>.<minor>.<GITHUB_RUN_NUMBER>` (e.g. `1.0.42`).

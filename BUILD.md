@@ -391,23 +391,21 @@ Once the internal certificate is trusted, Windows recognizes binaries signed by 
 ## 5. GitHub Actions & Secrets Guide
 
 Automated CI/CD workflows run in `.github/workflows/` using the exact same build engine as local builds:
-- **`ci.yml`**: Runs Ruff linter, Pytest test suites, and SonarQube quality gate.
-- **`build-agent.yml`**: Compiles standalone binaries for Linux (`ubuntu-24.04`) and Windows (`windows-latest`) using `development/build_agent.py`, applies Authenticode signing, and uploads downloadable artifacts.
-- **`docker-publish.yml`**: Builds and publishes multi-arch Docker container images for `cmdiqo-bot`.
+- **`ci.yml`**: Runs Ruff linter, Pytest test suites, and SonarQube quality gate on pushes and pull requests.
+- **`release.yml`**: Unified build and release pipeline triggered by `/release` in commit messages or manual `workflow_dispatch`. Utilizes `build.sh` on Linux (`ubuntu-24.04`) to cross-compile Linux and Windows agent binaries and native setup installers, packages ZIPs, builds and pushes multi-arch Docker images (`linux/amd64`, `linux/arm64`) to Docker Hub, and creates GitHub Releases with attached assets.
+- **`build-installer-builder.yml`**: Builds and publishes C++ builder container images (`lhotakj/cmdiqo-installer-builder`) to Docker Hub only when `installer.c/Dockerfile` is modified.
 
 ### 1. Summary of Repository Secrets
 
 > [!NOTE]
 > **No secrets are required to build and download binaries!**
-> The binary build workflow works out of the box with zero secrets required. If signing secrets are omitted, the workflow automatically generates a dedicated Cmdiqo certificate, signs the `.exe`, and packages `cmdiqo-agent.cer` along with the binary.
+> The unified build workflow compiles both Linux and Windows artifacts out of the box using Linux container cross-compilers with zero secrets required. Docker Hub credentials are only needed if publishing container images.
 
 | Secret Name | Workflow | Is it Required? | Description |
-| :--- | :--- | :---: | :--- |
-| `DOCKERHUB_USERNAME` | `docker-publish.yml` | **Only if publishing images** | Your Docker Hub account username. |
-| `DOCKERHUB_TOKEN` | `docker-publish.yml` | **Only if publishing images** | Docker Hub Personal Access Token (PAT). |
+| :--- | :--- | :--- | :--- |
+| `DOCKERHUB_USERNAME` | `release.yml` | **Only if publishing images** | Your Docker Hub account username. |
+| `DOCKERHUB_TOKEN` | `release.yml` | **Only if publishing images** | Docker Hub Personal Access Token (PAT). |
 | `SONAR_TOKEN` | `ci.yml` | **Optional** | SonarCloud token for code quality scanning. |
-| `WINDOWS_SIGNING_CERT_BASE64` | `build-agent.yml` | **Optional** | Base64-encoded `.pfx` code-signing certificate. |
-| `WINDOWS_SIGNING_CERT_PASSWORD` | `build-agent.yml` | **Optional** | Password for the `.pfx` certificate. |
 
 ---
 
