@@ -55,6 +55,19 @@
         "CMAKE_BUILD_TYPE": "Release",
         "VCPKG_TARGET_TRIPLET": "x64-linux-release"
       }
+    },
+    {
+      "name": "linux-arm64",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_TARGET_TRIPLET": "arm64-linux-release",
+        "CMAKE_SYSTEM_NAME": "Linux",
+        "CMAKE_SYSTEM_PROCESSOR": "aarch64",
+        "CMAKE_C_COMPILER": "aarch64-linux-gnu-gcc",
+        "CMAKE_CXX_COMPILER": "aarch64-linux-gnu-g++",
+        "CMAKE_CROSSCOMPILING_EMULATOR": "qemu-aarch64-static"
+      }
     }
   ],
   "buildPresets": [
@@ -71,6 +84,11 @@
     {
       "name": "build-linux-x64",
       "configurePreset": "linux-x64",
+      "configuration": "Release"
+    },
+    {
+      "name": "build-linux-arm64",
+      "configurePreset": "linux-arm64",
       "configuration": "Release"
     }
   ],
@@ -94,6 +112,14 @@
     {
       "name": "test-linux-x64",
       "configurePreset": "linux-x64",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "test-linux-arm64",
+      "configurePreset": "linux-arm64",
       "configuration": "Release",
       "output": {
         "outputOnFailure": true

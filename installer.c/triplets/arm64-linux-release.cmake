@@ -1,0 +1,17 @@
+if(EXISTS "${VCPKG_ROOT_DIR}/triplets/arm64-linux.cmake")
+    include("${VCPKG_ROOT_DIR}/triplets/arm64-linux.cmake")
+elseif(EXISTS "${VCPKG_ROOT_DIR}/triplets/community/arm64-linux.cmake")
+    include("${VCPKG_ROOT_DIR}/triplets/community/arm64-linux.cmake")
+else()
+    set(VCPKG_TARGET_ARCHITECTURE arm64)
+    set(VCPKG_CRT_LINKAGE dynamic)
+    set(VCPKG_LIBRARY_LINKAGE static)
+    set(VCPKG_CMAKE_SYSTEM_NAME Linux)
+endif()
+
+set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE "${CMAKE_CURRENT_LIST_DIR}/toolchains/linux-arm64.cmake")
+set(VCPKG_BUILD_TYPE release)
+
+if(PORT STREQUAL "wxwidgets")
+    list(APPEND VCPKG_CMAKE_CONFIGURE_OPTIONS "-DwxBUILD_TOOLKIT=gtk3")
+endif()

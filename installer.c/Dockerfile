@@ -72,6 +72,7 @@ RUN git clone https://github.com/microsoft/vcpkg.git /opt/vcpkg \
 ENV HOME=/tmp \
     VCPKG_ROOT=/opt/vcpkg \
     VCPKG_INSTALLED_DIR_LINUX=/opt/cmdiqo-vcpkg-installed/linux \
+    VCPKG_INSTALLED_DIR_LINUX_ARM64=/opt/cmdiqo-vcpkg-installed/linux-arm64 \
     VCPKG_INSTALLED_DIR_WINDOWS=/opt/cmdiqo-vcpkg-installed/windows-mingw \
     VCPKG_INSTALLED_DIR=/opt/cmdiqo-vcpkg-installed/linux \
     VCPKG_OVERLAY_TRIPLETS=/opt/cmdiqo-triplets \
@@ -204,6 +205,10 @@ RUN apt-get update \
         mingw-w64-tools \
         wine \
         wine64 \
+        gcc-aarch64-linux-gnu \
+        g++-aarch64-linux-gnu \
+        binutils-aarch64-linux-gnu \
+        qemu-user-static \
     && update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix \
     && update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix \
     && rm -rf /var/lib/apt/lists/*
