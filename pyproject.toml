@@ -1,0 +1,8 @@
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+ignore = [
+    "EXE001",  # Shebang is present but file is not executable (unreliable on cross-platform checkouts)
+    "EXE002",  # The file is executable but no shebang is present (unreliable on cross-platform checkouts)
+]
