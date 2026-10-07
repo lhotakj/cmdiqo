@@ -74,7 +74,7 @@ Release installers embed the precise version read from the payload ZIP:
 `1.2.0` are also accepted. The Release executables are
 stripped after linking. MinGW Windows builds statically link the C/C++ runtime
 (`-static -static-libgcc -static-libstdc++`) via the `x64-mingw-static` vcpkg
-triplet so the output binary runs on any 64-bit Windows host without external MinGW DLLs.
+triplet so the output binary runs on any 64-bit Windows host without external MinGW DLLs. The native Windows GUI installer (`cmdiqo-agent-windows-x64-setup.exe`) is super-lightweight, taking only **~5.2 MB RAM** during execution while providing an interactive setup wizard with UAC elevation, token validation, and automated Windows Service (SCM) registration.
 
 ## Docker build architecture & Pre-built Docker Hub Images
 

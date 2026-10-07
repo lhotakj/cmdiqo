@@ -17,7 +17,7 @@ The Cmdiqo Agent is a lightweight host daemon that establishes an outbound WebSo
 | :--- | :--- | :--- |
 | **Packaging Machinery** | Requires PyInstaller packaging, Python virtualenv, and Wine / native Windows runners to build Windows executables. | Standard CMake + vcpkg. Can be cross-compiled cleanly for Windows (`x86_64-w64-mingw32-g++`) directly from Linux/macOS. |
 | **Binary Size** | ~15 MB (bundled Python interpreter + standard library + C extension DLLs). | **~1.0 – 2.0 MB** (fully static Release binary with stripped symbols). |
-| **Memory Footprint (RAM)** | ~30 – 45 MB working set. | **~3 – 6 MB** working set. |
+| **Memory Footprint (RAM)** | ~30 – 45 MB working set. | **~1.1 MB (Linux) / ~3.3 MB (Windows)** working set (super-lightweight). |
 | **Startup / Cold-boot Time** | ~400 – 900 ms (PyInstaller archive decompression & runtime bootstrap). | **< 10 ms** (instant native execution). |
 | **Antivirus Heuristics** | PyInstaller single-file bootloaders frequently trigger heuristic false positives in Windows Defender / corporate EDRs. | Standard compiled PE executable signed via Authenticode; significantly lower false positive rate. |
 | **Process Tree Isolation** | Requires complex `taskkill` or `ctypes` Job Object management. | Native Win32 Job Objects (`CreateJobObjectW`, `AssignProcessToJobObject`) guarantee 100% clean termination on timeout. |

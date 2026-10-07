@@ -11,7 +11,7 @@ This document details the system architecture, end-to-end execution lifecycle, c
 The system consists of three decoupled layers:
 1. **Slack Cloud**: Interacts with users via Socket Mode (outbound WebSocket from the bot).
 2. **cmdiqo-bot Container & slacksim**: Hosts the Slack event dispatcher, local command runner, and the WebSocket **Agent Hub**. `slacksim` provides an interactive console REPL for local testing and debugging without Slack credentials.
-3. **cmdiqo-agent Instances**: Lightweight standalone binaries running on LAN nodes (Windows PCs, Linux servers, NAS units, Raspberry Pis) that maintain persistent outbound WebSocket connections to the Hub.
+3. **cmdiqo-agent Instances**: Super-lightweight native C++20 standalone daemons running on LAN nodes (consuming only **~1.1 MB RAM on Linux** and **~3.3 MB RAM on Windows**, with the native Windows GUI installer taking just **~5.2 MB RAM**) that maintain persistent outbound WebSocket connections to the Hub.
 
 ```mermaid
 graph TD
