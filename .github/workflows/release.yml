@@ -59,6 +59,9 @@ jobs:
     name: Build All Apps & Docker (Release on /release)
     needs: [check-release]
     runs-on: ubuntu-24.04
+    env:
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME || 'lhotakj' }}
     steps:
       - name: Free runner disk space
         run: |
@@ -93,11 +96,11 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
-        if: ${{ secrets.DOCKERHUB_TOKEN != '' }}
+        if: env.DOCKERHUB_TOKEN != '' && (needs.check-release.outputs.release_bot == 'true' || (github.event_name == 'workflow_dispatch' && inputs.push_docker))
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME || 'lhotakj' }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
 
       - name: Synchronize build version
         run: |
@@ -107,13 +110,13 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ needs.check-release.outputs.version }}
-          DOCKER_USER: ${{ secrets.DOCKERHUB_USERNAME || 'lhotakj' }}
+          DOCKER_USER: ${{ env.DOCKERHUB_USERNAME }}
           IS_RELEASE: ${{ needs.check-release.outputs.is_release }}
           PUSH_DOCKER: ${{ inputs.push_docker || needs.check-release.outputs.is_release }}
         run: |
           BUILD_ARGS=("--clean" "-v" "$VERSION" "--all" "--platform" "all" "--installer")
 
-          if [ "$PUSH_DOCKER" = "true" ] && [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+          if [ "$PUSH_DOCKER" = "true" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
             echo "[+] Enabling Docker image publishing to Docker Hub..."
             BUILD_ARGS+=("--push" "--docker-user" "$DOCKER_USER")
           fi
@@ -155,7 +158,7 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ needs.check-release.outputs.version }}
-          DOCKER_USER: ${{ secrets.DOCKERHUB_USERNAME || 'lhotakj' }}
+          DOCKER_USER: ${{ env.DOCKERHUB_USERNAME }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
           python development/generate_release_summary.py \
