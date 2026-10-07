@@ -73,6 +73,7 @@ def evaluate_release(message: str | None = None) -> ReleaseDecision:
         dispatch_target = os.environ.get("DISPATCH_TARGET", "all").strip().lower()
         dispatch_push_docker = os.environ.get("DISPATCH_PUSH_DOCKER", "true").strip().lower() != "false"
         dispatch_version = os.environ.get("DISPATCH_VERSION", "").strip()
+        dispatch_release = os.environ.get("DISPATCH_RELEASE", "true").strip().lower() != "false"
 
         release_agent = dispatch_target in ("all", "installer", "agent")
         release_bot = dispatch_target in ("all", "bot") and dispatch_push_docker
@@ -86,11 +87,11 @@ def evaluate_release(message: str | None = None) -> ReleaseDecision:
         return ReleaseDecision(
             release_agent=release_agent,
             release_bot=release_bot,
-            is_release=True,
+            is_release=dispatch_release,
             version=version,
             short_version=short_version,
             tag=tag,
-            trigger_reason=f"manual workflow_dispatch (target: {dispatch_target})",
+            trigger_reason=f"manual workflow_dispatch (release: {dispatch_release}, target: {dispatch_target})",
         )
 
     msg = message if message is not None else get_commit_message()

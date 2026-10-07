@@ -388,12 +388,36 @@ Once the internal certificate is trusted, Windows recognizes binaries signed by 
 
 ---
 
-## 5. GitHub Actions & Secrets Guide
+## 5. GitHub Actions & Workflows Architecture
 
-Automated CI/CD workflows run in `.github/workflows/` using the exact same build engine as local builds:
-- **`ci.yml`**: Runs Ruff linter, Pytest test suites, and SonarQube quality gate on pushes and pull requests.
-- **`release.yml`**: Unified build and release pipeline triggered by `/release` in commit messages or manual `workflow_dispatch`. Utilizes `build.sh` on Linux (`ubuntu-24.04`) to cross-compile Linux and Windows agent binaries and native setup installers, packages ZIPs, builds and pushes multi-arch Docker images (`linux/amd64`, `linux/arm64`) to Docker Hub, and creates GitHub Releases with attached assets.
-- **`build-installer-builder.yml`**: Builds and publishes C++ builder container images (`lhotakj/cmdiqo-installer-builder`) to Docker Hub only when `installer.c/Dockerfile` is modified.
+Automated CI/CD workflows live in `.github/workflows/` and provide a clean, streamlined 3-pipeline architecture:
+
+1. **`ci.yml` (CI: Lint & Test)**:
+   - **Trigger:** Runs on **any commit to any branch** (`push:`) and all pull requests (`pull_request:`).
+   - **Actions:** Sets up Python 3.12, installs dependencies, runs Ruff linter across all packages (`bot`, `agent`, `development`, `tests`), runs Pytest unit and integration test suites with coverage, and performs SonarCloud analysis (if `SONAR_TOKEN` is present).
+   - **Speed:** Finishes in under 60 seconds with no container builds or binary compilation.
+
+2. **`release.yml` (Build & Release)**:
+   - **Trigger:** Runs on every push to `main` and manual `workflow_dispatch`.
+   - **Build Execution:** Reuses `./build.sh` on an `ubuntu-24.04` runner to compile all apps cross-platform from a single Linux environment:
+     - Linux native agent binary (`cmdiqo-agent`)
+     - Windows native agent binary (`cmdiqo-agent.exe`)
+     - Linux package with systemd service installer (`cmdiqo-agent-linux-x64.zip`)
+     - Windows package with PowerShell service installer (`cmdiqo-agent-windows-x64.zip`)
+     - Linux native GTK3 GUI setup wizard (`cmdiqo-agent-linux-x64-setup`)
+     - Windows native Win32 GUI setup wizard (`cmdiqo-agent-windows-x64-setup.exe`)
+     - Cmdiqo Slack bot multi-arch container (`linux/amd64`, `linux/arm64`)
+   - **Artifacts:** Always verifies binaries and uploads them to GitHub Actions run storage (retained 90 days).
+   - **`/release` Automation:** If the commit message contains `/release` (e.g. `/release v0.10.0` or `/release 0.10.0`):
+     - Pushes multi-arch Docker image (`:latest` and `:<version>`) to Docker Hub.
+     - Automatically generates a formatted Markdown release summary (`development/generate_release_summary.py`) with a complete table of artifact names, architectures, file sizes, SHA256 checksums, and container pull commands.
+     - Publishes the release to GitHub Releases with tag `v<version>`, attached files, and structured release notes.
+     - Renders the summary directly in the GitHub Actions Workflow Step Summary.
+
+3. **`builder-image.yml` (Build C++ Builder Image)**:
+   - **Trigger:** Triggered **manually** (`workflow_dispatch`) or on push **only if `installer.c/Dockerfile` changes**.
+   - **Actions:** Uses `installer.c/setup-env.sh --platform all --docker-user lhotakj --push` to compile the multi-toolchain C++ builder container (`lhotakj/cmdiqo-installer-builder:all`), pushes it to Docker Hub, and smoke-tests it against the native installer CMake configuration.
+   - **Guarantee:** Never runs during normal development commits or releases; pre-built images are pulled by `build.sh` in seconds.
 
 ### 1. Summary of Repository Secrets
 
@@ -456,49 +480,34 @@ Automated CI/CD workflows run in `.github/workflows/` using the exact same build
 
 Cmdiqo CI/CD uses smart commit-message trigger commands to control formal releases, GitHub Release tag generation, binary asset uploads, and Docker Hub image publishing:
 
-| Commit Flag | Action Taken | Artifacts & Destination |
+| Commit Command | Action Taken | Artifacts & Destination |
 | :--- | :--- | :--- |
-| **`/release-agent`** | Builds the agent package on native Linux and Windows runners. | Creates/updates GitHub Release tag (`v<version>`) and uploads both ZIP service packages and both raw agent binaries. |
-| **`/release-bot`** | Builds multi-arch Docker image for `cmdiqo-bot`. | Creates/updates GitHub Release tag (`v<version>`) and pushes multi-arch image (`linux/amd64,linux/arm64`) to Docker Hub (`:latest`, `:<version>`, `:<major>.<minor>`). |
-| **`/release`** | **Executes both** agent build/release and bot build/release in parallel. | Full production release: GitHub Release tag + agent `.zip` assets + Docker Hub container push. |
+| *(standard push to main)* | Compiles all Linux & Windows binaries, zips, setups, and Docker container. | Stored in GitHub Actions run artifacts (90 days). No public release or tag created. |
+| **`/release`** | Full release using baseline version in `version.txt`. | All binaries built + Docker container pushed to Docker Hub + GitHub Release created with summary notes. |
+| **`/release <version>`** | Full release with specific version override (e.g. `/release 0.10.0` or `/release v0.10.0`). | Same as `/release`, with version updated across all artifacts and Git tag `v<version>`. |
+| **`/release-agent`** | Release targeting only the native C++ agent packages. | Linux & Windows agent binaries, ZIPs, and setups attached to GitHub Release. |
+| **`/release-bot`** | Release targeting only the Cmdiqo Hub container. | Builds and pushes multi-arch Docker image to Docker Hub, creates release tag. |
 
 #### Usage Examples in Git Commits:
 ```bash
-# 1. Release both Agent and Bot using base version from version.txt:
-git commit -m "chore: release version 1.1.0 /release"
+# 1. Standard commit (builds all apps and tests, no public release created):
+git commit -m "feat: add application domain blocking rules"
 git push origin main
 
-# 2. Release Agent only:
-git commit -m "feat(agent): support new telemetry metrics /release-agent"
+# 2. Release with baseline version from version.txt:
+git commit -m "chore: release /release"
 git push origin main
 
-# 3. Release Bot only and publish to Docker Hub:
-git commit -m "feat(hub): add wake-on-lan slash command /release-bot"
-git push origin main
-
-# 4. Release with an explicit version override directly in the commit message:
-git commit -m "chore: prepare hotfix release /release v1.1.1"
+# 3. Release with explicit version override:
+git commit -m "chore: /release v0.10.0"
 git push origin main
 ```
 
-> [!TIP]
-> **Standard Commits (No Flags):**
-> Pushing regular commits (without `/release*`) runs continuous integration tests and linting (`ci.yml`) in seconds, without triggering PyInstaller compilation or pushing unwanted intermediate images to Docker Hub.
-
-#### Automated Decision via Commit Message:
-Push-triggered release publication evaluates the commit message of the commit pushed to `main`:
-- If the commit message contains `/release-agent` $\rightarrow$ Agent binaries are built, signed, and published to GitHub Releases.
-- If the commit message contains `/release-bot` $\rightarrow$ Bot Docker image is built and pushed to Docker Hub, and GitHub Release tag is created.
-- If the commit message contains `/release` $\rightarrow$ Both Agent and Bot are built, released to GitHub, and pushed to Docker Hub.
-- If none of the flags are found $\rightarrow$ Workflows exit immediately without compiling binaries, tagging releases, or publishing Docker images.
-
-The **Build Agent Binaries (Windows & Linux x64)** workflow can also be started manually from the Actions tab. A manual run builds and retains both platform artifact sets for 90 days, but does not create or modify a GitHub Release.
-
 #### Downloading Built Binaries:
 1. Navigate to **Releases** on GitHub (`https://github.com/<user>/Cmdiqo/releases`):
-   - Every `/release-agent` or `/release` run attaches both platform ZIP service packages and raw agent binaries listed in [Distribution Files](#distribution-files).
+   - Every `/release` run attaches both platform ZIP service packages, setup wizards, raw agent binaries, and a detailed checksum table.
 2. Or open any completed workflow run under the **Actions** tab:
-   - Scroll to **Artifacts** to download build packages directly.
+   - Scroll to **Artifacts** to download build packages directly from any main push.
 
 ## Universal Clean Rebuild of Builder Images and All Toolchains
 

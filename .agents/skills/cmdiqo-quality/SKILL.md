@@ -131,7 +131,7 @@ All build and maintenance scripts are organized across the repository:
 - `installer.c/setup-env.sh` & `installer.c/setup-env.ps1`: Automated Docker builder image preparation and Docker Hub publishing (`--push`, `--docker-user`).
 - `development/update_version.py`: Resolves version and propagates to `version.txt`, `short_version.txt`, and bundled `_version.py` / `__version__.py` modules across `agent`, `bot`, and `slacksim`.
 - `development/build_agent.py`: Standalone Python agent compiler (PyInstaller, UPX, Authenticode signer).
-- `.github/workflows/build-installer-builder.yml`: Automated GitHub Actions dispatcher workflow to compile and push C++ builder container images to Docker Hub (`lhotakj/cmdiqo-installer-builder:*`).
+- `.github/workflows/builder-image.yml`: Automated GitHub Actions dispatcher workflow to compile and push C++ builder container images to Docker Hub (`lhotakj/cmdiqo-installer-builder:*`).
 
 ### Native Binary & Setup Release Pipeline
 - **Linux Setup (`build.sh --installer`):** Compiles Linux standalone agent, ZIP package, and self-contained native C++ setup binary with embedded agent (`dist/cmdiqo-agent`, `dist/cmdiqo-agent-linux-x64.zip`, `dist/cmdiqo-agent-linux-x64-setup`). Uses pre-built Docker Hub builder image `lhotakj/cmdiqo-installer-builder:ubuntu-22.04` with automatic local Dockerfile fallback.

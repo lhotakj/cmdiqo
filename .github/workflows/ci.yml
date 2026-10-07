@@ -2,9 +2,7 @@ name: CI & SonarQube Quality Gate
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
   test:
@@ -31,7 +29,7 @@ jobs:
 
       - name: Lint with Ruff
         run: |
-          ruff check bot agent
+          ruff check bot agent development tests
 
       - name: Run unit & integration tests
         run: |

@@ -1,10 +1,11 @@
-name: Build & Publish C++ Builder Image (Docker Hub)
+name: Build C++ Builder Image
 
 on:
   push:
     branches: [main]
     paths:
       - "installer.c/Dockerfile"
+      - "Dockerfile"
   workflow_dispatch:
     inputs:
       platform:
@@ -43,7 +44,8 @@ jobs:
             /opt/ghc \
             /opt/hostedtoolcache/CodeQL \
             /usr/share/swift \
-            /usr/local/share/powershell
+            /usr/local/share/powershell \
+            || true
           sudo docker image prune --all --force || true
           echo "=== Disk space after cleanup ==="
           df -h

@@ -6,17 +6,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to release (e.g. 0.10.0, defaults to version.txt)"
+        description: "Version override (e.g. 0.10.0, defaults to version.txt)"
         required: false
         type: string
-      target:
-        description: "Build target: all, installer, bot"
-        type: choice
-        options:
-          - all
-          - installer
-          - bot
-        default: all
+      release:
+        description: "Create GitHub Release and publish artifacts"
+        type: boolean
+        default: true
       push_docker:
         description: "Push container images to Docker Hub"
         type: boolean
@@ -28,12 +24,12 @@ permissions:
 
 jobs:
   check-release:
-    name: Check Commit or Dispatch for Release Trigger
+    name: Check Release Trigger & Version
     runs-on: ubuntu-24.04
     outputs:
+      is_release: ${{ steps.check.outputs.is_release }}
       release_agent: ${{ steps.check.outputs.release_agent }}
       release_bot: ${{ steps.check.outputs.release_bot }}
-      is_release: ${{ steps.check.outputs.is_release }}
       version: ${{ steps.check.outputs.version }}
       short_version: ${{ steps.check.outputs.short_version }}
       tag: ${{ steps.check.outputs.tag }}
@@ -53,15 +49,15 @@ jobs:
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           EVENT_NAME: ${{ github.event_name }}
           DISPATCH_VERSION: ${{ inputs.version }}
-          DISPATCH_TARGET: ${{ inputs.target }}
+          DISPATCH_TARGET: "all"
+          DISPATCH_RELEASE: ${{ inputs.release }}
           DISPATCH_PUSH_DOCKER: ${{ inputs.push_docker }}
         run: |
           python development/check_release.py
 
   build-and-release:
-    name: Build & Release (Linux & Windows Artifacts, Docker Multi-Arch)
+    name: Build All Apps & Docker (Release on /release)
     needs: [check-release]
-    if: needs.check-release.outputs.is_release == 'true'
     runs-on: ubuntu-24.04
     steps:
       - name: Free runner disk space
@@ -91,7 +87,6 @@ jobs:
           python-version: "3.12"
 
       - name: Set up QEMU (multi-arch Docker)
-        if: needs.check-release.outputs.release_bot == 'true'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
@@ -113,20 +108,14 @@ jobs:
         env:
           VERSION: ${{ needs.check-release.outputs.version }}
           DOCKER_USER: ${{ secrets.DOCKERHUB_USERNAME || 'lhotakj' }}
-          RELEASE_AGENT: ${{ needs.check-release.outputs.release_agent }}
-          RELEASE_BOT: ${{ needs.check-release.outputs.release_bot }}
+          IS_RELEASE: ${{ needs.check-release.outputs.is_release }}
+          PUSH_DOCKER: ${{ inputs.push_docker || needs.check-release.outputs.is_release }}
         run: |
-          BUILD_ARGS=("--clean" "-v" "$VERSION")
+          BUILD_ARGS=("--clean" "-v" "$VERSION" "--all" "--platform" "all" "--installer")
 
-          if [ "$RELEASE_AGENT" = "true" ] && [ "$RELEASE_BOT" = "true" ]; then
-            echo "[+] Executing full release build (--all --platform all --installer --push)..."
-            BUILD_ARGS+=("--all" "--platform" "all" "--installer" "--push" "--docker-user" "$DOCKER_USER")
-          elif [ "$RELEASE_AGENT" = "true" ]; then
-            echo "[+] Executing agent & installer release build (--installer --platform all)..."
-            BUILD_ARGS+=("--installer" "--platform" "all")
-          elif [ "$RELEASE_BOT" = "true" ]; then
-            echo "[+] Executing bot container release build (--bot --push)..."
-            BUILD_ARGS+=("--bot" "--push" "--docker-user" "$DOCKER_USER")
+          if [ "$PUSH_DOCKER" = "true" ] && [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "[+] Enabling Docker image publishing to Docker Hub..."
+            BUILD_ARGS+=("--push" "--docker-user" "$DOCKER_USER")
           fi
 
           echo "[*] Invoking: ./build.sh ${BUILD_ARGS[*]}"
@@ -138,22 +127,19 @@ jobs:
           echo "=== Distribution directory contents ==="
           ls -la dist/
 
-          if [ "${{ needs.check-release.outputs.release_agent }}" = "true" ]; then
-            echo "[*] Verifying native agent binaries and installer packages..."
-            test -f dist/cmdiqo-agent
-            test -f dist/cmdiqo-agent.exe
-            test -f dist/cmdiqo-agent-linux-x64.zip
-            test -f dist/cmdiqo-agent-windows-x64.zip
-            test -f dist/cmdiqo-agent-linux-x64-setup
-            test -f dist/cmdiqo-agent-windows-x64-setup.exe
-            echo "[+] All Linux and Windows native agent binaries and setups verified successfully!"
-          fi
+          echo "[*] Verifying native agent binaries and installer packages..."
+          test -f dist/cmdiqo-agent
+          test -f dist/cmdiqo-agent.exe
+          test -f dist/cmdiqo-agent-linux-x64.zip
+          test -f dist/cmdiqo-agent-windows-x64.zip
+          test -f dist/cmdiqo-agent-linux-x64-setup
+          test -f dist/cmdiqo-agent-windows-x64-setup.exe
+          echo "[+] All Linux and Windows native agent binaries and setups verified successfully!"
 
-      - name: Upload Release Artifacts Storage
-        if: needs.check-release.outputs.release_agent == 'true'
+      - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: cmdiqo-release-artifacts-${{ needs.check-release.outputs.version }}
+          name: cmdiqo-artifacts-${{ needs.check-release.outputs.version }}
           path: |
             dist/cmdiqo-agent
             dist/cmdiqo-agent.exe
@@ -165,7 +151,23 @@ jobs:
           retention-days: 90
           if-no-files-found: warn
 
+      - name: Generate Release Summary
+        shell: bash
+        env:
+          VERSION: ${{ needs.check-release.outputs.version }}
+          DOCKER_USER: ${{ secrets.DOCKERHUB_USERNAME || 'lhotakj' }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          python development/generate_release_summary.py \
+            -v "$VERSION" \
+            --dist dist \
+            --docker-user "$DOCKER_USER" \
+            --commit-message "$COMMIT_MESSAGE" \
+            -o dist/release-notes.md \
+            --summary-file "$GITHUB_STEP_SUMMARY"
+
       - name: Publish GitHub Release
+        if: needs.check-release.outputs.is_release == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -196,15 +198,14 @@ jobs:
               echo "[+] Uploading release assets..."
               gh release upload "$TAG" "${RELEASE_FILES[@]}" --clobber
             fi
-          else
-            echo "[+] Creating new release $TAG on GitHub..."
-            if [ ${#RELEASE_FILES[@]} -gt 0 ]; then
-              gh release create "$TAG" "${RELEASE_FILES[@]}" \
-                --title "Release $TAG" \
-                --generate-notes
-            else
-              gh release create "$TAG" \
-                --title "Release $TAG" \
-                --generate-notes
+            if [ -f dist/release-notes.md ]; then
+              echo "[+] Updating release notes..."
+              gh release edit "$TAG" --notes-file dist/release-notes.md
             fi
+          else
+            echo "[+] Creating new release $TAG on GitHub with release notes..."
+            gh release create "$TAG" "${RELEASE_FILES[@]}" \
+              --title "Release $TAG" \
+              --notes-file dist/release-notes.md
           fi
+          echo "[SUCCESS] GitHub Release $TAG published successfully!"

@@ -169,9 +169,9 @@ When `./build.sh --installer` or `.\build.ps1 -Installer` runs:
 
 ### GitHub Actions Dispatcher Pipeline
 
-The workflow `.github/workflows/build-installer-builder.yml` provides an automated dispatcher to build and publish the builder images to Docker Hub:
+The workflow `.github/workflows/builder-image.yml` provides an automated dispatcher to build and publish the builder images to Docker Hub:
 - Can be triggered manually via `workflow_dispatch` with target platform choices (`all`, `linux`, `windows`).
-- Automatically triggers on `push` to `main` when `installer.c/Dockerfile`, `vcpkg.json`, or `setup-env.*` are modified.
+- Automatically triggers on `push` to `main` only when `installer.c/Dockerfile` is modified.
 
 ## Building and publishing Docker builder images (`setup-env.sh` / `setup-env.ps1`)
 
