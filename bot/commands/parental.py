@@ -93,8 +93,65 @@ DISCORD_DOMAINS: list[str] = [
     "status.discord.com",
 ]
 
+TIKTOK_DOMAINS: list[str] = [
+    "tiktok.com",
+    "www.tiktok.com",
+    "tiktokcdn.com",
+    "tiktokv.com",
+]
+
+TWITCH_DOMAINS: list[str] = [
+    "twitch.tv",
+    "www.twitch.tv",
+    "ttvnw.net",
+    "jtvnw.net",
+]
+
+INSTAGRAM_DOMAINS: list[str] = [
+    "instagram.com",
+    "www.instagram.com",
+    "cdninstagram.com",
+]
+
+REDDIT_DOMAINS: list[str] = [
+    "reddit.com",
+    "www.reddit.com",
+    "redd.it",
+]
+
+AI_DOMAINS: list[str] = [
+    "character.ai",
+    "beta.character.ai",
+]
+
+GAMING_BYPASS_DOMAINS: list[str] = [
+    "now.gg",
+    "www.now.gg",
+    "poki.com",
+    "crazygames.com",
+    "coolmathgames.com",
+]
+
+PROXY_DOMAINS: list[str] = [
+    "croxyproxy.com",
+    "proxysite.com",
+    "blockaway.net",
+]
+
 PARENTAL_DOMAINS: list[str] = sorted(
-    set(YOUTUBE_DOMAINS + ROBLOX_DOMAINS + MINECRAFT_DOMAINS + DISCORD_DOMAINS)
+    set(
+        YOUTUBE_DOMAINS
+        + ROBLOX_DOMAINS
+        + MINECRAFT_DOMAINS
+        + DISCORD_DOMAINS
+        + TIKTOK_DOMAINS
+        + TWITCH_DOMAINS
+        + INSTAGRAM_DOMAINS
+        + REDDIT_DOMAINS
+        + AI_DOMAINS
+        + GAMING_BYPASS_DOMAINS
+        + PROXY_DOMAINS
+    )
 )
 ALL_DOMAINS: list[str] = PARENTAL_DOMAINS
 

@@ -126,6 +126,79 @@ DEFAULT_APPS: dict[str, dict[str, Any]] = {
             ],
         },
     },
+    "riot": {
+        "name": "Riot Games",
+        "description": "Riot Client, League of Legends & Valorant",
+        "windows": {
+            "executables": [
+                "RiotClientServices.exe",
+                "VALORANT.exe",
+                "LeagueClient.exe",
+                "LeagueClientUx.exe",
+            ],
+        },
+        "linux": {
+            "process_names": [
+                "RiotClientServices.exe",
+                "LeagueClient.exe",
+            ],
+        },
+    },
+    "battlenet": {
+        "name": "Battle.net",
+        "description": "Blizzard Battle.net Client & Games",
+        "windows": {
+            "executables": [
+                "Battle.net.exe",
+                "Battle.net Launcher.exe",
+                "Agent.exe",
+            ],
+        },
+        "linux": {
+            "flatpaks": [
+                "net.battle.BattleNet",
+            ],
+            "process_names": [
+                "Battle.net.exe",
+                "Agent.exe",
+            ],
+        },
+    },
+    "tiktok": {
+        "name": "TikTok",
+        "description": "TikTok Desktop & Windows Store App",
+        "windows": {
+            "appx_packages": [
+                "ByteDance.TikTok",
+                "TikTok",
+            ],
+        },
+        "linux": {
+            "process_names": [
+                "tiktok",
+            ],
+        },
+    },
+    "gfn": {
+        "name": "GeForce NOW",
+        "description": "NVIDIA GeForce NOW Cloud Gaming",
+        "windows": {
+            "executables": [
+                "GeForceNOW.exe",
+                "GeForceNOWStreamer.exe",
+            ],
+        },
+        "linux": {
+            "flatpaks": [
+                "com.nvidia.geforcenow",
+                "io.github.hmlendea.geforcenow-electron",
+            ],
+            "process_names": [
+                "GeForceNOW",
+                "geforcenow",
+            ],
+        },
+    },
 }
 
 
@@ -436,6 +509,9 @@ async def manage_appblock(
             return f":x: Failed to execute appblock command on `{host}`: {exc}"
 
     output = (raw_output or "").strip()
+
+    if output.startswith(("ERROR:", "(failed:")):
+        return f":x: Failed to execute appblock command on `{host}`:\n```{output}```"
 
     # 2. Format response based on action and output
     lines = [l.strip() for l in output.splitlines() if l.strip()]

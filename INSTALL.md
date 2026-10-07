@@ -94,6 +94,9 @@ Socket Mode allows the bot to receive Slack events over a secure outbound WebSoc
    - **Command:** `/wol` *(Alias)*
      - **Short Description:** `Wake-on-LAN boot shortcut`
      - **Usage Hint:** `<mac-or-ip>`
+   - **Optional Aliases:** `/blockapp`, `/appblock`
+     - **Short Description:** `Shortcut for application execution blocker`
+     - **Usage Hint:** `<host> <app|all> <on|off|status>`
    *(Leave Request URL blank for all commands — Socket Mode handles routing automatically)*
 
 ---
@@ -587,6 +590,10 @@ Once the bot and agents are running, test everything directly inside Slack:
        - `/host MY-WINDOWS-PC parental on` (blocks YouTube, Roblox, Minecraft, and Discord in hosts file & flushes DNS).
        - `/host MY-WINDOWS-PC parental off` (unblocks domains & flushes DNS).
        - `/host MY-WINDOWS-PC parental status` (checks current block status).
+     - Application Execution Blocker (Roblox, Steam, Epic Games, Discord, Minecraft, or all):
+       - `/host MY-WINDOWS-PC blockapp roblox on` (or `/host MY-WINDOWS-PC appblock roblox on` — blocks executables & terminates running processes via IFEO on Windows / Flatpak overrides on Linux).
+       - `/host MY-WINDOWS-PC blockapp steam off` (unblocks application execution).
+       - `/host MY-WINDOWS-PC blockapp all status` (checks current execution interception status across all configured apps).
    - **Windows-Specific Hotfixes:**
      - `/host MY-WINDOWS-PC win updates` (queries installed Windows quality updates).
    - **Docker Operations (Linux Host):**

@@ -6,10 +6,17 @@ import pytest
 
 from bot.app import handle_command, load_commands
 from bot.commands.parental import (
+    AI_DOMAINS,
     DISCORD_DOMAINS,
+    GAMING_BYPASS_DOMAINS,
+    INSTAGRAM_DOMAINS,
     MINECRAFT_DOMAINS,
     PARENTAL_DOMAINS,
+    PROXY_DOMAINS,
+    REDDIT_DOMAINS,
     ROBLOX_DOMAINS,
+    TIKTOK_DOMAINS,
+    TWITCH_DOMAINS,
     YOUTUBE_DOMAINS,
     build_parental_script_linux,
     build_parental_script_windows,
@@ -22,6 +29,13 @@ def test_parental_domains():
     assert len(ROBLOX_DOMAINS) >= 5
     assert len(MINECRAFT_DOMAINS) >= 30
     assert len(DISCORD_DOMAINS) >= 10
+    assert len(TIKTOK_DOMAINS) >= 4
+    assert len(TWITCH_DOMAINS) >= 4
+    assert len(INSTAGRAM_DOMAINS) >= 3
+    assert len(REDDIT_DOMAINS) >= 3
+    assert len(AI_DOMAINS) >= 2
+    assert len(GAMING_BYPASS_DOMAINS) >= 4
+    assert len(PROXY_DOMAINS) >= 3
     assert "youtube.com" in PARENTAL_DOMAINS
     assert "www.youtube.com" in PARENTAL_DOMAINS
     assert "youtubekids.com" in PARENTAL_DOMAINS
@@ -32,6 +46,14 @@ def test_parental_domains():
     assert "login.live.com" in PARENTAL_DOMAINS
     assert "discord.com" in PARENTAL_DOMAINS
     assert "discord.gg" in PARENTAL_DOMAINS
+    assert "tiktok.com" in PARENTAL_DOMAINS
+    assert "twitch.tv" in PARENTAL_DOMAINS
+    assert "instagram.com" in PARENTAL_DOMAINS
+    assert "reddit.com" in PARENTAL_DOMAINS
+    assert "character.ai" in PARENTAL_DOMAINS
+    assert "now.gg" in PARENTAL_DOMAINS
+    assert "poki.com" in PARENTAL_DOMAINS
+    assert "croxyproxy.com" in PARENTAL_DOMAINS
 
 
 def test_build_parental_script_windows_on():

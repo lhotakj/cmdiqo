@@ -276,7 +276,10 @@ Cmdiqo features a built-in, dynamically generated command manual:
 - `/help docker` — Specific guidance for Docker container and compose management.
 - `/help system` — Guidance for resource monitoring (uptime, memory, disk, top CPU).
 - `/help windows` — Windows agent PowerShell command specifications.
+- `/help parental` — Guidance for domain distraction blocking in hosts file.
+- `/help blockapp` or `/help appblock` — Guidance for executable process blocking via IFEO & Flatpak.
 - `/help home` or `/help wol` — Details on configured aliases and their targets.
+- Appending `help` to any category prefix (e.g. `/lan help`, `/host help`, `/docker help`, `/parental help`, `/blockapp help`) directly routes to that topic's detailed breakdown.
 
 ### Adding Your Own Commands (`config/commands.yaml`)
 

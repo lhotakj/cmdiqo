@@ -285,7 +285,7 @@ commands:
     command:
       python: "commands.parental:manage_parental"
     config:
-      domains:
+      domains: &parental_domains
         - youtube.com
         - www.youtube.com
         - m.youtube.com
@@ -356,6 +356,44 @@ commands:
         - router.discord.gg
         - gateway.discord.gg
         - status.discord.com
+        - tiktok.com
+        - www.tiktok.com
+        - tiktokcdn.com
+        - tiktokv.com
+        - twitch.tv
+        - www.twitch.tv
+        - ttvnw.net
+        - jtvnw.net
+        - instagram.com
+        - www.instagram.com
+        - cdninstagram.com
+        - reddit.com
+        - www.reddit.com
+        - redd.it
+        - character.ai
+        - beta.character.ai
+        - now.gg
+        - www.now.gg
+        - poki.com
+        - crazygames.com
+        - coolmathgames.com
+        - croxyproxy.com
+        - proxysite.com
+        - blockaway.net
+
+  - name: direct-parental
+    trigger: "/parental {host} {action}"
+    description: "Manage parental domain blocking on Windows or Linux (shortcut)"
+    details: "Direct shortcut for /host {host} parental {action}. Configures system-level hosts file blocking on target Windows or Linux agent."
+    examples:
+      - "/parental AMD on"
+      - "/parental nas on"
+      - "/parental AMD off"
+      - "/parental nas status"
+    command:
+      python: "commands.parental:manage_parental"
+    config:
+      domains: *parental_domains
 
   # ---- Application Execution Blocker (OS Agnostic) -------------------------
   - name: host-blockapp
@@ -372,7 +410,7 @@ commands:
     command:
       python: "commands.appblock:manage_appblock"
     config:
-      apps:
+      apps: &apps_config
         roblox:
           name: "Roblox"
           description: "Roblox Player, Studio, Bloxstrap & Linux wrappers"
@@ -459,6 +497,61 @@ commands:
               - "minecraft-launcher"
               - "prismlauncher"
 
+        riot:
+          name: "Riot Games"
+          description: "Riot Client, League of Legends & Valorant"
+          windows:
+            executables:
+              - "RiotClientServices.exe"
+              - "VALORANT.exe"
+              - "LeagueClient.exe"
+              - "LeagueClientUx.exe"
+          linux:
+            process_names:
+              - "RiotClientServices.exe"
+              - "LeagueClient.exe"
+
+        battlenet:
+          name: "Battle.net"
+          description: "Blizzard Battle.net Client & Games"
+          windows:
+            executables:
+              - "Battle.net.exe"
+              - "Battle.net Launcher.exe"
+              - "Agent.exe"
+          linux:
+            flatpaks:
+              - "net.battle.BattleNet"
+            process_names:
+              - "Battle.net.exe"
+              - "Agent.exe"
+
+        tiktok:
+          name: "TikTok"
+          description: "TikTok Desktop & Windows Store App"
+          windows:
+            appx_packages:
+              - "ByteDance.TikTok"
+              - "TikTok"
+          linux:
+            process_names:
+              - "tiktok"
+
+        gfn:
+          name: "GeForce NOW"
+          description: "NVIDIA GeForce NOW Cloud Gaming"
+          windows:
+            executables:
+              - "GeForceNOW.exe"
+              - "GeForceNOWStreamer.exe"
+          linux:
+            flatpaks:
+              - "com.nvidia.geforcenow"
+              - "io.github.hmlendea.geforcenow-electron"
+            process_names:
+              - "GeForceNOW"
+              - "geforcenow"
+
   - name: host-appblock
     trigger: "/host {host} appblock {app} {action}"
     description: "Alias for /host {host} blockapp {app} {action}"
@@ -468,4 +561,30 @@ commands:
       - "/host PC-KIDS appblock all status"
     command:
       python: "commands.appblock:manage_appblock"
+    config:
+      apps: *apps_config
+
+  - name: direct-blockapp
+    trigger: "/blockapp {host} {app} {action}"
+    description: "Block or unblock applications on target host (shortcut)"
+    details: "Direct shortcut for /host {host} blockapp {app} {action}."
+    examples:
+      - "/blockapp PC-KIDS roblox on"
+      - "/blockapp PC-KIDS all status"
+    command:
+      python: "commands.appblock:manage_appblock"
+    config:
+      apps: *apps_config
+
+  - name: direct-appblock
+    trigger: "/appblock {host} {app} {action}"
+    description: "Alias for /blockapp {host} {app} {action}"
+    details: "Alias for /blockapp {host} {app} {action}."
+    examples:
+      - "/appblock PC-KIDS roblox on"
+      - "/appblock PC-KIDS all status"
+    command:
+      python: "commands.appblock:manage_appblock"
+    config:
+      apps: *apps_config
 

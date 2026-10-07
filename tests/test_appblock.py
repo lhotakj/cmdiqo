@@ -20,6 +20,10 @@ def test_default_apps_structure():
     assert "epic" in DEFAULT_APPS
     assert "discord" in DEFAULT_APPS
     assert "minecraft" in DEFAULT_APPS
+    assert "riot" in DEFAULT_APPS
+    assert "battlenet" in DEFAULT_APPS
+    assert "tiktok" in DEFAULT_APPS
+    assert "gfn" in DEFAULT_APPS
 
     roblox = DEFAULT_APPS["roblox"]
     assert "RobloxPlayerBeta.exe" in roblox["windows"]["executables"]
@@ -28,6 +32,21 @@ def test_default_apps_structure():
     assert "org.sober.Sober" in roblox["linux"]["flatpaks"]
     assert "org.vinegarhq.Vinegar" in roblox["linux"]["flatpaks"]
     assert "sober" in roblox["linux"]["process_names"]
+
+    riot = DEFAULT_APPS["riot"]
+    assert "RiotClientServices.exe" in riot["windows"]["executables"]
+    assert "VALORANT.exe" in riot["windows"]["executables"]
+
+    battlenet = DEFAULT_APPS["battlenet"]
+    assert "Battle.net.exe" in battlenet["windows"]["executables"]
+    assert "net.battle.BattleNet" in battlenet["linux"]["flatpaks"]
+
+    tiktok = DEFAULT_APPS["tiktok"]
+    assert "ByteDance.TikTok" in tiktok["windows"]["appx_packages"]
+
+    gfn = DEFAULT_APPS["gfn"]
+    assert "GeForceNOW.exe" in gfn["windows"]["executables"]
+    assert "com.nvidia.geforcenow" in gfn["linux"]["flatpaks"]
 
 
 def test_build_appblock_script_windows_on():
@@ -300,3 +319,28 @@ async def test_handle_command_blockapp_integration():
     assert len(posted) == 2
     assert "Running `/host {host} appblock {app} {action}` on `PC-KIDS`" in posted[0]
     assert "Application execution BLOCKED on `PC-KIDS`" in posted[1]
+
+    # Test direct shortcut /blockapp {host} {app} {action}
+    posted.clear()
+    await handle_command(
+        "/blockapp PC-KIDS roblox on",
+        user_id="U1",
+        channel_id="C1",
+        post=post,
+        commands=commands,
+        hub=mock_hub,
+    )
+    assert len(posted) == 2
+    assert "Running `/blockapp {host} {app} {action}` on `PC-KIDS`" in posted[0]
+    assert "Application execution BLOCKED on `PC-KIDS`" in posted[1]
+
+
+@pytest.mark.asyncio
+async def test_manage_appblock_error_output():
+    mock_hub = MagicMock()
+    mock_hub.agents = {"PC-KIDS": {"platform": "Windows/11"}}
+    mock_hub.exec = AsyncMock(return_value="ERROR: access denied writing IFEO key")
+
+    res = await manage_appblock({"host": "PC-KIDS", "app": "roblox", "action": "on"}, hub=mock_hub)
+    assert ":x: Failed to execute appblock command on `PC-KIDS`" in res
+    assert "access denied" in res
