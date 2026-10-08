@@ -47,6 +47,15 @@ def test_generate_summary_with_artifacts(tmp_path: Path):
     arm64_setup = dist_dir / "cmdiqo-agent-linux-arm64-setup"
     arm64_setup.write_bytes(b"linux arm64 cli setup binary")
 
+    armv6_bin = dist_dir / "cmdiqo-agent-linux-armv6"
+    armv6_bin.write_bytes(b"linux armv6 binary content")
+
+    armv6_zip = dist_dir / "cmdiqo-agent-linux-armv6.zip"
+    armv6_zip.write_bytes(b"linux armv6 package zip")
+
+    armv6_setup = dist_dir / "cmdiqo-agent-linux-armv6-setup"
+    armv6_setup.write_bytes(b"linux armv6 cli setup binary")
+
     summary = generate_summary(
         version="0.10.0",
         dist_dir=dist_dir,
@@ -60,22 +69,31 @@ def test_generate_summary_with_artifacts(tmp_path: Path):
     assert "feat: awesome new features" in summary
     assert "cmdiqo-agent" in summary
     assert "cmdiqo-agent-linux-arm64" in summary
+    assert "cmdiqo-agent-linux-armv6" in summary
     assert "cmdiqo-agent.exe" in summary
     assert "cmdiqo-agent-linux-arm64.zip" in summary
+    assert "cmdiqo-agent-linux-armv6.zip" in summary
     assert "cmdiqo-agent-linux-arm64-setup" in summary
+    assert "cmdiqo-agent-linux-armv6-setup" in summary
     assert "ARM64" in summary
+    assert "ARMv6" in summary
     assert "https://github.com/lhotakj/cmdiqo/releases/download/v0.10.0/cmdiqo-agent" in summary
     assert "https://github.com/lhotakj/cmdiqo/releases/download/v0.10.0/cmdiqo-agent-linux-arm64" in summary
+    assert "https://github.com/lhotakj/cmdiqo/releases/download/v0.10.0/cmdiqo-agent-linux-armv6" in summary
     assert "https://github.com/lhotakj/cmdiqo/releases/download/v0.10.0/cmdiqo-agent.exe" in summary
     assert "https://github.com/lhotakj/cmdiqo/releases/download/v0.10.0/cmdiqo-agent-linux-arm64.zip" in summary
+    assert "https://github.com/lhotakj/cmdiqo/releases/download/v0.10.0/cmdiqo-agent-linux-armv6.zip" in summary
     assert "https://github.com/lhotakj/cmdiqo/releases/download/v0.10.0/cmdiqo-agent-linux-arm64-setup" in summary
+    assert "https://github.com/lhotakj/cmdiqo/releases/download/v0.10.0/cmdiqo-agent-linux-armv6-setup" in summary
     assert "docker pull lhotakj/cmdiqo:0.10.0" in summary
     assert "docker pull lhotakj/cmdiqo:latest" in summary
     assert "sha256sum cmdiqo-agent-linux-x64.zip" in summary
     assert "sha256sum cmdiqo-agent-linux-arm64.zip" in summary
+    assert "sha256sum cmdiqo-agent-linux-armv6.zip" in summary
     # Verify platform icons
     assert '<img src="https://raw.githubusercontent.com/lhotakj/cmdiqo/main/img/linux-bw.png" width="20" height="20" alt="Linux (Daemon)" align="middle">' in summary
     assert '<img src="https://raw.githubusercontent.com/lhotakj/cmdiqo/main/img/arm-bw.png" width="20" height="20" alt="Linux ARM64 (Daemon)" align="middle">' in summary
+    assert '<img src="https://raw.githubusercontent.com/lhotakj/cmdiqo/main/img/arm-bw.png" width="20" height="20" alt="Linux ARMv6 (Daemon)" align="middle">' in summary
     assert '<img src="https://raw.githubusercontent.com/lhotakj/cmdiqo/main/img/win-bw.png" width="20" height="20" alt="Windows (Service)" align="middle">' in summary
 
 

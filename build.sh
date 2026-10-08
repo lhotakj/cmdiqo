@@ -24,7 +24,7 @@ Build Targets:
   --installer, -i      Build the agent binary, ZIP package, and native setup executable
   --bot, -b, --docker  Build Docker container image for cmdiqo-bot
   --all                Build the agent package, native installer, and bot container
-  --build-all          Build all components for ALL platforms (linux64, linux-arm64, win64)
+  --build-all          Build all components for ALL platforms (linux64, linux-arm64, linux-armv6, win64)
   --target <string>    Explicit target: 'agent', 'installer', 'bot', or 'all'
 
 Versioning:
@@ -33,7 +33,7 @@ Versioning:
   --dev                Tag version as development build (<major>.<minor>.devel+<HEX>)
 
 Platform Selection:
-  --platform, -p <str> Target platform: 'linux64', 'linux-arm64', 'win64', or 'all'
+  --platform, -p <str> Target platform: 'linux64', 'linux-arm64', 'linux-armv6', 'win64', or 'all'
                        (default: win64 on Windows Bash, otherwise linux64)
 
 Compilation & Packaging:
@@ -56,8 +56,10 @@ Help:
 Examples:
   ./build.sh                                      # Build Linux agent binary and ZIP package
   ./build.sh --platform linux-arm64               # Build Linux ARM64 agent binary and ZIP package
+  ./build.sh --platform linux-armv6               # Build Linux ARMv6 (RPi Zero W / Pi 1) agent binary and ZIP
   ./build.sh --installer                          # Build Linux agent package and native installer
   ./build.sh --installer --platform linux-arm64   # Build Linux ARM64 agent package and native setup
+  ./build.sh --installer --platform linux-armv6   # Build Linux ARMv6 agent package and native setup
   ./build.sh --build-all                          # Build all components for ALL platforms
   ./build.sh --push-all                           # Build and push everything (builder + all platforms + bot)
   ./build.sh --installer --platform win64 --skip-agent-build
@@ -82,9 +84,10 @@ normalize_platform() {
     case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
         linux64|linux) printf '%s\n' linux64 ;;
         linux-arm64|arm64-linux|arm64|aarch64) printf '%s\n' linux-arm64 ;;
+        linux-armv6|linux-armv6l|armv6l|armv6|armhf|rpi-zero|rpi1) printf '%s\n' linux-armv6 ;;
         win64|windows|win) printf '%s\n' win64 ;;
         all) printf '%s\n' all ;;
-        *) error "Invalid platform '$1'. Expected 'linux64', 'linux-arm64', 'win64', or 'all'."; return 2 ;;
+        *) error "Invalid platform '$1'. Expected 'linux64', 'linux-arm64', 'linux-armv6', 'win64', or 'all'."; return 2 ;;
     esac
 }
 
@@ -219,12 +222,16 @@ fi
 
 BUILD_LINUX=false
 BUILD_LINUX_ARM64=false
+BUILD_LINUX_ARMV6=false
 BUILD_WIN=false
 if [[ "$PLATFORM" == "linux64" || "$PLATFORM" == "all" ]]; then
     BUILD_LINUX=true
 fi
 if [[ "$PLATFORM" == "linux-arm64" || "$PLATFORM" == "all" ]]; then
     BUILD_LINUX_ARM64=true
+fi
+if [[ "$PLATFORM" == "linux-armv6" || "$PLATFORM" == "all" ]]; then
+    BUILD_LINUX_ARMV6=true
 fi
 if [[ "$PLATFORM" == "win64" || "$PLATFORM" == "all" ]]; then
     BUILD_WIN=true
@@ -298,6 +305,16 @@ if [[ "$CLEAN" = true ]]; then
             rm -rf "$ROOT_DIR/installer.c/out/build/linux-arm64"
         fi
     fi
+    if [[ "$BUILD_LINUX_ARMV6" = true && ( "$BUILD_AGENT" = true || "$BUILD_INSTALLER" = true ) ]]; then
+        if [[ "$BUILD_AGENT" = true ]]; then
+            rm -f "$DIST_DIR/cmdiqo-agent-linux-armv6" "$DIST_DIR/cmdiqo-agent-linux-armv6.zip"
+            rm -rf "$ROOT_DIR/agent.c/out/build/linux-armv6"
+        fi
+        if [[ "$BUILD_INSTALLER" = true ]]; then
+            rm -f "$DIST_DIR/cmdiqo-agent-linux-armv6-setup"
+            rm -rf "$ROOT_DIR/installer.c/out/build/linux-armv6"
+        fi
+    fi
     if [[ "$BUILD_WIN" = true && ( "$BUILD_AGENT" = true || "$BUILD_INSTALLER" = true ) ]]; then
         if [[ "$BUILD_AGENT" = true ]]; then
             rm -f "$DIST_DIR/cmdiqo-agent.exe" "$DIST_DIR/cmdiqo-agent-windows-x64.zip"
@@ -324,7 +341,7 @@ fi
 SHORT_VERSION=$(printf '%s\n' "$VERSION" | cut -d. -f1,2)
 TIMESTAMP=$(date +%Y%m%d%H%M%S)
 info "Build target version: ${VERSION} (Short: ${SHORT_VERSION})"
-info "Platform selection: ${PLATFORM} (linux64: ${BUILD_LINUX}, linux-arm64: ${BUILD_LINUX_ARM64}, win64: ${BUILD_WIN})"
+info "Platform selection: ${PLATFORM} (linux64: ${BUILD_LINUX}, linux-arm64: ${BUILD_LINUX_ARM64}, linux-armv6: ${BUILD_LINUX_ARMV6}, win64: ${BUILD_WIN})"
 
 ensure_installer_builder_image() {
     local target_stage="$1"
@@ -453,6 +470,17 @@ elif platform == "linux-arm64":
         (agent_c_dir / "agent.json.example", "agent.json.example"),
         (dist_dir / "build-version.txt", "version.txt"),
     ]
+elif platform == "linux-armv6":
+    zip_name = "cmdiqo-agent-linux-armv6.zip"
+    files_to_pack = [
+        (binary_path, "cmdiqo-agent"),
+        (agent_c_dir / "install-service.sh", "install.sh"),
+        (agent_c_dir / "uninstall-service.sh", "uninstall.sh"),
+        (agent_c_dir / "cmdiqo-agent.service", "cmdiqo-agent.service"),
+        (agent_c_dir / "agent.env.example", "agent.env.example"),
+        (agent_c_dir / "agent.json.example", "agent.json.example"),
+        (dist_dir / "build-version.txt", "version.txt"),
+    ]
 else:
     zip_name = "cmdiqo-agent-linux-x64.zip"
     files_to_pack = [
@@ -506,6 +534,11 @@ build_native_agent() {
         artifact="cmdiqo-agent"
         destination="cmdiqo-agent-linux-arm64"
         installed_dir_var="VCPKG_INSTALLED_DIR_LINUX_ARM64"
+    elif [[ "$platform" == linux-armv6 ]]; then
+        preset="linux-armv6"
+        artifact="cmdiqo-agent"
+        destination="cmdiqo-agent-linux-armv6"
+        installed_dir_var="VCPKG_INSTALLED_DIR_LINUX_ARMV6"
     fi
     info "=== Building native $platform agent (Release) ==="
     rm -f "$DIST_DIR/$destination"
@@ -525,7 +558,11 @@ build_native_agent() {
         set -euo pipefail
         export TMPDIR="/tmp/cmdiqo-tmp-$$"
         export WINEPREFIX="/tmp/cmdiqo-wine-$$"
-        export QEMU_LD_PREFIX="/usr/aarch64-linux-gnu"
+        if [[ "$PRESET" == "linux-armv6" ]]; then
+            export QEMU_LD_PREFIX="/usr/arm-linux-gnueabihf"
+        else
+            export QEMU_LD_PREFIX="/usr/aarch64-linux-gnu"
+        fi
         install --directory --mode=700 "$TMPDIR" "$WINEPREFIX"
         if [[ -z "${!INSTALLED_DIR_VAR+x}" ]]; then
             printf "[ERROR] Builder image is missing environment variable %s for %s.\n" "$INSTALLED_DIR_VAR" "$PRESET" >&2
@@ -550,7 +587,7 @@ build_native_agent() {
         exit 1
     fi
     cp -f "$ROOT_DIR/agent.c/out/build/$preset/$artifact" "$DIST_DIR/$destination"
-    if [[ "$platform" == linux64 || "$platform" == linux-arm64 ]]; then
+    if [[ "$platform" == linux64 || "$platform" == linux-arm64 || "$platform" == linux-armv6 ]]; then
         chmod +x "$DIST_DIR/$destination"
     fi
     info "Native agent: $DIST_DIR/$destination"
@@ -606,6 +643,11 @@ build_native_installer() {
         artifact="cmdiqo-agent-setup"
         destination="cmdiqo-agent-linux-arm64-setup"
         installed_dir_var="VCPKG_INSTALLED_DIR_LINUX_ARM64"
+    elif [[ "$platform" == linux-armv6 ]]; then
+        preset="linux-armv6"
+        artifact="cmdiqo-agent-setup"
+        destination="cmdiqo-agent-linux-armv6-setup"
+        installed_dir_var="VCPKG_INSTALLED_DIR_LINUX_ARMV6"
     fi
     info "=== Building native $platform installer (Release) ==="
     rm -f "$DIST_DIR/$destination"
@@ -625,7 +667,11 @@ build_native_installer() {
         set -euo pipefail
         export TMPDIR="/tmp/cmdiqo-tmp-$$"
         export WINEPREFIX="/tmp/cmdiqo-wine-$$"
-        export QEMU_LD_PREFIX="/usr/aarch64-linux-gnu"
+        if [[ "$PRESET" == "linux-armv6" ]]; then
+            export QEMU_LD_PREFIX="/usr/arm-linux-gnueabihf"
+        else
+            export QEMU_LD_PREFIX="/usr/aarch64-linux-gnu"
+        fi
         install --directory --mode=700 "$TMPDIR" "$WINEPREFIX"
         if [[ -z "${!INSTALLED_DIR_VAR+x}" ]]; then
             printf "[ERROR] Builder image is missing environment variable %s for %s.\n" "$INSTALLED_DIR_VAR" "$PRESET" >&2
@@ -650,7 +696,7 @@ build_native_installer() {
         exit 1
     fi
     cp -f "$ROOT_DIR/installer.c/out/build/$preset/$artifact" "$DIST_DIR/$destination"
-    if [[ "$platform" == linux64 || "$platform" == linux-arm64 ]]; then
+    if [[ "$platform" == linux64 || "$platform" == linux-arm64 || "$platform" == linux-armv6 ]]; then
         chmod +x "$DIST_DIR/$destination"
     fi
     info "Native installer: $DIST_DIR/$destination"
@@ -664,6 +710,9 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
     fi
     if [[ "$BUILD_LINUX_ARM64" = true && "$BUILD_AGENT" != true ]]; then
         linux_arm64_payload_version="$(get_payload_version "$DIST_DIR/cmdiqo-agent-linux-arm64.zip")"
+    fi
+    if [[ "$BUILD_LINUX_ARMV6" = true && "$BUILD_AGENT" != true ]]; then
+        linux_armv6_payload_version="$(get_payload_version "$DIST_DIR/cmdiqo-agent-linux-armv6.zip")"
     fi
     if [[ "$BUILD_WIN" = true && "$BUILD_AGENT" != true ]]; then
         windows_payload_version="$(get_payload_version "$DIST_DIR/cmdiqo-agent-windows-x64.zip")"
@@ -683,6 +732,9 @@ if [[ "$BUILD_AGENT" = true ]]; then
     if [[ "$BUILD_LINUX_ARM64" = true ]]; then
         build_native_agent linux-arm64 "$VERSION"
     fi
+    if [[ "$BUILD_LINUX_ARMV6" = true ]]; then
+        build_native_agent linux-armv6 "$VERSION"
+    fi
     if [[ "$BUILD_WIN" = true ]]; then
         build_native_agent win64 "$VERSION"
     fi
@@ -697,6 +749,9 @@ if [[ -n "$COPY_TO" ]]; then
     elif [[ "$BUILD_LINUX_ARM64" = true ]]; then
         agent_binary="$DIST_DIR/cmdiqo-agent-linux-arm64"
         agent_zip="$DIST_DIR/cmdiqo-agent-linux-arm64.zip"
+    elif [[ "$BUILD_LINUX_ARMV6" = true ]]; then
+        agent_binary="$DIST_DIR/cmdiqo-agent-linux-armv6"
+        agent_zip="$DIST_DIR/cmdiqo-agent-linux-armv6.zip"
     fi
     if [[ -d "$COPY_TO" ]]; then
         COPY_TO="$COPY_TO/$(basename "$agent_binary")"
@@ -719,6 +774,10 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
     if [[ "$BUILD_LINUX_ARM64" = true ]]; then
         linux_arm64_payload_version="$(get_payload_version "$DIST_DIR/cmdiqo-agent-linux-arm64.zip")"
         build_native_installer linux-arm64 "$linux_arm64_payload_version"
+    fi
+    if [[ "$BUILD_LINUX_ARMV6" = true ]]; then
+        linux_armv6_payload_version="$(get_payload_version "$DIST_DIR/cmdiqo-agent-linux-armv6.zip")"
+        build_native_installer linux-armv6 "$linux_armv6_payload_version"
     fi
     if [[ "$BUILD_WIN" = true ]]; then
         windows_payload_version="$(get_payload_version "$DIST_DIR/cmdiqo-agent-windows-x64.zip")"

@@ -341,14 +341,18 @@ Install `cmdiqo-agent` on your Linux machines (e.g., Raspberry Pi / ARM64 SBCs, 
 Download the appropriate package from the GitHub Release or Actions artifact, or build locally:
 - **x86_64**: `cmdiqo-agent-linux-x64.zip` (or `./build.sh --platform linux64 --target agent`)
 - **ARM64 / aarch64**: `cmdiqo-agent-linux-arm64.zip` (or `./build.sh --platform linux-arm64 --target agent`)
+- **ARMv6 / armv6l**: `cmdiqo-agent-linux-armv6.zip` (or `./build.sh --platform linux-armv6 --target agent`) — *for Raspberry Pi Zero / Zero W / Pi 1*
 
 Copy the ZIP to the target Linux machine:
 ```bash
 # Example for x86_64:
 scp dist/cmdiqo-agent-linux-x64.zip user@192.168.1.50:/tmp/
 
-# Example for ARM64 (e.g. Raspberry Pi):
+# Example for ARM64 (e.g. Raspberry Pi 3/4/5, Zero 2 W):
 scp dist/cmdiqo-agent-linux-arm64.zip user@192.168.1.50:/tmp/
+
+# Example for ARMv6 (e.g. Raspberry Pi Zero / Zero W / Pi 1):
+scp dist/cmdiqo-agent-linux-armv6.zip user@192.168.1.50:/tmp/
 ```
 
 ---
@@ -361,6 +365,8 @@ cd /tmp
 unzip cmdiqo-agent-linux-x64.zip -d cmdiqo-agent
 # Or for ARM64:
 unzip cmdiqo-agent-linux-arm64.zip -d cmdiqo-agent
+# Or for ARMv6 (RPi Zero W):
+unzip cmdiqo-agent-linux-armv6.zip -d cmdiqo-agent
 
 cd cmdiqo-agent
 sudo ./install.sh
@@ -373,13 +379,13 @@ The script will:
 
 > [!TIP]
 > **Alternative: Native C++ Setup Application (`cmdiqo-agent-*-setup`)**:
-> If you built or downloaded the native setup bundle, you can launch the GUI wizard (on x86_64) or run headlessly/CLI (x86_64 and ARM64):
+> If you built or downloaded the native setup bundle, you can launch the GUI wizard (on x86_64) or run headlessly/CLI (x86_64, ARM64, and ARMv6):
 > ```bash
 > # Graphical setup wizard (Linux x86_64, requires X11 / Wayland desktop):
 > ./cmdiqo-agent-linux-x64-setup
 > 
-> # Headless CLI installation (Linux x86_64 or Linux ARM64 / Raspberry Pi):
-> ./cmdiqo-agent-linux-arm64-setup --cli install --hub-url "ws://192.168.1.10:8765" --token "your-agent-token" --name "rpi"
+> # Headless CLI installation (Linux x86_64, Linux ARM64, or Linux ARMv6 / RPi Zero W):
+> ./cmdiqo-agent-linux-arm64-setup --cli install --hub-url "ws://192.168.1.10:8765" --token "your-agent-token" --name "rpi-zero"
 > ```
 
 ---

@@ -488,36 +488,41 @@ On any Windows machine:
 ```
 Outputs: `dist/cmdiqo-agent.exe` and `dist/cmdiqo-agent-windows-x64.zip`.
 
-#### 2. Build Linux Agent Package (x86_64 & ARM64)
+#### 2. Build Linux Agent Package (x86_64, ARM64, and ARMv6)
 
 On Linux (or WSL):
 ```bash
 # Build Linux x86_64 agent and ZIP package:
 ./build.sh --clean --platform linux64 --target agent
 
-# Build Linux ARM64 (aarch64) agent and ZIP package (Raspberry Pi, SBCs, AWS Graviton):
+# Build Linux ARM64 (aarch64) agent and ZIP package (Raspberry Pi 3/4/5, Zero 2 W, SBCs, AWS Graviton):
 ./build.sh --clean --platform linux-arm64 --target agent
 
-# Build Linux agent and paired native setup (GUI on x64, CLI on ARM64):
+# Build Linux ARMv6 (armv6l) agent and ZIP package (Raspberry Pi Zero / Zero W, Pi 1):
+./build.sh --clean --platform linux-armv6 --target agent
+
+# Build Linux agent and paired native setup (GUI on x64, CLI on ARM64 and ARMv6):
 ./build.sh --installer --platform linux64
 ./build.sh --installer --platform linux-arm64
+./build.sh --installer --platform linux-armv6
 
-# Build all components across all platforms (linux64, linux-arm64, win64, bot):
+# Build all components across all platforms (linux64, linux-arm64, linux-armv6, win64, bot):
 ./build.sh --build-all
 ```
 Outputs:
 - **Linux x86_64**: `dist/cmdiqo-agent`, `dist/cmdiqo-agent-linux-x64.zip`, and `dist/cmdiqo-agent-linux-x64-setup`
 - **Linux ARM64**: `dist/cmdiqo-agent-linux-arm64`, `dist/cmdiqo-agent-linux-arm64.zip`, and `dist/cmdiqo-agent-linux-arm64-setup`
+- **Linux ARMv6**: `dist/cmdiqo-agent-linux-armv6`, `dist/cmdiqo-agent-linux-armv6.zip`, and `dist/cmdiqo-agent-linux-armv6-setup`
 - **Windows x64**: `dist/cmdiqo-agent.exe`, `dist/cmdiqo-agent-windows-x64.zip`, and `dist/cmdiqo-agent-windows-x64-setup.exe`
 
 Each ZIP includes the binary and platform service scripts: `install.sh`/`uninstall.sh` on Linux and `install.ps1`/`uninstall.ps1` on Windows.
 
 `--installer` additionally writes the native setup executable to `dist/` beside
-the matching ZIP (GUI installer for Windows & Linux x64, self-contained CLI installer for ARM64).
+the matching ZIP (GUI installer for Windows & Linux x64, self-contained CLI installer for ARM64 and ARMv6).
 
 The Docker installer routes in `build.sh` use the unified
 `lhotakj/cmdiqo-installer-builder:all` image: native GCC builds the Linux x64 GTK3 setup,
-`aarch64-linux-gnu-gcc` cross-compiles the Linux ARM64 setup, and MinGW-w64 cross-compiles the Windows wxMSW setup.
+`aarch64-linux-gnu-gcc` cross-compiles the Linux ARM64 setup, `arm-linux-gnueabihf-gcc` (targeting `-march=armv6zk -mfloat-abi=hard -mfpu=vfp`) cross-compiles the Linux ARMv6 setup, and MinGW-w64 cross-compiles the Windows wxMSW setup.
 
 #### 3. Automated CI Builds via GitHub Actions (Direct Download & Release)
 The repository includes [`.github/workflows/release.yml`](.github/workflows/release.yml). Select **Actions → Build & Release → Run workflow** or push with `/release` on `main`:
