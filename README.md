@@ -44,9 +44,9 @@ nothing to expose, TLS handled for you. Ideal for a home server.
 - 🐳 Docker + Compose included; ready for Docker Hub via GitHub Actions
 - 🔒 Allow-lists for Slack **users** and **channels**
 - 🧵 Replies in threads, long output auto-split into multiple messages
-- ⚡ **Super-Lightweight Native C++20 Agents & GUI Installers**:
-  - **Linux Agent**: only **~1.1 MB RAM** working set
-  - **Windows Agent**: only **~3.3 MB RAM** working set
+- ⚡ **Super-Lightweight Native C++20 Agents & GUI/CLI Installers**:
+  - **Linux Agent (x86_64 & ARM64/aarch64)**: only **~1.1 MB RAM** working set
+  - **Windows Agent (x86_64)**: only **~3.3 MB RAM** working set
   - **Windows Installer GUI**: only **~5.2 MB RAM**
   - Instant cold boot (<10 ms), zero Python runtime dependency on target nodes
 
@@ -472,7 +472,7 @@ Because the background agent daemon consumes only **1.1 MB RAM on Linux** and **
 
 ---
 
-### Building Standalone Binaries (Windows & Linux 64-bit)
+### Building Standalone Binaries (Windows, Linux 64-bit & ARM64)
 
 You can compile the agent into a single, standalone binary that has **zero Python runtime dependencies** on target machines. Full build documentation is available in [BUILD.md](BUILD.md).
 
@@ -488,36 +488,43 @@ On any Windows machine:
 ```
 Outputs: `dist/cmdiqo-agent.exe` and `dist/cmdiqo-agent-windows-x64.zip`.
 
-#### 2. Build Linux 64-bit Agent Package
+#### 2. Build Linux Agent Package (x86_64 & ARM64)
 
-On Linux:
+On Linux (or WSL):
 ```bash
-./build.sh --clean --target agent
+# Build Linux x86_64 agent and ZIP package:
+./build.sh --clean --platform linux64 --target agent
 
-# Compiles the agent ZIP and paired native Linux setup bundle:
-./build.sh --installer
+# Build Linux ARM64 (aarch64) agent and ZIP package (Raspberry Pi, SBCs, AWS Graviton):
+./build.sh --clean --platform linux-arm64 --target agent
+
+# Build Linux agent and paired native setup (GUI on x64, CLI on ARM64):
+./build.sh --installer --platform linux64
+./build.sh --installer --platform linux-arm64
+
+# Build all components across all platforms (linux64, linux-arm64, win64, bot):
+./build.sh --build-all
 ```
-Outputs: `dist/cmdiqo-agent` and `dist/cmdiqo-agent-linux-x64.zip`. Each ZIP includes the binary and platform service scripts: `install.sh`/`uninstall.sh` on Linux and `install.ps1`/`uninstall.ps1` on Windows.
+Outputs:
+- **Linux x86_64**: `dist/cmdiqo-agent`, `dist/cmdiqo-agent-linux-x64.zip`, and `dist/cmdiqo-agent-linux-x64-setup`
+- **Linux ARM64**: `dist/cmdiqo-agent-linux-arm64`, `dist/cmdiqo-agent-linux-arm64.zip`, and `dist/cmdiqo-agent-linux-arm64-setup`
+- **Windows x64**: `dist/cmdiqo-agent.exe`, `dist/cmdiqo-agent-windows-x64.zip`, and `dist/cmdiqo-agent-windows-x64-setup.exe`
+
+Each ZIP includes the binary and platform service scripts: `install.sh`/`uninstall.sh` on Linux and `install.ps1`/`uninstall.ps1` on Windows.
 
 `--installer` additionally writes the native setup executable to `dist/` beside
-the matching ZIP. Keep both `dist` files together when distributing the
-graphical installer.
+the matching ZIP (GUI installer for Windows & Linux x64, self-contained CLI installer for ARM64).
 
-The Docker installer routes in `build.sh` and `build.ps1` use the unified
-`lhotakj/cmdiqo-installer-builder:all` image: GCC builds the Linux GTK3 setup,
-and MinGW-w64 cross-compiles the Windows wxMSW setup. PyInstaller still needs
-native Windows Python for the Windows agent. From Unix, place a Windows-built
-agent ZIP in `dist/`, then run
-`./build.sh --installer --platform win64 --skip-agent-build`. Windows Git Bash
-can build the agent with native Windows Python; PowerShell supports a complete
-two-platform build with `.\build.ps1 -Installer -Platform all`.
+The Docker installer routes in `build.sh` use the unified
+`lhotakj/cmdiqo-installer-builder:all` image: native GCC builds the Linux x64 GTK3 setup,
+`aarch64-linux-gnu-gcc` cross-compiles the Linux ARM64 setup, and MinGW-w64 cross-compiles the Windows wxMSW setup.
 
 #### 3. Automated CI Builds via GitHub Actions (Direct Download & Release)
 The repository includes [`.github/workflows/release.yml`](.github/workflows/release.yml). Select **Actions → Build & Release → Run workflow** or push with `/release` on `main`:
 1. Go to your GitHub repository and click the **Actions** tab.
 2. Select the latest **Build & Release** workflow run.
 3. Download artifacts from the **Artifacts** section at the bottom of the summary page, or download directly from the tagged GitHub Release.
-4. Includes Linux and Windows native agents, service ZIP packages, and GUI installers.
+4. Includes Linux (x86_64 and ARM64) and Windows native agents, service ZIP packages, and GUI/CLI installers.
 
 Commit `/release` (or `/release-agent`, `/release-bot`, with optional version like `/release 0.10.0`) on `main` to build all artifacts via `build.sh` and publish them to a GitHub Release and Docker Hub. CI verifies every ZIP and binary before upload.
 
