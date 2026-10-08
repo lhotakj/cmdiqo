@@ -335,14 +335,20 @@ slack [#general] @U_ADMIN > /host AMD uptime
 
 ## 4. How to Install the Linux Service (`cmdiqo-agent`)
 
-Install `cmdiqo-agent` on your Linux machines (e.g., Raspberry Pi, Ubuntu NAS, home server) so you can execute shell commands on them remotely from Slack.
+Install `cmdiqo-agent` on your Linux machines (e.g., Raspberry Pi / ARM64 SBCs, Ubuntu NAS, AWS Graviton, home servers) so you can execute shell commands on them remotely from Slack.
 
 ### Step 4.1: Download or Build the Linux Agent Package
-Download `cmdiqo-agent-linux-x64.zip` from the GitHub Release or Actions
-artifact, or build it locally with `./build.sh --agent`. Copy the ZIP to
-the target Linux machine:
+Download the appropriate package from the GitHub Release or Actions artifact, or build locally:
+- **x86_64**: `cmdiqo-agent-linux-x64.zip` (or `./build.sh --platform linux64 --target agent`)
+- **ARM64 / aarch64**: `cmdiqo-agent-linux-arm64.zip` (or `./build.sh --platform linux-arm64 --target agent`)
+
+Copy the ZIP to the target Linux machine:
 ```bash
+# Example for x86_64:
 scp dist/cmdiqo-agent-linux-x64.zip user@192.168.1.50:/tmp/
+
+# Example for ARM64 (e.g. Raspberry Pi):
+scp dist/cmdiqo-agent-linux-arm64.zip user@192.168.1.50:/tmp/
 ```
 
 ---
@@ -351,8 +357,12 @@ scp dist/cmdiqo-agent-linux-x64.zip user@192.168.1.50:/tmp/
 On the target Linux machine:
 ```bash
 cd /tmp
-unzip cmdiqo-agent-linux-x64.zip -d cmdiqo-agent-linux-x64
-cd cmdiqo-agent-linux-x64
+# For x86_64:
+unzip cmdiqo-agent-linux-x64.zip -d cmdiqo-agent
+# Or for ARM64:
+unzip cmdiqo-agent-linux-arm64.zip -d cmdiqo-agent
+
+cd cmdiqo-agent
 sudo ./install.sh
 ```
 
@@ -362,14 +372,14 @@ The script will:
 3. Install and enable the systemd service `/etc/systemd/system/cmdiqo-agent.service`.
 
 > [!TIP]
-> **Alternative: Native C++ Setup Application (`cmdiqo-agent-linux-x64-setup`)**:
-> If you built or downloaded the native setup bundle, you can launch the GUI wizard or run headlessly:
+> **Alternative: Native C++ Setup Application (`cmdiqo-agent-*-setup`)**:
+> If you built or downloaded the native setup bundle, you can launch the GUI wizard (on x86_64) or run headlessly/CLI (x86_64 and ARM64):
 > ```bash
-> # Graphical setup wizard (requires X11 / Wayland desktop):
+> # Graphical setup wizard (Linux x86_64, requires X11 / Wayland desktop):
 > ./cmdiqo-agent-linux-x64-setup
 > 
-> # Headless CLI installation:
-> ./cmdiqo-agent-linux-x64-setup --cli install --hub-url "ws://192.168.1.10:8765" --token "your-agent-token" --name "nas"
+> # Headless CLI installation (Linux x86_64 or Linux ARM64 / Raspberry Pi):
+> ./cmdiqo-agent-linux-arm64-setup --cli install --hub-url "ws://192.168.1.10:8765" --token "your-agent-token" --name "rpi"
 > ```
 
 ---

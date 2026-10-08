@@ -1,4 +1,10 @@
+#ifndef CMDIQO_ENABLE_GUI
+#define CMDIQO_ENABLE_GUI 1
+#endif
+
+#if CMDIQO_ENABLE_GUI
 #include "cmdiqo/gui.hpp"
+#endif
 #include "cmdiqo/installer.hpp"
 
 #include <fstream>
@@ -415,9 +421,14 @@ int main(int argc, char** argv) {
         return run_cli(*options);
     }
 
+#if CMDIQO_ENABLE_GUI
 #ifdef _WIN32
     FreeConsole();
 #endif
 
     return run_gui(argc, argv, options->payload, options->elevation_config);
+#else
+    std::cerr << "Graphical GUI is not supported on this platform/architecture. Please run with --cli.\n";
+    return 1;
+#endif
 }

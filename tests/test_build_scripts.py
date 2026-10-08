@@ -113,7 +113,10 @@ class BuildHarness:
         return [record for record in records if command is None or record[0] == command]
 
     def payload(self, platform: str, version: str | None = "1.2.0") -> Path:
-        path = self.root / "dist" / f"cmdiqo-agent-{platform}-x64.zip"
+        if platform in ("linux-arm64", "arm64"):
+            path = self.root / "dist" / "cmdiqo-agent-linux-arm64.zip"
+        else:
+            path = self.root / "dist" / f"cmdiqo-agent-{platform}-x64.zip"
         path.parent.mkdir(exist_ok=True)
         with zipfile.ZipFile(path, "w") as archive:
             if version is not None:
@@ -155,6 +158,7 @@ def build(tmp_path: Path, bash: str) -> BuildHarness:
         if (repo / "agent.c" / name).is_file():
             shutil.copy2(repo / "agent.c" / name, agent / name)
     (root / "prebuilt-linux").mkdir()
+    (root / "prebuilt-linux-arm64").mkdir()
     (root / "prebuilt-windows").mkdir()
     tools = root / "tools"
     tools.mkdir()
@@ -237,6 +241,7 @@ case "${1:-}" in
         printf '%s' "${MOCK_PULL_HASH:-<no value>}" > "$MOCK_WORKSPACE/pulled-hash"
         ;;
     tag) exit "${MOCK_TAG_STATUS:-0}" ;;
+    push) exit "${MOCK_PUSH_STATUS:-0}" ;;
     build|buildx) exit "${MOCK_BUILD_STATUS:-0}" ;;
     run)
         if [[ "${MOCK_RUN_STATUS:-0}" != 0 ]]; then exit "$MOCK_RUN_STATUS"; fi
@@ -252,6 +257,7 @@ case "${1:-}" in
             esac
         done
         export VCPKG_INSTALLED_DIR_LINUX="$MOCK_WORKSPACE/prebuilt-linux"
+        export VCPKG_INSTALLED_DIR_LINUX_ARM64="$MOCK_WORKSPACE/prebuilt-linux-arm64"
         export VCPKG_INSTALLED_DIR_WINDOWS="$MOCK_WORKSPACE/prebuilt-windows"
         cd "$MOCK_WORKSPACE${workdir#/workspace}"
         "$@"
@@ -261,7 +267,7 @@ esac
 """,
     )
     harness = BuildHarness(root, bash)
-    for platform in ("linux", "windows"):
+    for platform in ("linux", "linux-arm64", "windows"):
         shutil.copy2(harness.payload(platform), root / f"seed-{platform}.zip")
     return harness
 
@@ -293,10 +299,15 @@ def test_invalid_options_fail_before_building(
 
 
 @pytest.mark.parametrize(
-    "platform,preset", [("linux64", "linux-x64"), ("Windows", "windows-x64-mingw")]
+    "platform,preset,dep_dir",
+    [
+        ("linux64", "linux-x64", "prebuilt-linux"),
+        ("linux-arm64", "linux-arm64", "prebuilt-linux-arm64"),
+        ("Windows", "windows-x64-mingw", "prebuilt-windows"),
+    ],
 )
 def test_installer_uses_unified_prebuilt_image(
-    build: BuildHarness, platform: str, preset: str
+    build: BuildHarness, platform: str, preset: str, dep_dir: str
 ) -> None:
     result = build.run("--installer", "--skip-agent-build", "--platform", platform)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -312,7 +323,7 @@ def test_installer_uses_unified_prebuilt_image(
     assert configure[configure.index("--preset") + 1] == preset
     assert "-DVCPKG_MANIFEST_INSTALL=OFF" in configure
     assert (
-        f"-DVCPKG_INSTALLED_DIR={build.root.as_posix()}/prebuilt-{'windows' if platform == 'Windows' else 'linux'}"
+        f"-DVCPKG_INSTALLED_DIR={build.root.as_posix()}/{dep_dir}"
         in configure
     )
     assert [
@@ -325,6 +336,35 @@ def test_installer_uses_unified_prebuilt_image(
     ] in build.calls()
 
 
+def test_agent_linux_arm64_build(build: BuildHarness) -> None:
+    result = build.run("--agent", "--platform", "linux-arm64")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (build.root / "dist" / "cmdiqo-agent-linux-arm64").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-arm64.zip").is_file()
+    configure = next(call for call in build.calls("cmake") if "--fresh" in call)
+    assert configure[configure.index("--preset") + 1] == "linux-arm64"
+    assert (
+        f"-DVCPKG_INSTALLED_DIR={build.root.as_posix()}/prebuilt-linux-arm64"
+        in configure
+    )
+    assert [
+        "ctest",
+        "--preset",
+        "test-linux-arm64",
+        "-C",
+        "Release",
+        "--output-on-failure",
+    ] in build.calls()
+
+
+def test_agent_linux_arm64_copy_to(build: BuildHarness) -> None:
+    dest = build.root / "target" / "my-arm-agent"
+    result = build.run("--agent", "--platform", "linux-arm64", "--copy-to", str(dest))
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert dest.is_file()
+    assert (build.root / "target" / "cmdiqo-agent-linux-arm64.zip").is_file()
+
+
 def test_combined_installer_reuses_one_image_and_preserves_zips(
     build: BuildHarness,
 ) -> None:
@@ -333,7 +373,7 @@ def test_combined_installer_reuses_one_image_and_preserves_zips(
         "--installer", "--skip-agent-build", "--platform", "all", "--clean"
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert len([call for call in build.calls("docker") if call[1] == "run"]) == 2
+    assert len([call for call in build.calls("docker") if call[1] == "run"]) == 3
     assert (
         len(
             [
@@ -346,6 +386,7 @@ def test_combined_installer_reuses_one_image_and_preserves_zips(
     )
     assert all(path.read_bytes() == content for path, content in payloads.items())
     assert (build.root / "dist" / "cmdiqo-agent-linux-x64-setup").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-arm64-setup").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-windows-x64-setup.exe").is_file()
 
 
@@ -483,9 +524,60 @@ def test_agent_builds_all_platforms(
     assert result.returncode == 0, result.stdout + result.stderr
     assert (build.root / "dist" / "cmdiqo-agent").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-linux-x64.zip").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-arm64").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-arm64.zip").is_file()
     assert (build.root / "dist" / "cmdiqo-agent.exe").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-windows-x64.zip").is_file()
-    assert len([call for call in build.calls("docker") if call[1] == "run"]) == 2
+    assert len([call for call in build.calls("docker") if call[1] == "run"]) == 3
+
+
+def test_build_all_target_and_platform(
+    build: BuildHarness,
+) -> None:
+    result = build.run("--build-all")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (build.root / "dist" / "cmdiqo-agent").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-x64.zip").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-x64-setup").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-arm64").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-arm64.zip").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-arm64-setup").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent.exe").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-windows-x64.zip").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-windows-x64-setup.exe").is_file()
+    assert len([call for call in build.calls("docker") if call[1] == "run"]) == 6
+    docker_build = next(
+        call for call in build.calls("docker") if call[1:3] == ["buildx", "build"]
+    )
+    assert "--load" in docker_build
+
+
+def test_push_all_rebuilds_and_pushes(
+    build: BuildHarness,
+) -> None:
+    result = build.run("--push-all")
+    assert result.returncode == 0, result.stdout + result.stderr
+    builder_build = next(
+        call
+        for call in build.calls("docker")
+        if call[1:3] == ["buildx", "build"] and "--target" in call
+    )
+    assert builder_build[builder_build.index("--target") + 1] == "all"
+    assert [
+        "docker",
+        "push",
+        "lhotakj/cmdiqo-installer-builder:all",
+    ] in build.calls()
+    bot_build = next(
+        call
+        for call in build.calls("docker")
+        if call[1:3] == ["buildx", "build"] and "--target" not in call
+    )
+    assert "--push" in bot_build
+    assert bot_build[bot_build.index("--platform") + 1] == "linux/amd64,linux/arm64"
+    assert (build.root / "dist" / "cmdiqo-agent-linux-x64-setup").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-arm64-setup").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-windows-x64-setup.exe").is_file()
 
 
 def test_missing_prebuilt_dependency_root_is_reported(build: BuildHarness) -> None:
@@ -610,6 +702,20 @@ def test_selected_clean_does_not_remove_other_platform_payload(
     result = build.run("--agent", "--clean", "--platform", "linux64")
     assert result.returncode == 0, result.stdout + result.stderr
     assert windows.read_bytes() == previous
+
+
+def test_selected_clean_linux_arm64(build: BuildHarness) -> None:
+    arm_zip = build.root / "dist" / "cmdiqo-agent-linux-arm64.zip"
+    previous_arm = arm_zip.read_bytes()
+    result = build.run("--agent", "--clean", "--platform", "linux64")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert arm_zip.read_bytes() == previous_arm
+
+    linux_zip = build.root / "dist" / "cmdiqo-agent-linux-x64.zip"
+    previous_linux = linux_zip.read_bytes()
+    result = build.run("--agent", "--clean", "--platform", "linux-arm64")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert linux_zip.read_bytes() == previous_linux
 
 
 @pytest.mark.parametrize("script", ["build.sh", "installer.c/setup-env.sh"])
