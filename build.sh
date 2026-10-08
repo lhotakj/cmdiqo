@@ -354,7 +354,7 @@ print(digest.hexdigest())
             info "Pre-built builder image ($local_image) matches source checksum."
             return 0
         fi
-        info "Found existing local builder image ($local_image); reusing without rebuilding."
+        warn "Found existing local builder image ($local_image) with checksum mismatch; reusing without rebuilding. (Use --rebuild-builder to refresh)"
         return 0
     fi
 
@@ -366,7 +366,7 @@ print(digest.hexdigest())
             docker_cli tag "$remote_image" "$local_image"
             return 0
         fi
-        info "Found existing remote builder image ($remote_image); tagging as $local_image and reusing."
+        warn "Found existing remote builder image ($remote_image) with checksum mismatch; tagging as $local_image and reusing. (Use --rebuild-builder to refresh)"
         docker_cli tag "$remote_image" "$local_image"
         return 0
     fi
@@ -525,10 +525,17 @@ build_native_agent() {
         set -euo pipefail
         export TMPDIR="/tmp/cmdiqo-tmp-$$"
         export WINEPREFIX="/tmp/cmdiqo-wine-$$"
+        export QEMU_LD_PREFIX="/usr/aarch64-linux-gnu"
         install --directory --mode=700 "$TMPDIR" "$WINEPREFIX"
+        if [[ -z "${!INSTALLED_DIR_VAR+x}" ]]; then
+            printf "[ERROR] Builder image is missing environment variable %s for %s.\n" "$INSTALLED_DIR_VAR" "$PRESET" >&2
+            printf "[ERROR] The local builder image is outdated and lacks %s support. Rebuild it with --rebuild-builder.\n" "$PRESET" >&2
+            exit 1
+        fi
         installed_dir="${!INSTALLED_DIR_VAR}"
         if [[ ! -d "$installed_dir" ]]; then
             printf "[ERROR] Pre-built dependency root is missing: %s\n" "$installed_dir" >&2
+            printf "[ERROR] Rebuild the builder image with --rebuild-builder.\n" >&2
             exit 1
         fi
         cmake --fresh --preset "$PRESET" \
@@ -618,10 +625,17 @@ build_native_installer() {
         set -euo pipefail
         export TMPDIR="/tmp/cmdiqo-tmp-$$"
         export WINEPREFIX="/tmp/cmdiqo-wine-$$"
+        export QEMU_LD_PREFIX="/usr/aarch64-linux-gnu"
         install --directory --mode=700 "$TMPDIR" "$WINEPREFIX"
+        if [[ -z "${!INSTALLED_DIR_VAR+x}" ]]; then
+            printf "[ERROR] Builder image is missing environment variable %s for %s.\n" "$INSTALLED_DIR_VAR" "$PRESET" >&2
+            printf "[ERROR] The local builder image is outdated and lacks %s support. Rebuild it with --rebuild-builder.\n" "$PRESET" >&2
+            exit 1
+        fi
         installed_dir="${!INSTALLED_DIR_VAR}"
         if [[ ! -d "$installed_dir" ]]; then
             printf "[ERROR] Pre-built dependency root is missing: %s\n" "$installed_dir" >&2
+            printf "[ERROR] Rebuild the builder image with --rebuild-builder.\n" >&2
             exit 1
         fi
         cmake --fresh --preset "$PRESET" \

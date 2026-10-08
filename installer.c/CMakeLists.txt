@@ -172,7 +172,11 @@ if(MINGW)
         endif()
     endif()
 elseif(UNIX AND NOT APPLE AND CMAKE_BUILD_TYPE STREQUAL "Release")
-    find_program(CMDIQO_STRIP_EXECUTABLE strip)
+    if(CMAKE_STRIP)
+        set(CMDIQO_STRIP_EXECUTABLE "${CMAKE_STRIP}")
+    else()
+        find_program(CMDIQO_STRIP_EXECUTABLE strip)
+    endif()
     if(CMDIQO_STRIP_EXECUTABLE)
         add_custom_command(
             TARGET cmdiqo-agent-setup
