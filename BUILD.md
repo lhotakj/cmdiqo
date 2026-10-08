@@ -400,17 +400,20 @@ Automated CI/CD workflows live in `.github/workflows/` and provide a clean, stre
 2. **`release.yml` (Build & Release)**:
    - **Trigger:** Runs on every push to `main` and manual `workflow_dispatch`.
    - **Build Execution:** Reuses `./build.sh` on an `ubuntu-24.04` runner to compile all apps cross-platform from a single Linux environment:
-     - Linux native agent binary (`cmdiqo-agent`)
+     - Linux x86_64 native agent binary (`cmdiqo-agent`)
+     - Linux ARM64 native agent binary (`cmdiqo-agent-linux-arm64`)
      - Windows native agent binary (`cmdiqo-agent.exe`)
-     - Linux package with systemd service installer (`cmdiqo-agent-linux-x64.zip`)
+     - Linux x86_64 package with systemd service installer (`cmdiqo-agent-linux-x64.zip`)
+     - Linux ARM64 package with systemd service installer (`cmdiqo-agent-linux-arm64.zip`)
      - Windows package with PowerShell service installer (`cmdiqo-agent-windows-x64.zip`)
-     - Linux native GTK3 GUI setup wizard (`cmdiqo-agent-linux-x64-setup`)
+     - Linux x86_64 native GTK3 GUI setup wizard (`cmdiqo-agent-linux-x64-setup`)
+     - Linux ARM64 native headless CLI setup wizard (`cmdiqo-agent-linux-arm64-setup`)
      - Windows native Win32 GUI setup wizard (`cmdiqo-agent-windows-x64-setup.exe`)
      - Cmdiqo Slack bot multi-arch container (`linux/amd64`, `linux/arm64`)
    - **Artifacts:** Always verifies binaries and uploads them to GitHub Actions run storage (retained 90 days).
    - **`/release` Automation:** If the commit message contains `/release` (e.g. `/release v0.10.0` or `/release 0.10.0`):
      - Pushes multi-arch Docker image (`:latest` and `:<version>`) to Docker Hub.
-     - Automatically generates a formatted Markdown release summary (`development/generate_release_summary.py`) with a complete table of artifact names, architectures, file sizes, SHA256 checksums, and container pull commands.
+     - Automatically generates a formatted Markdown release summary (`development/generate_release_summary.py`) with direct release download links, complete artifact table (names, platforms, architectures, file sizes, SHA256 checksums), and container pull commands.
      - Publishes the release to GitHub Releases with tag `v<version>`, attached files, and structured release notes.
      - Renders the summary directly in the GitHub Actions Workflow Step Summary.
 

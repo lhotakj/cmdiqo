@@ -92,10 +92,10 @@ jobs:
         run: |
           echo "=== Distribution directory contents ==="
           ls -la dist/
-          for f in cmdiqo-agent cmdiqo-agent.exe cmdiqo-agent-linux-x64.zip cmdiqo-agent-windows-x64.zip cmdiqo-agent-linux-x64-setup cmdiqo-agent-windows-x64-setup.exe; do
+          for f in cmdiqo-agent cmdiqo-agent.exe cmdiqo-agent-linux-arm64 cmdiqo-agent-linux-x64.zip cmdiqo-agent-linux-arm64.zip cmdiqo-agent-windows-x64.zip cmdiqo-agent-linux-x64-setup cmdiqo-agent-linux-arm64-setup cmdiqo-agent-windows-x64-setup.exe; do
             test -f "dist/$f" || { echo "[-] Missing dist/$f"; exit 1; }
           done
-          echo "[+] All Linux and Windows native agent binaries and setups verified successfully!"
+          echo "[+] All Linux (x64 & ARM64) and Windows native agent binaries and setups verified successfully!"
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
@@ -115,6 +115,7 @@ jobs:
             -v "$VERSION" \
             --dist dist \
             --docker-user "$DOCKERHUB_USERNAME" \
+            --repo "$GITHUB_REPOSITORY" \
             --commit-message "$COMMIT_MESSAGE" \
             -o dist/release-notes.md \
             --summary-file "$GITHUB_STEP_SUMMARY"

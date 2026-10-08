@@ -40,18 +40,23 @@ def generate_summary(
     docker_user: str = "lhotakj",
     commit_message: str = "",
     tag: str | None = None,
+    github_repo: str | None = None,
 ) -> str:
     """Generate Markdown release summary."""
     dist = dist_dir or DIST_DIR
     tag = tag or f"v{version.lstrip('vV')}"
     clean_version = version.lstrip("vV")
+    repo = github_repo or os.environ.get("GITHUB_REPOSITORY", "lhotakj/cmdiqo")
 
     artifact_specs = [
         ("cmdiqo-agent", "Linux (Daemon)", "x86_64", "Standalone service daemon executable"),
+        ("cmdiqo-agent-linux-arm64", "Linux ARM64 (Daemon)", "ARM64", "Standalone service daemon executable (aarch64)"),
         ("cmdiqo-agent.exe", "Windows (Service)", "x86_64", "Standalone Windows service executable (signed)"),
         ("cmdiqo-agent-linux-x64.zip", "Linux (Package)", "x86_64", "Full daemon package + systemd installer"),
+        ("cmdiqo-agent-linux-arm64.zip", "Linux ARM64 (Package)", "ARM64", "Full daemon package + systemd installer (aarch64)"),
         ("cmdiqo-agent-windows-x64.zip", "Windows (Package)", "x86_64", "Full service package + PowerShell installer"),
         ("cmdiqo-agent-linux-x64-setup", "Linux (GUI Setup)", "x86_64", "Native C++ GTK3 interactive installer wizard"),
+        ("cmdiqo-agent-linux-arm64-setup", "Linux ARM64 (CLI Setup)", "ARM64", "Native C++ headless CLI installer wizard (aarch64)"),
         ("cmdiqo-agent-windows-x64-setup.exe", "Windows (GUI Setup)", "x86_64", "Native C++ Win32 interactive installer wizard"),
         ("cmdiqo-agent.cer", "Windows (Certificate)", "All", "Authenticode digital signing public root certificate"),
     ]
@@ -85,8 +90,9 @@ def generate_summary(
             found_any = True
             size_str = human_size(file_path.stat().st_size)
             sha = file_sha256(file_path)
+            download_url = f"https://github.com/{repo}/releases/download/{tag}/{filename}"
             lines.append(
-                f"| `{filename}` | {platform} | {arch} | {size_str} | `{sha[:16]}...{sha[-8:]}` | {desc} |"
+                f"| [`{filename}`]({download_url}) | {platform} | {arch} | {size_str} | `{sha[:16]}...{sha[-8:]}` | {desc} |"
             )
 
     if not found_any:
@@ -110,7 +116,11 @@ def generate_summary(
         "",
         "To verify integrity of any downloaded package on Linux or macOS:",
         "```bash",
+        "# Linux x86_64",
         "sha256sum cmdiqo-agent-linux-x64.zip",
+        "",
+        "# Linux ARM64",
+        "sha256sum cmdiqo-agent-linux-arm64.zip",
         "```",
         "On Windows PowerShell:",
         "```powershell",
@@ -129,6 +139,13 @@ def main() -> None:
     parser.add_argument("-v", "--version", required=True, help="Release version (e.g. 0.10.0)")
     parser.add_argument("--dist", default="dist", help="Path to dist directory")
     parser.add_argument("--docker-user", default="lhotakj", help="Docker Hub organization/user")
+    parser.add_argument(
+        "--repo",
+        "--github-repo",
+        dest="github_repo",
+        default=os.environ.get("GITHUB_REPOSITORY", "lhotakj/cmdiqo"),
+        help="GitHub repository (owner/repo) for release download links",
+    )
     parser.add_argument("--commit-message", default="", help="Commit message for highlights")
     parser.add_argument("-o", "--output", help="Output file path (e.g. dist/release-notes.md)")
     parser.add_argument("--summary-file", help="Path to GITHUB_STEP_SUMMARY file")
@@ -139,6 +156,7 @@ def main() -> None:
         dist_dir=Path(args.dist),
         docker_user=args.docker_user,
         commit_message=args.commit_message,
+        github_repo=args.github_repo,
     )
 
     if args.output:
