@@ -14,6 +14,29 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DIST_DIR = ROOT / "dist"
+IMG_DIR = ROOT / "img"
+
+
+def ensure_icons_resized(img_dir: Path | None = None, target_size: tuple[int, int] = (32, 32)) -> None:
+    """Ensure source platform icons in img/ are resized to target_size (e.g. 32x32)."""
+    target = img_dir or IMG_DIR
+    if not target.is_dir():
+        return
+    try:
+        from PIL import Image
+    except ImportError:
+        return
+
+    for icon_name in ("linux-bw.png", "arm-bw.png", "win-bw.png"):
+        icon_path = target / icon_name
+        if icon_path.is_file():
+            try:
+                with Image.open(icon_path) as im:
+                    if im.size != target_size:
+                        resized = im.convert("RGBA").resize(target_size, Image.Resampling.LANCZOS)
+                        resized.save(icon_path)
+            except Exception:
+                pass
 
 
 def human_size(num_bytes: int) -> str:
@@ -41,24 +64,28 @@ def generate_summary(
     commit_message: str = "",
     tag: str | None = None,
     github_repo: str | None = None,
+    icon_base_url: str | None = None,
+    icon_size: int = 20,
 ) -> str:
     """Generate Markdown release summary."""
+    ensure_icons_resized()
     dist = dist_dir or DIST_DIR
     tag = tag or f"v{version.lstrip('vV')}"
     clean_version = version.lstrip("vV")
     repo = github_repo or os.environ.get("GITHUB_REPOSITORY", "lhotakj/cmdiqo")
+    icons_url = (icon_base_url or f"https://raw.githubusercontent.com/{repo}/main/img").rstrip("/")
 
     artifact_specs = [
-        ("cmdiqo-agent", "Linux (Daemon)", "x86_64", "Standalone service daemon executable"),
-        ("cmdiqo-agent-linux-arm64", "Linux ARM64 (Daemon)", "ARM64", "Standalone service daemon executable (aarch64)"),
-        ("cmdiqo-agent.exe", "Windows (Service)", "x86_64", "Standalone Windows service executable (signed)"),
-        ("cmdiqo-agent-linux-x64.zip", "Linux (Package)", "x86_64", "Full daemon package + systemd installer"),
-        ("cmdiqo-agent-linux-arm64.zip", "Linux ARM64 (Package)", "ARM64", "Full daemon package + systemd installer (aarch64)"),
-        ("cmdiqo-agent-windows-x64.zip", "Windows (Package)", "x86_64", "Full service package + PowerShell installer"),
-        ("cmdiqo-agent-linux-x64-setup", "Linux (GUI Setup)", "x86_64", "Native C++ GTK3 interactive installer wizard"),
-        ("cmdiqo-agent-linux-arm64-setup", "Linux ARM64 (CLI Setup)", "ARM64", "Native C++ headless CLI installer wizard (aarch64)"),
-        ("cmdiqo-agent-windows-x64-setup.exe", "Windows (GUI Setup)", "x86_64", "Native C++ Win32 interactive installer wizard"),
-        ("cmdiqo-agent.cer", "Windows (Certificate)", "All", "Authenticode digital signing public root certificate"),
+        ("cmdiqo-agent", "linux-bw.png", "Linux (Daemon)", "x86_64", "Standalone service daemon executable"),
+        ("cmdiqo-agent-linux-arm64", "arm-bw.png", "Linux ARM64 (Daemon)", "ARM64", "Standalone service daemon executable (aarch64)"),
+        ("cmdiqo-agent.exe", "win-bw.png", "Windows (Service)", "x86_64", "Standalone Windows service executable (signed)"),
+        ("cmdiqo-agent-linux-x64.zip", "linux-bw.png", "Linux (Package)", "x86_64", "Full daemon package + systemd installer"),
+        ("cmdiqo-agent-linux-arm64.zip", "arm-bw.png", "Linux ARM64 (Package)", "ARM64", "Full daemon package + systemd installer (aarch64)"),
+        ("cmdiqo-agent-windows-x64.zip", "win-bw.png", "Windows (Package)", "x86_64", "Full service package + PowerShell installer"),
+        ("cmdiqo-agent-linux-x64-setup", "linux-bw.png", "Linux (GUI Setup)", "x86_64", "Native C++ GTK3 interactive installer wizard"),
+        ("cmdiqo-agent-linux-arm64-setup", "arm-bw.png", "Linux ARM64 (CLI Setup)", "ARM64", "Native C++ headless CLI installer wizard (aarch64)"),
+        ("cmdiqo-agent-windows-x64-setup.exe", "win-bw.png", "Windows (GUI Setup)", "x86_64", "Native C++ Win32 interactive installer wizard"),
+        ("cmdiqo-agent.cer", "win-bw.png", "Windows (Certificate)", "All", "Authenticode digital signing public root certificate"),
     ]
 
     lines: list[str] = [
@@ -84,15 +111,16 @@ def generate_summary(
     ])
 
     found_any = False
-    for filename, platform, arch, desc in artifact_specs:
+    for filename, icon_file, platform, arch, desc in artifact_specs:
         file_path = dist / filename
         if file_path.is_file():
             found_any = True
             size_str = human_size(file_path.stat().st_size)
             sha = file_sha256(file_path)
             download_url = f"https://github.com/{repo}/releases/download/{tag}/{filename}"
+            icon_tag = f'<img src="{icons_url}/{icon_file}" width="{icon_size}" height="{icon_size}" alt="{platform}" align="middle"> '
             lines.append(
-                f"| [`{filename}`]({download_url}) | {platform} | {arch} | {size_str} | `{sha[:16]}...{sha[-8:]}` | {desc} |"
+                f"| [`{filename}`]({download_url}) | {icon_tag}{platform} | {arch} | {size_str} | `{sha[:16]}...{sha[-8:]}` | {desc} |"
             )
 
     if not found_any:
@@ -146,6 +174,16 @@ def main() -> None:
         default=os.environ.get("GITHUB_REPOSITORY", "lhotakj/cmdiqo"),
         help="GitHub repository (owner/repo) for release download links",
     )
+    parser.add_argument(
+        "--icon-base-url",
+        help="Base URL for platform icons (defaults to raw.githubusercontent.com/{repo}/main/img)",
+    )
+    parser.add_argument(
+        "--icon-size",
+        type=int,
+        default=20,
+        help="Display size (width and height in px) for platform icons (default: 20)",
+    )
     parser.add_argument("--commit-message", default="", help="Commit message for highlights")
     parser.add_argument("-o", "--output", help="Output file path (e.g. dist/release-notes.md)")
     parser.add_argument("--summary-file", help="Path to GITHUB_STEP_SUMMARY file")
@@ -157,6 +195,8 @@ def main() -> None:
         docker_user=args.docker_user,
         commit_message=args.commit_message,
         github_repo=args.github_repo,
+        icon_base_url=args.icon_base_url,
+        icon_size=args.icon_size,
     )
 
     if args.output:
