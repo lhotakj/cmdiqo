@@ -209,15 +209,17 @@ RUN apt-get update \
         gcc-aarch64-linux-gnu \
         g++-aarch64-linux-gnu \
         binutils-aarch64-linux-gnu \
-        gcc-arm-linux-gnueabihf \
-        g++-arm-linux-gnueabihf \
-        binutils-arm-linux-gnueabihf \
         qemu-user-static \
     && update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix \
     && update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix \
+    && curl -fsSL -o /tmp/armv6-musl.tgz "https://musl.cc/armv6-linux-musleabihf-cross.tgz" \
+    && tar -xzf /tmp/armv6-musl.tgz -C /opt \
+    && for f in /opt/armv6-linux-musleabihf-cross/bin/*; do ln -sf "$f" "/usr/local/bin/$(basename "$f")"; done \
+    && rm -f /tmp/armv6-musl.tgz \
     && rm -rf /var/lib/apt/lists/*
 
-ENV WINEDEBUG=-all
+ENV WINEDEBUG=-all \
+    PATH=/opt/armv6-linux-musleabihf-cross/bin:${PATH}
 
 RUN mkdir -p /tmp/vcpkg-binary-cache \
     && VCPKG_DEFAULT_BINARY_CACHE=/tmp/vcpkg-binary-cache /opt/vcpkg/vcpkg install \

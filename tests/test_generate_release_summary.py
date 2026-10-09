@@ -129,6 +129,7 @@ def test_generate_summary_custom_icons(tmp_path: Path):
 
 def test_ensure_icons_resized(tmp_path: Path):
     from PIL import Image
+
     from development.generate_release_summary import ensure_icons_resized
 
     img_dir = tmp_path / "img"

@@ -522,7 +522,7 @@ the matching ZIP (GUI installer for Windows & Linux x64, self-contained CLI inst
 
 The Docker installer routes in `build.sh` use the unified
 `lhotakj/cmdiqo-installer-builder:all` image: native GCC builds the Linux x64 GTK3 setup,
-`aarch64-linux-gnu-gcc` cross-compiles the Linux ARM64 setup, `arm-linux-gnueabihf-gcc` (targeting `-marm -march=armv6zk -mfloat-abi=hard -mfpu=vfp`) cross-compiles the Linux ARMv6 setup, and MinGW-w64 cross-compiles the Windows wxMSW setup.
+`aarch64-linux-gnu-gcc` cross-compiles the Linux ARM64 setup, `armv6-linux-musleabihf-gcc` (targeting `-marm -march=armv6zk -mfloat-abi=hard -mfpu=vfp` with static musl libc) cross-compiles the Linux ARMv6 setup, and MinGW-w64 cross-compiles the Windows wxMSW setup.
 
 #### 3. Automated CI Builds via GitHub Actions (Direct Download & Release)
 The repository includes [`.github/workflows/release.yml`](.github/workflows/release.yml). Select **Actions → Build & Release → Run workflow** or push with `/release` on `main`:

@@ -164,20 +164,25 @@ if(MINGW)
             )
         endif()
     endif()
-elseif(UNIX AND NOT APPLE AND CMAKE_BUILD_TYPE STREQUAL "Release")
-    if(CMAKE_STRIP)
-        set(CMDIQO_STRIP_EXECUTABLE "${CMAKE_STRIP}")
-    else()
-        find_program(CMDIQO_STRIP_EXECUTABLE strip)
+elseif(UNIX AND NOT APPLE)
+    if(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv6l" OR VCPKG_TARGET_TRIPLET MATCHES "armv6")
+        target_link_options(cmdiqo-agent PRIVATE -static)
     endif()
-    if(CMDIQO_STRIP_EXECUTABLE)
-        add_custom_command(
-            TARGET cmdiqo-agent
-            POST_BUILD
-            COMMAND "${CMDIQO_STRIP_EXECUTABLE}" --strip-unneeded "$<TARGET_FILE:cmdiqo-agent>"
-            COMMENT "Stripping release agent symbols"
-            VERBATIM
-        )
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
+        if(CMAKE_STRIP)
+            set(CMDIQO_STRIP_EXECUTABLE "${CMAKE_STRIP}")
+        else()
+            find_program(CMDIQO_STRIP_EXECUTABLE strip)
+        endif()
+        if(CMDIQO_STRIP_EXECUTABLE)
+            add_custom_command(
+                TARGET cmdiqo-agent
+                POST_BUILD
+                COMMAND "${CMDIQO_STRIP_EXECUTABLE}" --strip-unneeded "$<TARGET_FILE:cmdiqo-agent>"
+                COMMENT "Stripping release agent symbols"
+                VERBATIM
+            )
+        endif()
     endif()
 endif()
 
@@ -197,6 +202,8 @@ if(BUILD_TESTING)
     target_link_libraries(cmdiqo-agent-tests PRIVATE cmdiqo_agent_core Catch2::Catch2WithMain)
     if(MINGW)
         target_link_options(cmdiqo-agent-tests PRIVATE -static -static-libgcc -static-libstdc++)
+    elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv6l" OR VCPKG_TARGET_TRIPLET MATCHES "armv6")
+        target_link_options(cmdiqo-agent-tests PRIVATE -static)
     endif()
     add_test(NAME cmdiqo-agent-tests COMMAND cmdiqo-agent-tests)
 endif()

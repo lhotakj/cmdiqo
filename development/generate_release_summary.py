@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
 DIST_DIR = ROOT / "dist"
@@ -35,8 +38,8 @@ def ensure_icons_resized(img_dir: Path | None = None, target_size: tuple[int, in
                     if im.size != target_size:
                         resized = im.convert("RGBA").resize(target_size, Image.Resampling.LANCZOS)
                         resized.save(icon_path)
-            except Exception:
-                pass
+            except (OSError, ValueError) as exc:
+                logger.debug("Failed to resize icon %s: %s", icon_path, exc)
 
 
 def human_size(num_bytes: int) -> str:

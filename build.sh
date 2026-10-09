@@ -576,7 +576,7 @@ build_native_agent() {
         export TMPDIR="/tmp/cmdiqo-tmp-$$"
         export WINEPREFIX="/tmp/cmdiqo-wine-$$"
         if [[ "$PRESET" == "linux-armv6" ]]; then
-            export QEMU_LD_PREFIX="/usr/arm-linux-gnueabihf"
+            export QEMU_CPU="arm1176"
         else
             export QEMU_LD_PREFIX="/usr/aarch64-linux-gnu"
         fi
@@ -685,7 +685,7 @@ build_native_installer() {
         export TMPDIR="/tmp/cmdiqo-tmp-$$"
         export WINEPREFIX="/tmp/cmdiqo-wine-$$"
         if [[ "$PRESET" == "linux-armv6" ]]; then
-            export QEMU_LD_PREFIX="/usr/arm-linux-gnueabihf"
+            export QEMU_CPU="arm1176"
         else
             export QEMU_LD_PREFIX="/usr/aarch64-linux-gnu"
         fi
