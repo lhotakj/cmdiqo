@@ -231,7 +231,7 @@ async def test_handle_command_parental_linux_integration():
     )
 
     assert len(posted) == 2
-    assert "Running `/host {host} parental {action}` on `nas`" in posted[0]
+    assert "Running `/host nas parental on` on `nas`" in posted[0]
     assert "Parental controls ENABLED on `nas`" in posted[1]
     assert "Linux (`nas` /etc/hosts)" in posted[1]
 

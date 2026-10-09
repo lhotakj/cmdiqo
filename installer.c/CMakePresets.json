@@ -81,8 +81,8 @@
         "CMAKE_C_COMPILER": "arm-linux-gnueabihf-gcc",
         "CMAKE_CXX_COMPILER": "arm-linux-gnueabihf-g++",
         "CMAKE_STRIP": "arm-linux-gnueabihf-strip",
-        "CMAKE_C_FLAGS": "-march=armv6zk -mfloat-abi=hard -mfpu=vfp",
-        "CMAKE_CXX_FLAGS": "-march=armv6zk -mfloat-abi=hard -mfpu=vfp",
+        "CMAKE_C_FLAGS": "-marm -march=armv6zk -mfloat-abi=hard -mfpu=vfp",
+        "CMAKE_CXX_FLAGS": "-marm -march=armv6zk -mfloat-abi=hard -mfpu=vfp",
         "CMAKE_CROSSCOMPILING_EMULATOR": "qemu-arm-static;-L;/usr/arm-linux-gnueabihf"
       }
     }

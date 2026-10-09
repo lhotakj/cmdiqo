@@ -43,6 +43,8 @@ Compilation & Packaging:
   --copy-to <path>     Copy the compiled binary to destination path upon completion
                        (agent builds for a single platform only)
   --skip-sign         Skip Authenticode signing when building with Windows Python
+  --rebuild-builder    Force rebuilding the C++ builder Docker image locally
+  --no-rebuild-builder Do not build or rebuild the C++ builder image; reuse existing or pulled image
 
 Docker Options:
   --push               Build and push multi-arch Docker images to registry (linux/amd64,linux/arm64)
@@ -108,6 +110,7 @@ CLEAN=false
 SKIP_AGENT_BUILD=false
 SKIP_SIGN=false
 REBUILD_BUILDER=false
+NO_REBUILD_BUILDER="${NO_REBUILD_BUILDER:-false}"
 COPY_TO=""
 VERSION_OVERRIDE=""
 BUILD_ID="${BUILD_ID:-${GITHUB_RUN_NUMBER:-}}"
@@ -182,7 +185,8 @@ while [[ $# -gt 0 ]]; do
             ;;
         --clean) CLEAN=true; shift ;;
         --skip-agent-build) SKIP_AGENT_BUILD=true; shift ;;
-        --rebuild-builder|--rebuild-image) REBUILD_BUILDER=true; shift ;;
+        --rebuild-builder|--rebuild-image) REBUILD_BUILDER=true; NO_REBUILD_BUILDER=false; shift ;;
+        --no-rebuild-builder|--no-build-builder|--skip-builder-build) NO_REBUILD_BUILDER=true; REBUILD_BUILDER=false; shift ;;
         --copy-to) require_option_value "$@"; COPY_TO="$2"; shift 2 ;;
         --copy-to=*) require_option_value --copy-to "${1#*=}"; COPY_TO="${1#*=}"; shift ;;
         --skip-sign) SKIP_SIGN=true; shift ;;
@@ -399,13 +403,26 @@ print(digest.hexdigest())
                 docker_cli tag "$remote_image" "$local_image"
                 return 0
             fi
+            if [[ "$NO_REBUILD_BUILDER" = true ]]; then
+                warn "Pulled builder image ($remote_image) checksum differs, but builder rebuild is disabled; reusing pulled image."
+                docker_cli tag "$remote_image" "$local_image"
+                return 0
+            fi
             warn "Pulled builder image does not match the Dockerfile, manifest, and triplets; rebuilding locally."
         else
+            if [[ "$NO_REBUILD_BUILDER" = true ]]; then
+                error "Pre-built builder image ($remote_image) could not be pulled and rebuilding is disabled (--no-rebuild-builder)."
+                return 1
+            fi
             warn "Pre-built builder image is unavailable; rebuilding locally."
         fi
     fi
 
     # 4. Fallback: Build image locally
+    if [[ "$NO_REBUILD_BUILDER" = true ]]; then
+        error "Builder image ($local_image) is missing or mismatched and rebuilding is disabled (--no-rebuild-builder)."
+        return 1
+    fi
     info "=== Building native installer Docker image locally ($local_image, target: $target_stage) ==="
     docker_cli buildx build --load --platform linux/amd64 \
         --tag "$local_image" \
@@ -845,6 +862,15 @@ if [[ "$BUILD_AGENT" = true || "$BUILD_INSTALLER" = true ]]; then
         artifacts+=("$DIST_DIR/cmdiqo-agent-linux-arm64.zip")
         if [[ "$BUILD_INSTALLER" = true ]]; then
             artifacts+=("$DIST_DIR/cmdiqo-agent-linux-arm64-setup")
+        fi
+    fi
+    if [[ "$BUILD_LINUX_ARMV6" = true ]]; then
+        if [[ "$BUILD_AGENT" = true ]]; then
+            artifacts+=("$DIST_DIR/cmdiqo-agent-linux-armv6")
+        fi
+        artifacts+=("$DIST_DIR/cmdiqo-agent-linux-armv6.zip")
+        if [[ "$BUILD_INSTALLER" = true ]]; then
+            artifacts+=("$DIST_DIR/cmdiqo-agent-linux-armv6-setup")
         fi
     fi
     if [[ "$BUILD_WIN" = true ]]; then

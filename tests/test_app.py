@@ -250,7 +250,7 @@ async def test_handle_command_execution(monkeypatch):
     )
 
     assert post_mock.await_count == 2
-    assert "Running `/test {name}`" in post_mock.await_args_list[0][0][0]
+    assert "Running `/test my-target`" in post_mock.await_args_list[0][0][0]
     assert "Executed with my-target" in post_mock.await_args_list[1][0][0]
 
 
@@ -438,7 +438,7 @@ async def test_handle_command_with_alias_translation():
     )
     assert post_mock.await_count == 2
     assert (
-        "Running `/host {host} docker ps` on `home`"
+        "Running `/host home docker ps` on `home`"
         in post_mock.await_args_list[0][0][0]
     )
     assert "docker_ps_on_home" in post_mock.await_args_list[1][0][0]
@@ -934,7 +934,7 @@ async def test_handle_command_implicit_host_targeting():
     )
 
     assert post_mock.await_count == 2
-    assert "Running `/host {host} uptime` on `node1`" in post_mock.await_args_list[0][0][0]
+    assert "Running `/host node1 uptime` on `node1`" in post_mock.await_args_list[0][0][0]
     assert "uptime_123" in post_mock.await_args_list[1][0][0]
     mock_hub.exec.assert_awaited_once_with("node1", "shell", "uptime", cwd=None, timeout=120)
 

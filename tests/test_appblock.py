@@ -302,7 +302,7 @@ async def test_handle_command_blockapp_integration():
     )
 
     assert len(posted) == 2
-    assert "Running `/host {host} blockapp {app} {action}` on `PC-KIDS`" in posted[0]
+    assert "Running `/host PC-KIDS blockapp roblox on` on `PC-KIDS`" in posted[0]
     assert "Application execution BLOCKED on `PC-KIDS`" in posted[1]
 
     # Test alias /host {host} appblock {app} {action}
@@ -317,7 +317,7 @@ async def test_handle_command_blockapp_integration():
     )
 
     assert len(posted) == 2
-    assert "Running `/host {host} appblock {app} {action}` on `PC-KIDS`" in posted[0]
+    assert "Running `/host PC-KIDS appblock roblox on` on `PC-KIDS`" in posted[0]
     assert "Application execution BLOCKED on `PC-KIDS`" in posted[1]
 
     # Test direct shortcut /blockapp {host} {app} {action}
@@ -331,7 +331,7 @@ async def test_handle_command_blockapp_integration():
         hub=mock_hub,
     )
     assert len(posted) == 2
-    assert "Running `/blockapp {host} {app} {action}` on `PC-KIDS`" in posted[0]
+    assert "Running `/blockapp PC-KIDS roblox on` on `PC-KIDS`" in posted[0]
     assert "Application execution BLOCKED on `PC-KIDS`" in posted[1]
 
 

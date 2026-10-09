@@ -11,8 +11,8 @@ endif()
 
 set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE "${CMAKE_CURRENT_LIST_DIR}/toolchains/linux-armv6.cmake")
 set(VCPKG_BUILD_TYPE release)
-set(VCPKG_C_FLAGS "-march=armv6zk -mfloat-abi=hard -mfpu=vfp")
-set(VCPKG_CXX_FLAGS "-march=armv6zk -mfloat-abi=hard -mfpu=vfp")
+set(VCPKG_C_FLAGS "-marm -march=armv6zk -mfloat-abi=hard -mfpu=vfp")
+set(VCPKG_CXX_FLAGS "-marm -march=armv6zk -mfloat-abi=hard -mfpu=vfp")
 
 if(PORT STREQUAL "wxwidgets")
     list(APPEND VCPKG_CMAKE_CONFIGURE_OPTIONS "-DwxBUILD_TOOLKIT=gtk3")

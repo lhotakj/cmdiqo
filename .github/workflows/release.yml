@@ -63,7 +63,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
-        if: env.DOCKERHUB_TOKEN != '' && (steps.check.outputs.release_bot == 'true' || (github.event_name == 'workflow_dispatch' && inputs.push_docker))
+        if: env.DOCKERHUB_TOKEN != ''
         uses: docker/login-action@v3
         with:
           username: ${{ env.DOCKERHUB_USERNAME }}
@@ -79,7 +79,7 @@ jobs:
           IS_RELEASE: ${{ steps.check.outputs.is_release }}
           PUSH_DOCKER: ${{ inputs.push_docker || steps.check.outputs.release_bot == 'true' }}
         run: |
-          BUILD_ARGS=("--clean" "-v" "$VERSION" "--all" "--platform" "all" "--installer")
+          BUILD_ARGS=("--clean" "-v" "$VERSION" "--all" "--platform" "all" "--installer" "--no-rebuild-builder")
           if [ "$PUSH_DOCKER" = "true" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
             echo "[+] Enabling Docker image publishing to Docker Hub..."
             BUILD_ARGS+=("--push" "--docker-user" "$DOCKERHUB_USERNAME")
@@ -92,10 +92,10 @@ jobs:
         run: |
           echo "=== Distribution directory contents ==="
           ls -la dist/
-          for f in cmdiqo-agent cmdiqo-agent.exe cmdiqo-agent-linux-arm64 cmdiqo-agent-linux-x64.zip cmdiqo-agent-linux-arm64.zip cmdiqo-agent-windows-x64.zip cmdiqo-agent-linux-x64-setup cmdiqo-agent-linux-arm64-setup cmdiqo-agent-windows-x64-setup.exe; do
+          for f in cmdiqo-agent cmdiqo-agent.exe cmdiqo-agent-linux-arm64 cmdiqo-agent-linux-armv6 cmdiqo-agent-linux-x64.zip cmdiqo-agent-linux-arm64.zip cmdiqo-agent-linux-armv6.zip cmdiqo-agent-windows-x64.zip cmdiqo-agent-linux-x64-setup cmdiqo-agent-linux-arm64-setup cmdiqo-agent-linux-armv6-setup cmdiqo-agent-windows-x64-setup.exe; do
             test -f "dist/$f" || { echo "[-] Missing dist/$f"; exit 1; }
           done
-          echo "[+] All Linux (x64 & ARM64) and Windows native agent binaries and setups verified successfully!"
+          echo "[+] All Linux (x64, ARM64 & ARMv6) and Windows native agent binaries and setups verified successfully!"
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4

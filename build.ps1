@@ -34,6 +34,7 @@ $CopyTo = ""
 $Clean = $false
 $SkipAgentBuild = $false
 $RebuildBuilder = $false
+$NoRebuildBuilder = if ($env:NO_REBUILD_BUILDER -eq "true" -or $env:NO_REBUILD_BUILDER -eq "1") { $true } else { $false }
 $Push = $false
 $DockerUser = if ($env:DOCKERHUB_USERNAME) { $env:DOCKERHUB_USERNAME } else { "lhotakj" }
 $Platform = "win64"
@@ -62,7 +63,8 @@ for ($index = 0; $index -lt $CliArgs.Count; $index++) {
         "^--target=(.+)$|^-target=(.+)$" { $Target = $argument.Substring($argument.IndexOf("=") + 1); break }
         "^--clean$|^-clean$" { $Clean = $true; break }
         "^--skip-agent-build$|^-skipagentbuild$" { $SkipAgentBuild = $true; break }
-        "^--rebuild-builder$|^-rebuild-builder$|^--rebuild-image$|^-rebuild-image$" { $RebuildBuilder = $true; break }
+        "^--rebuild-builder$|^-rebuild-builder$|^-rebuildbuilder$|^--rebuild-image$|^-rebuild-image$" { $RebuildBuilder = $true; $NoRebuildBuilder = $false; break }
+        "^--no-rebuild-builder$|^-no-rebuild-builder$|^-norebuildbuilder$|^--no-build-builder$|^-no-build-builder$|^-nobuildbuilder$|^--skip-builder-build$|^-skip-builder-build$|^-skipbuilderbuild$" { $NoRebuildBuilder = $true; $RebuildBuilder = $false; break }
         "^--skip-sign$|^-skip-sign$|^-skipsign$" { $SkipSign = $true; break }
         "^--copy-to$|^-copy-to$|^-copyto$" { $CopyTo = Get-OptionValue $argument; break }
         "^--copy-to=(.+)$|^-copy-to=(.+)$|^-copyto=(.+)$" { $CopyTo = $argument.Substring($argument.IndexOf("=") + 1); break }
@@ -138,6 +140,10 @@ Compilation & Packaging:
 Docker Options:
   -Push, --push                Build and push multi-arch Docker images
   -DockerUser, --docker-user   Docker Hub registry username
+  -RebuildBuilder, --rebuild-builder
+                               Force rebuilding the C++ builder Docker image locally
+  -NoRebuildBuilder, --no-rebuild-builder
+                               Do not build or rebuild the C++ builder image; reuse existing or pulled image
 
 Examples:
   .\build.ps1 -Agent
@@ -283,24 +289,43 @@ function Ensure-InstallerBuilderImage {
     }
 
     # 3. Try pulling from Docker Hub
-    Write-Info "Attempting to pull pre-built builder image ($RemoteImage) from Docker Hub..."
-    & docker pull $RemoteImage 2>$null
-    if ($LASTEXITCODE -eq 0) {
-        $pulledLabels = & docker image inspect --format '{{json .Config.Labels}}' $RemoteImage 2>$null
+    if (-not $RebuildBuilder) {
+        Write-Info "Attempting to pull pre-built builder image ($RemoteImage) from Docker Hub..."
+        & docker pull $RemoteImage 2>$null
         if ($LASTEXITCODE -eq 0) {
-            $pulledHash = ($pulledLabels | ConvertFrom-Json -ErrorAction Stop).'io.cmdiqo.installer-builder.build-input-sha256'
-            if ($pulledHash -eq $buildInputHash) {
-                Write-Info "Pre-built builder image ($RemoteImage) is ready."
-                & docker tag $RemoteImage $LocalImage 2>$null
-                if ($LASTEXITCODE -ne 0) {
-                    throw "Failed to tag native installer builder $RemoteImage as $LocalImage."
+            $pulledLabels = & docker image inspect --format '{{json .Config.Labels}}' $RemoteImage 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                $pulledHash = ($pulledLabels | ConvertFrom-Json -ErrorAction Stop).'io.cmdiqo.installer-builder.build-input-sha256'
+                if ($pulledHash -eq $buildInputHash) {
+                    Write-Info "Pre-built builder image ($RemoteImage) is ready."
+                    & docker tag $RemoteImage $LocalImage 2>$null
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Failed to tag native installer builder $RemoteImage as $LocalImage."
+                    }
+                    return
                 }
-                return
+                if ($NoRebuildBuilder) {
+                    Write-Warn "Pulled builder image ($RemoteImage) checksum differs, but builder rebuild is disabled; reusing pulled image."
+                    & docker tag $RemoteImage $LocalImage 2>$null
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Failed to tag native installer builder $RemoteImage as $LocalImage."
+                    }
+                    return
+                }
+                Write-Warn "Pulled builder image does not match the Dockerfile, manifest, and triplets; rebuilding locally."
             }
+        } else {
+            if ($NoRebuildBuilder) {
+                throw "Pre-built builder image ($RemoteImage) could not be pulled and rebuilding is disabled (--no-rebuild-builder)."
+            }
+            Write-Warn "Pre-built builder image is unavailable; rebuilding locally."
         }
     }
 
     # 4. Fallback: Build locally
+    if ($NoRebuildBuilder) {
+        throw "Builder image ($LocalImage) is missing or mismatched and rebuilding is disabled (--no-rebuild-builder)."
+    }
     Write-Info "=== Building native installer Docker image locally ($LocalImage, target: $TargetStage) ==="
     & docker buildx build --load --platform linux/amd64 --tag $LocalImage --tag $RemoteImage --file $dockerfile --target $TargetStage --build-arg "BUILDER_INPUT_SHA=$buildInputHash" $InstallerRoot
     if ($LASTEXITCODE -ne 0) {

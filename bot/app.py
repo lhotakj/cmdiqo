@@ -913,7 +913,7 @@ async def handle_command(
                 or (format_params(spec["target"], m.groupdict()) if spec.get("target") else "")
             )
             tgt = f" on `{target_name}`" if target_name else ""
-            await post(f":hourglass_flowing_sand: Running `{spec['trigger']}`{tgt} ...")
+            await post(f":hourglass_flowing_sand: Running `{text}`{tgt} ...")
             try:
                 output = await execute_command(
                     spec,

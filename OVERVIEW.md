@@ -58,7 +58,7 @@ sequenceDiagram
     Bot->>Bot: Apply aliases (e.g. /home -> /host home)
     Bot->>Bot: Regex match: trigger_to_regex("/host {host} win reboot")
     Bot->>Bot: validate_params({"host": "PC-OLO"}) (Prevents Injection)
-    Bot->>Slack: Post status: ":hourglass_flowing_sand: Running `/host {host} win reboot` on `PC-OLO`..."
+    Bot->>Slack: Post status: ":hourglass_flowing_sand: Running `/host PC-OLO win reboot` on `PC-OLO`..."
 
     Note over Bot,Hub: 3. Hub Command Dispatch
     Bot->>Hub: await hub.exec("PC-OLO", "ps1", "shutdown /r /t 10 ...", timeout=60)

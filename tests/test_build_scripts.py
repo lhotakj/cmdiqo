@@ -621,6 +621,41 @@ def test_push_all_rebuilds_and_pushes(
     assert (build.root / "dist" / "cmdiqo-agent-windows-x64-setup.exe").is_file()
 
 
+def test_no_rebuild_builder_reuses_pulled_image_on_checksum_mismatch(
+    build: BuildHarness,
+) -> None:
+    build.env["MOCK_LOCAL_HASH"] = ""
+    build.env["MOCK_REMOTE_HASH"] = ""
+    build.env["MOCK_PULL_STATUS"] = "0"
+    build.env["MOCK_PULL_HASH"] = "mismatched-sha256-abc123"
+    result = build.run("--installer", "--skip-agent-build", "--no-rebuild-builder")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "builder rebuild is disabled; reusing pulled image" in result.stdout
+    assert not [
+        call for call in build.calls("docker") if call[1] in ("build", "buildx")
+    ]
+    assert [
+        "docker",
+        "tag",
+        "lhotakj/cmdiqo-installer-builder:all",
+        "cmdiqo-installer-builder:all",
+    ] in build.calls()
+
+
+def test_no_rebuild_builder_fails_when_image_cannot_be_pulled(
+    build: BuildHarness,
+) -> None:
+    build.env["MOCK_LOCAL_HASH"] = ""
+    build.env["MOCK_REMOTE_HASH"] = ""
+    build.env["MOCK_PULL_STATUS"] = "1"
+    result = build.run("--installer", "--skip-agent-build", "--no-rebuild-builder")
+    assert result.returncode != 0
+    assert "rebuilding is disabled (--no-rebuild-builder)" in result.stderr
+    assert not [
+        call for call in build.calls("docker") if call[1] in ("build", "buildx")
+    ]
+
+
 def test_missing_prebuilt_dependency_root_is_reported(build: BuildHarness) -> None:
     (build.root / "prebuilt-windows").rmdir()
     result = build.run("--installer", "--skip-agent-build", "--platform", "win64")
@@ -829,6 +864,7 @@ def test_powershell_platform_aliases(powershell: str, platform: str) -> None:
         "build-error",
         "version-error",
         "linux-agent-copy",
+        "no-rebuild-builder",
     ],
 )
 def test_powershell_installer_routing(
@@ -856,6 +892,13 @@ function global:docker {
     switch ([string]$args[0]) {
         "image" {
             if ($env:MOCK_SCENARIO -eq "missing-hash") { return "{}" }
+            if ($env:MOCK_SCENARIO -eq "no-rebuild-builder") {
+                if ($args[-1] -eq "cmdiqo-installer-builder:all") {
+                    $global:LASTEXITCODE = 1
+                    return
+                }
+                return (@{"io.cmdiqo.installer-builder.build-input-sha256" = "mismatched"} | ConvertTo-Json -Compress)
+            }
             if ($env:MOCK_SCENARIO -eq "retag-error" -and $args[-1] -eq "cmdiqo-installer-builder:all") {
                 $global:LASTEXITCODE = 1
                 return
@@ -883,6 +926,8 @@ function global:docker {
 }
 if ($env:MOCK_SCENARIO -eq "linux-agent-copy") {
     & (Join-Path $env:MOCK_WORKSPACE "build.ps1") -Agent -Platform Linux -CopyTo (Join-Path $env:MOCK_WORKSPACE "copied\linux-agent")
+} elseif ($env:MOCK_SCENARIO -eq "no-rebuild-builder") {
+    & (Join-Path $env:MOCK_WORKSPACE "build.ps1") -Installer -SkipAgentBuild -Platform All -Clean -NoRebuildBuilder
 } else {
     & (Join-Path $env:MOCK_WORKSPACE "build.ps1") -Installer -SkipAgentBuild -Platform All -Clean
 }

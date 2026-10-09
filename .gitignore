@@ -46,3 +46,4 @@ certs/
 .cache/
 
 installer.c/cache/
+agent/_version.py

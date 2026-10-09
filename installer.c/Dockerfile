@@ -255,7 +255,7 @@ RUN mkdir -p /tmp/cmdiqo-manifest-armv6 /tmp/vcpkg-binary-cache \
         --x-buildtrees-root=/tmp/vcpkg-buildtrees \
         --x-packages-root=/tmp/vcpkg-packages \
         --downloads-root=/tmp/vcpkg-downloads \
-        && rm -rf /tmp/vcpkg-binary-cache /tmp/vcpkg-buildtrees /tmp/vcpkg-downloads /tmp/vcpkg-packages /tmp/cmdiqo-manifest-armv6 \
+    && rm -rf /tmp/vcpkg-binary-cache /tmp/vcpkg-buildtrees /tmp/vcpkg-downloads /tmp/vcpkg-packages /tmp/cmdiqo-manifest-armv6 \
     && install --directory --mode=0777 "${VCPKG_INSTALLED_DIR_LINUX_ARMV6}/vcpkg" \
     && find "${VCPKG_INSTALLED_DIR_LINUX_ARMV6}" -type d -exec chmod a+rwx {} + \
     && chmod -R a+rwX "${VCPKG_INSTALLED_DIR_LINUX_ARMV6}/vcpkg"
