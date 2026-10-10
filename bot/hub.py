@@ -20,6 +20,20 @@ import websockets
 log = logging.getLogger("cmdiqo-bot.hub")
 
 
+class WebsocketsConnectionFilter(logging.Filter):
+    """Normalize websockets connection open logs to DEBUG level."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name.startswith("websockets") and "connection open" in record.getMessage().lower():
+            record.levelno = logging.DEBUG
+            record.levelname = "DEBUG"
+        return True
+
+
+logging.getLogger("websockets.server").addFilter(WebsocketsConnectionFilter())
+logging.getLogger("websockets").addFilter(WebsocketsConnectionFilter())
+
+
 def _headers(ws: Any) -> Any:
     """Compatibility: websockets >= 14 exposes ws.request.headers, the legacy
     API exposed ws.request_headers."""
@@ -56,8 +70,8 @@ def get_version() -> str:
                 raw = cand.read_text(encoding="utf-8").strip()
                 if raw:
                     return raw
-    except Exception:
-        pass
+    except OSError as exc:
+        log.debug("Could not read version.txt candidate: %s", exc)
     try:
         from bot._version import __version__
 
@@ -314,7 +328,7 @@ class Hub:
                 code = msg.get("code")
                 out_len = len(msg.get("output") or "")
                 err = msg.get("error")
-                log.info(
+                log.debug(
                     "[%s] Received result from agent '%s': ok=%s, code=%s, out_bytes=%d, error=%s",
                     str(req_id)[:8],
                     agent_name or "?",

@@ -986,3 +986,33 @@ async def test_handle_command_implicit_host_targeting():
     mock_hub.exec.assert_awaited_once_with("node1", "shell", "uptime", cwd=None, timeout=120)
 
 
+@pytest.mark.asyncio
+async def test_agent_event_notification_logs_at_debug(caplog):
+    cfg = BotConfig(
+        slack_bot_token="xoxb-test",
+        slack_app_token="xapp-test",
+        agent_token="",
+        hub_port=8765,
+        hub_host="127.0.0.1",
+        allowed_channels={"C_TEST"},
+    )
+    mock_app, mock_hub, _ = create_bot_app(cfg)
+    mock_app.client.chat_postMessage = AsyncMock()
+
+    with caplog.at_level("DEBUG"):
+        await mock_hub.on_agent_event("connected", "rpi5", {"agent_connection_notify": True})
+
+    debug_records = [
+        r for r in caplog.records
+        if r.levelname == "DEBUG" and "Successfully posted agent event notification" in r.message
+    ]
+    info_records = [
+        r for r in caplog.records
+        if r.levelname == "INFO" and "Successfully posted agent event notification" in r.message
+    ]
+    assert len(debug_records) == 1
+    assert len(info_records) == 0
+    assert "channel C_TEST" in debug_records[0].message
+
+
+

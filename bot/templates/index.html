@@ -517,6 +517,12 @@
       letter-spacing: 0.04em;
     }
 
+    .level-debug {
+      background: rgba(148, 163, 184, 0.12);
+      color: var(--text-muted);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+    }
+
     .level-info {
       background: rgba(0, 242, 254, 0.12);
       color: var(--cyan-neon);
@@ -714,7 +720,12 @@
           <span style="font-size: 0.72rem; color: var(--text-dim); margin-left: 6px;">(last 50 entries)</span>
         </div>
         <div class="terminal-controls">
-          <label for="auto-scroll-toggle">
+          <label for="reverse-order-toggle" title="Display latest log entries first">
+            <input type="checkbox" id="reverse-order-toggle" aria-label="Toggle reverse order to show latest log entries first"
+              checked>
+            <span>Reverse order</span>
+          </label>
+          <label for="auto-scroll-toggle" title="Toggle automatic scrolling of log output">
             <input type="checkbox" id="auto-scroll-toggle" aria-label="Toggle automatic scrolling of log output"
               checked>
             <span>Auto-scroll</span>
@@ -724,7 +735,7 @@
 
       <div class="log-viewport" id="log-viewport">
         {% if logs %}
-        {% for l in logs %}
+        {% for l in logs | reverse %}
         <div class="log-row">
           <span class="log-ts">{{ l.ts }}</span>
           <span class="log-level level-{{ l.level | lower }}">{{ l.level }}</span>
@@ -741,6 +752,7 @@
         </div>
         {% endif %}
       </div>
+      <script id="initial-logs-data" type="application/json">{{ logs | tojson }}</script>
     </section>
 
     <!-- Footer -->
@@ -855,6 +867,16 @@
         console.warn('Failed parsing initial agents', err);
       }
 
+      let currentLogs = [];
+      try {
+        const initLogsEl = document.getElementById('initial-logs-data');
+        if (initLogsEl && initLogsEl.textContent) {
+          currentLogs = JSON.parse(initLogsEl.textContent);
+        }
+      } catch (err) {
+        console.warn('Failed parsing initial logs', err);
+      }
+
       function applySort(col, dir) {
         currentSort = { col, dir };
         saveSortPreference(currentSort);
@@ -889,9 +911,33 @@
       const tbody = document.getElementById('agents-tbody');
       const badge = document.getElementById('agent-count-badge');
       const logViewport = document.getElementById('log-viewport');
+      const reverseOrderToggle = document.getElementById('reverse-order-toggle');
       const autoScrollToggle = document.getElementById('auto-scroll-toggle');
       const sseStatus = document.getElementById('sse-status');
       const sseStatusText = document.getElementById('sse-status-text');
+
+      // Reverse-order Persistence (default true: latest entries first)
+      const REVERSE_ORDER_KEY = 'cmdiqo_log_reverse';
+
+      function loadReverseOrderPreference() {
+        try {
+          const val = localStorage.getItem(REVERSE_ORDER_KEY);
+          if (val !== null) {
+            return val === 'true';
+          }
+        } catch (err) {
+          console.warn('Failed to load reverse-order preference from localStorage', err);
+        }
+        return true;
+      }
+
+      function saveReverseOrderPreference(enabled) {
+        try {
+          localStorage.setItem(REVERSE_ORDER_KEY, String(enabled));
+        } catch (err) {
+          console.warn('Failed to save reverse-order preference to localStorage', err);
+        }
+      }
 
       // Auto-scroll Persistence
       const AUTOSCROLL_KEY = 'cmdiqo_autoscroll';
@@ -916,12 +962,30 @@
         }
       }
 
+      function scrollToActivePosition() {
+        if (!autoScrollToggle || !autoScrollToggle.checked) return;
+        const isReverse = reverseOrderToggle ? reverseOrderToggle.checked : true;
+        if (isReverse) {
+          logViewport.scrollTop = 0;
+        } else {
+          logViewport.scrollTop = logViewport.scrollHeight;
+        }
+      }
+
+      if (reverseOrderToggle) {
+        reverseOrderToggle.checked = loadReverseOrderPreference();
+        reverseOrderToggle.addEventListener('change', function () {
+          saveReverseOrderPreference(reverseOrderToggle.checked);
+          renderLogs(currentLogs);
+        });
+      }
+
       if (autoScrollToggle) {
         autoScrollToggle.checked = loadAutoScrollPreference();
         autoScrollToggle.addEventListener('change', function () {
           saveAutoScrollPreference(autoScrollToggle.checked);
           if (autoScrollToggle.checked) {
-            logViewport.scrollTop = logViewport.scrollHeight;
+            scrollToActivePosition();
           }
         });
       }
@@ -969,10 +1033,7 @@
         updateUptimes();
       }
 
-      function appendLog(l) {
-        const emptyRow = document.getElementById('empty-log-row');
-        if (emptyRow) emptyRow.remove();
-
+      function createLogRow(l) {
         const row = document.createElement('div');
         row.className = 'log-row';
         const lvlClass = `level-${(l.level || 'info').toLowerCase()}`;
@@ -981,22 +1042,45 @@
           <span class="log-level ${lvlClass}">${escapeHtml(l.level || 'INFO')}</span>
           <span class="log-source">[${escapeHtml(l.source || 'hub')}]</span>
           <span class="log-msg">${escapeHtml(l.message || '')}</span>`;
+        return row;
+      }
 
-        logViewport.appendChild(row);
+      function appendLog(l) {
+        if (!l) return;
+        const emptyRow = document.getElementById('empty-log-row');
+        if (emptyRow) emptyRow.remove();
 
-        // Keep maximum 50 rows in DOM
-        while (logViewport.children.length > 50) {
-          logViewport.removeChild(logViewport.firstChild);
+        currentLogs.push(l);
+        while (currentLogs.length > 50) {
+          currentLogs.shift();
         }
 
-        if (autoScrollToggle.checked) {
-          logViewport.scrollTop = logViewport.scrollHeight;
+        const isReverse = reverseOrderToggle ? reverseOrderToggle.checked : true;
+        const row = createLogRow(l);
+
+        if (isReverse) {
+          logViewport.prepend(row);
+          while (logViewport.children.length > 50) {
+            if (logViewport.lastElementChild) {
+              logViewport.removeChild(logViewport.lastElementChild);
+            }
+          }
+        } else {
+          logViewport.appendChild(row);
+          while (logViewport.children.length > 50) {
+            if (logViewport.firstElementChild) {
+              logViewport.removeChild(logViewport.firstElementChild);
+            }
+          }
         }
+
+        scrollToActivePosition();
       }
 
       function renderLogs(logs) {
+        currentLogs = Array.isArray(logs) ? [...logs] : [];
         logViewport.innerHTML = '';
-        if (!logs || logs.length === 0) {
+        if (!currentLogs || currentLogs.length === 0) {
           logViewport.innerHTML = `
             <div class="log-row" id="empty-log-row">
               <span class="log-ts">--:--:--</span>
@@ -1006,10 +1090,15 @@
             </div>`;
           return;
         }
-        logs.forEach(appendLog);
-        if (autoScrollToggle.checked) {
-          logViewport.scrollTop = logViewport.scrollHeight;
-        }
+
+        const isReverse = reverseOrderToggle ? reverseOrderToggle.checked : true;
+        const displayLogs = isReverse ? [...currentLogs].reverse() : [...currentLogs];
+
+        displayLogs.forEach(l => {
+          logViewport.appendChild(createLogRow(l));
+        });
+
+        scrollToActivePosition();
       }
 
       function escapeHtml(str) {
@@ -1066,6 +1155,9 @@
       }
 
       // Initialize
+      if (reverseOrderToggle) {
+        reverseOrderToggle.checked = loadReverseOrderPreference();
+      }
       if (autoScrollToggle) {
         autoScrollToggle.checked = loadAutoScrollPreference();
       }
@@ -1074,11 +1166,12 @@
       if (currentAgents && currentAgents.length > 0) {
         renderAgents(currentAgents);
       }
+      if (reverseOrderToggle && !reverseOrderToggle.checked && currentLogs.length > 0) {
+        renderLogs(currentLogs);
+      }
       connectSSE();
       updateUptimes();
-      if (autoScrollToggle && autoScrollToggle.checked) {
-        logViewport.scrollTop = logViewport.scrollHeight;
-      }
+      scrollToActivePosition();
     })();
   </script>
 </body>

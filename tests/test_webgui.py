@@ -1,7 +1,7 @@
 """tests.test_webgui: Unit tests for WebGUI state, uptime parser, and Flask endpoints."""
 
-import collections
 import json
+import logging
 import time
 import unittest
 
@@ -60,7 +60,7 @@ class TestWebGui(unittest.TestCase):
 
     def test_parse_windows_uptime(self) -> None:
         sample_win = "Uptime: 4d 2h 15m 9s (Booted: 2026-10-06 10:02:37)"
-        boot_epoch, formatted = parse_and_standardize_uptime(sample_win)
+        _boot_epoch, formatted = parse_and_standardize_uptime(sample_win)
         self.assertIn("04d 02h 15m 09s", formatted)
 
     def test_state_lifecycle(self) -> None:
@@ -134,6 +134,7 @@ class TestWebGui(unittest.TestCase):
 
     def test_bot_config_web_port(self) -> None:
         import os
+
         from bot.app import BotConfig
 
         old_port = os.environ.get("WEB_PORT")
@@ -170,6 +171,7 @@ class TestWebGui(unittest.TestCase):
     def test_handle_command_standardizes_uptime(self) -> None:
         import asyncio
         from unittest.mock import AsyncMock
+
         from bot.app import handle_command, trigger_to_regex
 
         async def _test() -> None:
@@ -281,11 +283,81 @@ class TestWebGui(unittest.TestCase):
         pos_alpha = html.find("host-alpha")
         pos_bravo = html.find("host-bravo")
         pos_charlie = html.find("host-charlie")
+        self.assertTrue(0 <= pos_alpha < pos_bravo < pos_charlie)
         # 6. Verify auto-scroll localStorage key and persistence logic
         self.assertIn("cmdiqo_autoscroll", html)
         self.assertIn("loadAutoScrollPreference", html)
         self.assertIn("saveAutoScrollPreference", html)
 
+    def test_log_reverse_order_default_and_toggle(self) -> None:
+        state = WebGuiState()
+        state.add_log("info", "hub", "Event Alpha 1")
+        state.add_log("warn", "hub", "Event Bravo 2")
+        state.add_log("error", "hub", "Event Charlie 3")
+
+        app = create_webgui_app(state, bot_version="2.0.0")
+        client = app.test_client()
+        resp = client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.data.decode("utf-8")
+
+        # 1. Verify latest entries appear first by default in server-rendered log rows
+        pos_charlie = html.find("Event Charlie 3")
+        pos_bravo = html.find("Event Bravo 2")
+        pos_alpha = html.find("Event Alpha 1")
+        self.assertTrue(0 <= pos_charlie < pos_bravo < pos_alpha)
+
+        # 2. Verify reverse-order checkbox control is present and checked by default
+        self.assertIn('id="reverse-order-toggle"', html)
+        self.assertIn("<span>Reverse order</span>", html)
+        self.assertIn('aria-label="Toggle reverse order to show latest log entries first"', html)
+
+        # 3. Verify initial logs json script tag contains all logs in chronological order
+        self.assertIn('<script id="initial-logs-data" type="application/json">', html)
+        self.assertIn('"message": "Event Alpha 1"', html)
+        self.assertIn('"message": "Event Charlie 3"', html)
+
+        # 4. Verify localStorage persistence keys and JavaScript functions
+        self.assertIn("cmdiqo_log_reverse", html)
+        self.assertIn("loadReverseOrderPreference", html)
+        self.assertIn("saveReverseOrderPreference", html)
+        self.assertIn("scrollToActivePosition", html)
+
+    def test_websockets_connection_open_and_debug_levels(self) -> None:
+        state = WebGuiState()
+        handler = HubWebLogHandler(state)
+
+        # 1. Test websockets.server connection open record normalization to DEBUG
+        rec = logging.LogRecord(
+            name="websockets.server",
+            level=logging.INFO,
+            pathname="server.py",
+            lineno=42,
+            msg="connection open",
+            args=(),
+            exc_info=None,
+        )
+        handler.emit(rec)
+        logs = state.get_logs()
+        self.assertEqual(len(logs), 1)
+        self.assertEqual(logs[0]["level"], "DEBUG")
+        self.assertEqual(logs[0]["source"], "websockets.server")
+        self.assertEqual(logs[0]["message"], "connection open")
+
+        # 2. Add an explicit DEBUG log entry
+        state.add_log("DEBUG", "hub", "Verbose internal trace")
+
+        # 3. Test index.html renders .level-debug CSS and contains level-debug class
+        app = create_webgui_app(state, bot_version="2.0.0")
+        client = app.test_client()
+        resp = client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.data.decode("utf-8")
+        self.assertIn(".level-debug", html)
+        self.assertIn("level-debug", html)
+        self.assertIn("var(--text-muted)", html)
+
 
 if __name__ == "__main__":
     unittest.main()
+

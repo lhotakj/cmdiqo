@@ -52,8 +52,8 @@ def get_version() -> str:
                 raw = cand.read_text(encoding="utf-8").strip()
                 if raw:
                     return raw
-    except Exception:
-        pass
+    except OSError as exc:
+        log.debug("Could not read version.txt candidate: %s", exc)
     try:
         from agent._version import __version__
 

@@ -80,6 +80,9 @@ OperationResult test_hub_tcp(std::string_view hub_url, int timeout_seconds = 2);
 
 Config load_config(const InstallerPaths& paths);
 OperationResult save_config(const InstallerPaths& paths, const Config& config);
+OperationResult validate_existing_config(
+    const InstallerPaths& paths,
+    const std::optional<std::filesystem::path>& custom_config = std::nullopt);
 std::string config_to_json(const Config& config);
 std::optional<Config> config_from_json(std::string_view document, std::string& error);
 Config prompt_config(const Config& initial, std::istream& in, std::ostream& out);
@@ -127,6 +130,10 @@ public:
         const Config& config,
         const std::optional<std::filesystem::path>& explicit_payload = std::nullopt,
         const ProgressCallback& progress = {});
+    OperationResult upgrade(
+        const std::optional<std::filesystem::path>& explicit_payload = std::nullopt,
+        const ProgressCallback& progress = {},
+        const std::optional<std::filesystem::path>& custom_config = std::nullopt);
     OperationResult uninstall(bool purge_config, const ProgressCallback& progress = {});
 
 private:

@@ -419,6 +419,62 @@ OperationResult InstallerService::install_or_upgrade(
     return OperationResult::success("Cmdiqo Agent was installed and started.");
 }
 
+OperationResult InstallerService::upgrade(
+    const std::optional<std::filesystem::path>& explicit_payload,
+    const ProgressCallback& progress,
+    const std::optional<std::filesystem::path>& custom_config) {
+    if (!PlatformOperations::is_elevated()) {
+        return OperationResult::failure("Upgrade requires Administrator/root privileges.");
+    }
+    const ServiceStatus status = PlatformOperations::service_status(paths_);
+    if (status == ServiceStatus::not_installed || !std::filesystem::exists(paths_.binary_path)) {
+        return OperationResult::failure(
+            "Cannot upgrade: No existing installation found (service is not installed). Use --install or --fresh for initial installation.");
+    }
+    const OperationResult config_validation = validate_existing_config(paths_, custom_config);
+    if (!config_validation.ok) {
+        return config_validation;
+    }
+    if (!has_payload(explicit_payload)) {
+        return OperationResult::failure("No embedded agent payload found and no payload archive was specified.");
+    }
+    report(progress, "Installer elevation, installation, and configuration checks passed.");
+    if (status == ServiceStatus::running) {
+        report(progress, "Stopping currently running service.");
+        if (const OperationResult stopped = PlatformOperations::stop_service(paths_); !stopped.ok) {
+            logger_.error(stopped.message);
+            return stopped;
+        }
+        report(progress, "Service stop confirmed.");
+    }
+#ifdef _WIN32
+    report(progress, "Waiting for the agent executable to be released.");
+    const OperationResult released = wait_for_file_release(paths_.binary_path);
+    if (!released.ok) {
+        logger_.error(released.message);
+        return released;
+    }
+    report(progress, released.message);
+#endif
+    report(progress, "Extracting agent payload.");
+    if (const OperationResult extracted = extract_payload(explicit_payload, progress); !extracted.ok) {
+        logger_.error(extracted.message);
+        return extracted;
+    }
+    report(progress, "Updating system service registration.");
+    if (const OperationResult registered = PlatformOperations::register_service(paths_, logger_); !registered.ok) {
+        logger_.error(registered.message);
+        return registered;
+    }
+    report(progress, "Starting system service.");
+    if (const OperationResult started = PlatformOperations::start_service(paths_); !started.ok) {
+        logger_.error(started.message);
+        return started;
+    }
+    report(progress, "Upgrade completed.");
+    return OperationResult::success("Cmdiqo Agent was upgraded and restarted.");
+}
+
 OperationResult InstallerService::uninstall(bool purge_config, const ProgressCallback& progress) {
     if (!PlatformOperations::is_elevated()) {
         return OperationResult::failure("Uninstall requires Administrator/root privileges.");

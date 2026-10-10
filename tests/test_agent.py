@@ -311,6 +311,7 @@ def test_agent_version_cli(capsys):
 
 def test_agent_get_agent_arch(monkeypatch):
     import platform
+
     from agent.agent import get_agent_arch
 
     monkeypatch.delenv("CMDIQO_AGENT_ARCH", raising=False)

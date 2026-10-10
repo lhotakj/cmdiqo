@@ -125,8 +125,9 @@ def test_get_version_reads_version_txt():
 
 def test_get_version_fallback_when_version_txt_missing():
     """Verify get_version falls back to bundled _version module when version.txt is missing."""
-    import bot.app
     from unittest.mock import patch
+
+    import bot.app
 
     with patch("pathlib.Path.is_file", return_value=False):
         ver = bot.app.get_version()

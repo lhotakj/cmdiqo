@@ -1,6 +1,7 @@
 #include "cmdiqo/installer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <fstream>
 #include <sstream>
 
 using namespace cmdiqo::installer;
@@ -175,4 +176,90 @@ TEST_CASE("InstallerService install_or_upgrade fails when not elevated") {
         CHECK_FALSE(res.ok);
         CHECK(res.message.find("privileges") != std::string::npos);
     }
+}
+
+TEST_CASE("validate_existing_config fails when no configuration exists") {
+    InstallerPaths paths;
+    paths.config_file = std::filesystem::temp_directory_path() / "nonexistent_cmdiqo_config.json";
+    paths.config_dir = std::filesystem::temp_directory_path() / "nonexistent_dir";
+    paths.legacy_env_file = std::filesystem::temp_directory_path() / "nonexistent_legacy.env";
+    paths.install_dir = std::filesystem::temp_directory_path() / "nonexistent_install";
+
+    const auto res = validate_existing_config(paths);
+    CHECK_FALSE(res.ok);
+    CHECK(res.message.find("No existing configuration found") != std::string::npos);
+}
+
+TEST_CASE("validate_existing_config validates token and hub_url") {
+    const auto temp_dir = std::filesystem::temp_directory_path() / "cmdiqo_test_cfg";
+    std::filesystem::create_directories(temp_dir);
+
+    InstallerPaths paths;
+    paths.config_file = temp_dir / "config.json";
+    paths.config_dir = temp_dir;
+
+    // 1. Missing token
+    {
+        std::ofstream out(paths.config_file);
+        out << R"({"hub_url": "ws://127.0.0.1:8765", "token": "", "name": "test-agent"})";
+    }
+    auto res = validate_existing_config(paths);
+    CHECK_FALSE(res.ok);
+    CHECK(res.message.find("AGENT_TOKEN") != std::string::npos);
+
+    // 2. Invalid hub URL
+    {
+        std::ofstream out(paths.config_file);
+        out << R"({"hub_url": "invalid://not-ws", "token": "tok123", "name": "test-agent"})";
+    }
+    res = validate_existing_config(paths);
+    CHECK_FALSE(res.ok);
+    CHECK((res.message.find("Hub URL") != std::string::npos || res.message.find("HUB_URL") != std::string::npos));
+
+    // 3. Valid JSON config
+    {
+        std::ofstream out(paths.config_file);
+        out << R"({"hub_url": "wss://hub.example.com:443", "token": "tok123", "name": "test-agent"})";
+    }
+    res = validate_existing_config(paths);
+    CHECK(res.ok);
+
+    // 4. Valid .env config
+    paths.config_file = temp_dir / "nonexistent.json";
+    paths.legacy_env_file = temp_dir / "agent.env";
+    {
+        std::ofstream out(paths.legacy_env_file);
+        out << "HUB_URL=\"ws://10.0.0.1:8765\"\nAGENT_TOKEN=\"secret-tok\"\nAGENT_NAME=\"env-agent\"\n";
+    }
+    res = validate_existing_config(paths);
+    CHECK(res.ok);
+
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir, ec);
+}
+
+TEST_CASE("InstallerService upgrade fails when not elevated or no installation in place") {
+    InstallerPaths paths;
+    paths.binary_path = std::filesystem::temp_directory_path() / "nonexistent_binary.exe";
+    paths.install_dir = std::filesystem::temp_directory_path() / "nonexistent_install";
+    paths.config_file = std::filesystem::temp_directory_path() / "nonexistent_cfg.json";
+
+    InstallerService service(paths);
+    const auto res = service.upgrade();
+    CHECK_FALSE(res.ok);
+    if (!PlatformOperations::is_elevated()) {
+        CHECK(res.message.find("privileges") != std::string::npos);
+    } else {
+        CHECK(res.message.find("No existing installation found") != std::string::npos);
+    }
+}
+
+TEST_CASE("platform_name includes OS platform and architecture") {
+    const std::string name = platform_name(current_platform());
+    CHECK_FALSE(name.empty());
+#if defined(_WIN32)
+    CHECK(name.find("Windows") != std::string::npos);
+#elif defined(__linux__)
+    CHECK(name.find("Linux") != std::string::npos);
+#endif
 }

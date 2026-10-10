@@ -981,3 +981,80 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         assert not [call for call in calls if call[0] == "buildx"]
     assert (build.root / "dist" / "cmdiqo-agent-linux-x64.zip").exists()
     assert (build.root / "dist" / "cmdiqo-agent-windows-x64.zip").exists()
+
+
+def test_dockerfile_bot_multistage_structure() -> None:
+    dockerfile = Path(__file__).resolve().parent.parent / "docker" / "Dockerfile"
+    assert dockerfile.is_file(), "docker/Dockerfile must exist"
+    content = dockerfile.read_text(encoding="utf-8")
+
+    # Verify multi-stage build definitions
+    assert "FROM python:3.12-alpine AS builder" in content
+    assert "FROM python:3.12-alpine AS runtime" in content
+
+    # Verify asset compression step
+    assert "compress_assets.py" in content
+    assert "python compress_assets.py bot" in content
+
+    # Verify virtualenv copying and isolation
+    assert "COPY --from=builder /opt/venv /opt/venv" in content
+    assert 'ENV PATH="/opt/venv/bin:$PATH"' in content
+
+    # Verify size optimizations & non-root user
+    assert "PYTHONDONTWRITEBYTECODE=1" in content
+    assert "USER cmdiqo" in content
+
+
+def test_compress_assets_utility(tmp_path: Path) -> None:
+    from docker.compress_assets import compress_directory
+
+    sample_html = """<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body {
+        margin: 0;
+        background: #050914;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Title</h1>
+    <script>
+      function test() {
+        const a = 1;
+        return a + 2;
+      }
+    </script>
+  </body>
+</html>"""
+    sample_css = """
+body {
+  margin: 0;
+  padding: 0;
+}
+"""
+    sample_js = """
+function calculate(x, y) {
+  const result = x + y;
+  return result;
+}
+"""
+    (tmp_path / "page.html").write_text(sample_html, encoding="utf-8")
+    (tmp_path / "style.css").write_text(sample_css, encoding="utf-8")
+    (tmp_path / "app.js").write_text(sample_js, encoding="utf-8")
+
+    stats = compress_directory(tmp_path)
+    assert "page.html" in stats
+    assert "style.css" in stats
+    assert "app.js" in stats
+
+    orig_html, min_html = stats["page.html"]
+    assert min_html < orig_html
+
+    orig_css, min_css = stats["style.css"]
+    assert min_css < orig_css
+
+    orig_js, min_js = stats["app.js"]
+    assert min_js < orig_js
+

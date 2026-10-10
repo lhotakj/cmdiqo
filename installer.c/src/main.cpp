@@ -29,6 +29,7 @@ struct Options {
     bool cli{false};
     bool gui{false};
     bool install{false};
+    bool upgrade{false};
     bool fresh{false};
     bool configure{false};
     bool locate_config{false};
@@ -58,6 +59,7 @@ void print_usage(std::ostream& output) {
         << "CLI: cmdiqo-agent-setup --cli ACTION [options]\n\n"
         << "Actions:\n"
         << "  --install                 Install, upgrade, or repair the agent service\n"
+        << "  --upgrade                 Upgrade binary and restart service, keeping configuration\n"
         << "  --fresh                   Interactive fresh install (prompts for configuration)\n"
         << "  --configure               Interactively edit and update the agent configuration\n"
         << "  --locate-config           Print the full path to the configuration file\n"
@@ -99,6 +101,11 @@ std::optional<Options> parse_options(int argc, char** argv, std::string& error) 
         } else if (option == "--fresh") {
             options.fresh = true;
             options.install = true;
+        } else if (option == "--upgrade" || option == "upgrade") {
+            options.upgrade = true;
+            if (index + 1 < argc && argv[index + 1][0] != '-') {
+                options.payload = std::filesystem::path(argv[++index]);
+            }
         } else if (option == "--configure" || option == "--config-edit") {
             options.configure = true;
         } else if (option == "--locate-config" || option == "--config-path") {
@@ -140,7 +147,7 @@ std::optional<Options> parse_options(int argc, char** argv, std::string& error) 
         } else if (option == "--help" || option == "-h" || option == "-?" || option == "/?") {
             options.help = true;
         } else if (option == "--version") {
-            std::cout << "Cmdiqo native installer " << CMDIQO_INSTALLER_VERSION << '\n';
+            std::cout << "Cmdiqo installer " << CMDIQO_INSTALLER_VERSION << " (" << platform_name(current_platform()) << ")\n";
             return std::nullopt;
         } else {
             error = "Unknown option: " + option;
@@ -154,7 +161,7 @@ std::optional<Options> parse_options(int argc, char** argv, std::string& error) 
 }
 
 bool has_cli_action(const Options& options) {
-    return options.install || options.fresh || options.configure || options.locate_config
+    return options.install || options.fresh || options.upgrade || options.configure || options.locate_config
         || options.uninstall || options.status || options.test_hub
         || options.start || options.restart || options.stop
         || options.hub_url.has_value() || options.token.has_value() || options.agent_name.has_value()
@@ -162,7 +169,7 @@ bool has_cli_action(const Options& options) {
 }
 
 bool needs_privilege(const Options& options) {
-    return options.install || options.configure || options.uninstall || options.start || options.restart || options.stop;
+    return options.install || options.upgrade || options.configure || options.uninstall || options.start || options.restart || options.stop;
 }
 
 Config configured_values(const Options& options, const InstallerPaths& paths, std::string& error) {
@@ -332,7 +339,9 @@ int run_cli(const Options& options) {
         std::cout << "[*] " << message << '\n';
     };
     OperationResult result;
-    if (options.install) {
+    if (options.upgrade) {
+        result = service.upgrade(options.payload, progress, options.config);
+    } else if (options.install) {
         std::string error;
         Config config;
         if (options.fresh) {

@@ -165,11 +165,24 @@ Platform current_platform() {
 }
 
 std::string platform_name(Platform platform) {
+    std::string arch;
+#if defined(_M_X64) || defined(__x86_64__)
+    arch = "x64";
+#elif defined(_M_ARM64) || defined(__aarch64__)
+    arch = "arm64";
+#elif defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) || defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6Z__) || defined(__ARM_ARCH_6ZK__)
+    arch = "armv6";
+#elif defined(__arm__) || defined(_M_ARM)
+    arch = "arm";
+#elif defined(_M_IX86) || defined(__i386__)
+    arch = "x86";
+#endif
+
     switch (platform) {
         case Platform::windows:
-            return "Windows";
+            return arch.empty() ? "Windows" : ("Windows " + arch);
         case Platform::linux:
-            return "Linux";
+            return arch.empty() ? "Linux" : ("Linux " + arch);
         case Platform::unsupported:
             return "Unsupported";
     }
@@ -568,6 +581,105 @@ Config load_config(const InstallerPaths& paths) {
     }
 
     return config;
+}
+
+OperationResult validate_existing_config(
+    const InstallerPaths& paths,
+    const std::optional<std::filesystem::path>& custom_config) {
+    std::vector<std::filesystem::path> candidates;
+    if (custom_config && !custom_config->empty()) {
+        candidates.push_back(*custom_config);
+    }
+    if (const char* env_config = std::getenv("AGENT_CONFIG"); env_config != nullptr && *env_config != '\0') {
+        candidates.push_back(env_config);
+    }
+    if (!paths.config_file.empty()) {
+        candidates.push_back(paths.config_file);
+    }
+    if (!paths.config_dir.empty()) {
+        candidates.push_back(paths.config_dir / "agent.json");
+        candidates.push_back(paths.config_dir / "cmdiqo.json");
+        if (!paths.legacy_env_file.empty()) {
+            candidates.push_back(paths.legacy_env_file);
+        }
+        candidates.push_back(paths.config_dir / "agent.env");
+    }
+    if (!paths.install_dir.empty()) {
+        candidates.push_back(paths.install_dir / "config.json");
+        candidates.push_back(paths.install_dir / "agent.json");
+        candidates.push_back(paths.install_dir / "agent.env");
+    }
+
+    std::filesystem::path found_file;
+    for (const auto& candidate : candidates) {
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(candidate, ec)) {
+            found_file = candidate;
+            break;
+        }
+    }
+
+    if (found_file.empty()) {
+        return OperationResult::failure("Cannot upgrade: No existing configuration found. Use --install or --fresh for initial installation.");
+    }
+
+    Config config;
+    if (found_file.extension() == ".env") {
+        std::ifstream env_file(found_file);
+        if (!env_file) {
+            return OperationResult::failure("Cannot upgrade: Could not open configuration file " + found_file.string() + ".");
+        }
+        std::string line;
+        while (std::getline(env_file, line)) {
+            const auto separator = line.find('=');
+            if (separator == std::string::npos || line.empty() || line.front() == '#') {
+                continue;
+            }
+            const std::string key = trim(line.substr(0, separator));
+            std::string value = trim(line.substr(separator + 1));
+            if (value.size() >= 2 && ((value.front() == '"' && value.back() == '"')
+                                      || (value.front() == '\'' && value.back() == '\''))) {
+                value = value.substr(1, value.size() - 2);
+            }
+            if (key == "HUB_URL" && !value.empty()) {
+                config.hub_url = value;
+            } else if ((key == "AGENT_TOKEN" || key == "TOKEN" || key == "SECRET") && !value.empty()) {
+                config.token = value;
+            } else if ((key == "AGENT_NAME" || key == "NAME") && !value.empty()) {
+                config.agent_name = value;
+            } else if (key == "AGENT_CONNECTION_NOTIFY") {
+                config.agent_connection_notify = value == "true" || value == "1" || value == "yes";
+            }
+        }
+    } else {
+        std::ifstream json_file(found_file);
+        if (!json_file) {
+            return OperationResult::failure("Cannot upgrade: Could not open configuration file " + found_file.string() + ".");
+        }
+        std::stringstream contents;
+        contents << json_file.rdbuf();
+        std::string error;
+        const auto parsed = config_from_json(contents.str(), error);
+        if (!parsed) {
+            return OperationResult::failure("Cannot upgrade: Existing configuration file " + found_file.string() + " is invalid: " + error);
+        }
+        config = *parsed;
+    }
+
+    if (config.token.empty()) {
+        return OperationResult::failure("Cannot upgrade: Existing configuration is missing required AGENT_TOKEN in " + found_file.string() + ".");
+    }
+    if (config.hub_url.empty()) {
+        return OperationResult::failure("Cannot upgrade: Existing configuration is missing required HUB_URL in " + found_file.string() + ".");
+    }
+    if (!parse_hub_endpoint(config.hub_url)) {
+        return OperationResult::failure("Cannot upgrade: Existing configuration has invalid HUB_URL '" + config.hub_url + "' in " + found_file.string() + ".");
+    }
+    if (config.agent_name.empty()) {
+        return OperationResult::failure("Cannot upgrade: Existing configuration is missing required AGENT_NAME in " + found_file.string() + ".");
+    }
+
+    return OperationResult::success("Existing configuration is valid.");
 }
 
 OperationResult save_config(const InstallerPaths& paths, const Config& config) {

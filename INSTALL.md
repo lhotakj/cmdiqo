@@ -396,7 +396,10 @@ The script will:
 > ./cmdiqo-agent-linux-x64-setup
 > 
 > # Headless CLI installation (Linux x86_64, Linux ARM64, or Linux ARMv6 / RPi Zero W):
-> ./cmdiqo-agent-linux-arm64-setup --cli install --hub-url "ws://192.168.1.10:8765" --token "your-agent-token" --name "rpi-zero"
+> sudo ./cmdiqo-agent-linux-arm64-setup --cli --install --hub-url "ws://192.168.1.10:8765" --token "your-agent-token" --name "rpi-zero"
+> 
+> # In-place binary upgrade (replaces binary and restarts service, keeping configuration):
+> sudo ./cmdiqo-agent-linux-x64-setup --cli --upgrade
 > ```
 
 ---
@@ -507,6 +510,8 @@ To verify and ensure the `.exe` is authentic and safe:
 > - Double-click `cmdiqo-agent-windows-x64-setup.exe`.
 > - Configure your Hub URL, Agent Token, and Machine Name.
 > - Click **Install Service** (runs with standard Windows UAC elevation).
+> - Or in-place upgrade via CLI (replaces binary and restarts service, keeping configuration):
+>   `.\cmdiqo-agent-windows-x64-setup.exe --cli --upgrade`
 
 #### What the installer sets up automatically:
 - **Real Windows Service (`CmdiqoAgent`)**: Registered directly in Windows Service Control Manager (SCM). Visible in `services.msc`.

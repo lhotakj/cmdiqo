@@ -353,7 +353,7 @@ def run_both(extra_args: list[str]) -> int:
     return 0
 
 
-CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"], max_content_width=100)
+CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"], "max_content_width": 100}
 
 
 def _resolve_cli_version() -> str:
@@ -386,49 +386,49 @@ def cli(ctx: click.Context) -> None:
         sys.exit(run_both([]))
 
 
-@cli.command("hub", context_settings=dict(ignore_unknown_options=True, help_option_names=["-h", "--help"]))
+@cli.command("hub", context_settings={"ignore_unknown_options": True, "help_option_names": ["-h", "--help"]})
 @click.argument("extra_args", nargs=-1, type=click.UNPROCESSED)
 def cmd_hub(extra_args: tuple[str, ...]) -> None:
     """Start the Cmdiqo Bot & WebSocket Hub service only."""
     sys.exit(run_single(ROOT / "bot" / "app.py", "Hub", list(extra_args)))
 
 
-@cli.command("agent", context_settings=dict(ignore_unknown_options=True, help_option_names=["-h", "--help"]))
+@cli.command("agent", context_settings={"ignore_unknown_options": True, "help_option_names": ["-h", "--help"]})
 @click.argument("extra_args", nargs=-1, type=click.UNPROCESSED)
 def cmd_agent(extra_args: tuple[str, ...]) -> None:
     """Start the Cmdiqo Remote Agent on this host only."""
     sys.exit(run_single(ROOT / "agent" / "agent.py", "Agent", list(extra_args)))
 
 
-@cli.command("sim", context_settings=dict(ignore_unknown_options=True, help_option_names=["-h", "--help"]))
+@cli.command("sim", context_settings={"ignore_unknown_options": True, "help_option_names": ["-h", "--help"]})
 @click.argument("extra_args", nargs=-1, type=click.UNPROCESSED)
 def cmd_sim(extra_args: tuple[str, ...]) -> None:
     """Start the interactive Slack emulator (no Slack tokens needed)."""
     sys.exit(run_single(ROOT / "slacksim" / "slacksim.py", "SlackSim", list(extra_args)))
 
 
-@cli.command("slacksim", hidden=True, context_settings=dict(ignore_unknown_options=True, help_option_names=["-h", "--help"]))
+@cli.command("slacksim", hidden=True, context_settings={"ignore_unknown_options": True, "help_option_names": ["-h", "--help"]})
 @click.argument("extra_args", nargs=-1, type=click.UNPROCESSED)
 def cmd_slacksim(extra_args: tuple[str, ...]) -> None:
     """Hidden alias for sim command."""
     sys.exit(run_single(ROOT / "slacksim" / "slacksim.py", "SlackSim", list(extra_args)))
 
 
-@cli.command("both", context_settings=dict(ignore_unknown_options=True, help_option_names=["-h", "--help"]))
+@cli.command("both", context_settings={"ignore_unknown_options": True, "help_option_names": ["-h", "--help"]})
 @click.argument("extra_args", nargs=-1, type=click.UNPROCESSED)
 def cmd_both(extra_args: tuple[str, ...]) -> None:
     """Start both Hub and Agent concurrently with unified supervision."""
     sys.exit(run_both(list(extra_args)))
 
 
-@cli.command("diag", context_settings=dict(help_option_names=["-h", "--help"]))
+@cli.command("diag", context_settings={"help_option_names": ["-h", "--help"]})
 def cmd_diag() -> None:
     """Inspect Python runtime, filesystem permissions, and configuration."""
     diagnose_environment()
     sys.exit(0)
 
 
-@cli.command("version", context_settings=dict(help_option_names=["-h", "--help"]))
+@cli.command("version", context_settings={"help_option_names": ["-h", "--help"]})
 def cmd_version() -> None:
     """Show bundled application version and exit."""
     from bot.app import get_version

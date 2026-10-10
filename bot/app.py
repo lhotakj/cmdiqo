@@ -71,8 +71,8 @@ def get_version() -> str:
                 v = candidate.read_text(encoding="utf-8").strip()
                 if v:
                     return v
-    except Exception:
-        pass
+    except OSError as exc:
+        log.debug("Could not read version.txt candidate: %s", exc)
 
     # 2. Fall back to bundled module if running without version.txt (e.g. standalone binary)
     try:
@@ -519,16 +519,21 @@ WINDOWS_COMMAND_FALLBACKS: dict[str, tuple[str, str]] = {
 
 def _standardize_uptime_if_applicable(spec: dict[str, Any], output: str) -> str:
     """Format uptime command output to standardized '<days>d <hours>h <m>m <s>s' with zero pads."""
-    if spec.get("name") == "host-uptime" or str(spec.get("trigger", "")).lower().endswith(" uptime"):
-        if isinstance(output, str) and not output.startswith(("Error", "ℹ️", ":warning:", "kind 'ps1'")):
-            try:
-                from bot.webgui import parse_and_standardize_uptime_checked
+    if (
+        spec.get("name") == "host-uptime"
+        or str(spec.get("trigger", "")).lower().endswith(" uptime")
+    ) and (
+        isinstance(output, str)
+        and not output.startswith(("Error", "ℹ️", ":warning:", "kind 'ps1'"))
+    ):
+        try:
+            from bot.webgui import parse_and_standardize_uptime_checked
 
-                _, formatted, ok = parse_and_standardize_uptime_checked(output)
-                if ok:
-                    return f"Uptime: {formatted}"
-            except Exception:  # noqa: BLE001
-                pass
+            _, formatted, ok = parse_and_standardize_uptime_checked(output)
+            if ok:
+                return f"Uptime: {formatted}"
+        except Exception as exc:  # noqa: BLE001
+            log.debug("Failed parsing uptime: %s", exc)
     return output
 
 
@@ -1002,8 +1007,8 @@ async def handle_command(
                         boot_epoch, formatted, ok = parse_and_standardize_uptime_checked(output)
                         if ok and target_name:
                             webgui_state.update_agent_uptime(target_name, boot_epoch, formatted)
-                    except Exception:  # noqa: BLE001
-                        pass
+                    except Exception as exc:  # noqa: BLE001
+                        log.debug("Failed updating webgui agent uptime: %s", exc)
             except Exception as exc:
                 log.exception("Command %s failed", spec["name"])
                 output = f"Error: {exc}"
@@ -1143,13 +1148,13 @@ def create_bot_app(
                 for ch in target_channels:
                     try:
                         await app.client.chat_postMessage(channel=ch, text=msg)
-                        log.info("Successfully posted agent event notification to channel %s: %s", ch, msg)
+                        log.debug("Successfully posted agent event notification to channel %s: %s", ch, msg)
                     except Exception as exc:  # noqa: BLE001
                         if "not_in_channel" in str(exc):
                             try:
                                 await app.client.conversations_join(channel=ch)
                                 await app.client.chat_postMessage(channel=ch, text=msg)
-                                log.info("Auto-joined channel %s and posted agent notification: %s", ch, msg)
+                                log.debug("Auto-joined channel %s and posted agent notification: %s", ch, msg)
                                 continue
                             except Exception as join_exc:  # noqa: BLE001
                                 log.warning("Could not auto-join channel %s: %s", ch, join_exc)
@@ -1330,6 +1335,12 @@ async def main() -> None:
 
         webgui_state = WebGuiState()
         hub_log_handler = HubWebLogHandler(webgui_state)
+        hub_log_handler.setLevel(logging.DEBUG)
+        configured_log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+        for h in logging.getLogger().handlers:
+            if h is not hub_log_handler and h.level == logging.NOTSET:
+                h.setLevel(configured_log_level)
+        logging.getLogger("cmdiqo-bot").setLevel(logging.DEBUG)
         logging.getLogger().addHandler(hub_log_handler)
         start_webgui_thread(
             webgui_state, port=config.web_port, bot_version=__version__
@@ -1349,7 +1360,7 @@ async def main() -> None:
 
 def print_bot_help() -> None:
     """Print command-line help for cmdiqo-bot."""
-    print(f"""Usage: cmdiqo-bot [OPTIONS]
+    print("""Usage: cmdiqo-bot [OPTIONS]
 
   Cmdiqo Slack Bot & WebSocket Hub.
 

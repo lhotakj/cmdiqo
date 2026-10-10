@@ -14,7 +14,7 @@ import queue
 import re
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -90,7 +90,7 @@ def parse_and_standardize_uptime_checked(
         boot_str = boot_match.group(1).replace("T", " ")
         try:
             dt = datetime.strptime(boot_str, "%Y-%m-%d %H:%M:%S")
-            boot_epoch = dt.replace(tzinfo=timezone.utc).timestamp()
+            boot_epoch = dt.replace(tzinfo=UTC).timestamp()
             total_seconds = max(0.0, now - boot_epoch)
             return boot_epoch, format_uptime_zero_padded(total_seconds), True
         except ValueError:
@@ -281,8 +281,11 @@ class HubWebLogHandler(logging.Handler):
             if "werkzeug" in record.name.lower():
                 return
             msg = record.getMessage()
+            lvl = record.levelname
+            if record.name.startswith("websockets") and "connection open" in msg.lower():
+                lvl = "DEBUG"
             self.state.add_log(
-                level=record.levelname,
+                level=lvl,
                 source=record.name.replace("cmdiqo-bot.", "").replace("cmdiqo-bot", "hub"),
                 message=msg,
             )

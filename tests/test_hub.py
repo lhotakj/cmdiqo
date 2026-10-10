@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -424,16 +425,56 @@ async def test_hub_startup_logs_version(caplog):
     hub = Hub(host="127.0.0.1", port=9998, version="3.1.4")
     hub._stop_event.set()
 
-    with caplog.at_level("INFO"):
-        with patch("websockets.serve") as mock_serve:
-            mock_ctx = AsyncMock()
-            mock_ctx.__aenter__.return_value = AsyncMock()
-            mock_ctx.__aexit__.return_value = None
-            mock_serve.return_value = mock_ctx
+    with caplog.at_level("INFO"), patch("websockets.serve") as mock_serve:
+        mock_ctx = AsyncMock()
+        mock_ctx.__aenter__.return_value = AsyncMock()
+        mock_ctx.__aexit__.return_value = None
+        mock_serve.return_value = mock_ctx
 
-            await hub.run()
+        await hub.run()
 
     assert any("Hub v3.1.4 listening on ws://127.0.0.1:9998" in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_hub_result_logs_at_debug_level(caplog):
+    hub = Hub(host="127.0.0.1", port=9998, version="1.0.0")
+    loop = asyncio.get_running_loop()
+    fut = loop.create_future()
+    req_id = "test-req-123"
+    hub.pending[req_id] = fut
+    hub.pending_agents[req_id] = "home"
+
+    raw_msg = json.dumps({
+        "type": "result",
+        "id": req_id,
+        "ok": True,
+        "code": 0,
+        "output": "sample output",
+        "error": None,
+    })
+
+    with caplog.at_level("DEBUG"):
+        await hub._on_message(raw_msg)
+
+    assert fut.done()
+    debug_records = [r for r in caplog.records if r.levelname == "DEBUG" and "Received result from agent" in r.message]
+    info_records = [r for r in caplog.records if r.levelname == "INFO" and "Received result from agent" in r.message]
+    assert len(debug_records) == 1
+    assert len(info_records) == 0
+    assert "Received result from agent 'home': ok=True, code=0, out_bytes=13, error=none" in debug_records[0].message
+
+
+def test_websockets_connection_open_normalized_to_debug(caplog):
+    ws_logger = logging.getLogger("websockets.server")
+    with caplog.at_level("DEBUG"):
+        ws_logger.info("connection open")
+
+    debug_records = [r for r in caplog.records if r.levelname == "DEBUG" and "connection open" in r.message]
+    info_records = [r for r in caplog.records if r.levelname == "INFO" and "connection open" in r.message]
+    assert len(debug_records) == 1
+    assert len(info_records) == 0
+
 
 
 

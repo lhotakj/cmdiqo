@@ -145,7 +145,7 @@ Every execution request carries a unique UUID, correlated across both server and
 | **Hub** | Command Dispatched | `[INFO] [a1b2c3d4] Dispatching ps1 command to agent 'PC-OLO': shutdown /r /t 10 ... (timeout=60s, cwd=(default))` |
 | **Agent** | Command Received | `[INFO] [a1b2c3d4] Received ps1 execution request: shutdown /r /t 10 ... (timeout=60s, cwd=(default))` |
 | **Agent** | Execution Completed | `[INFO] [a1b2c3d4] Execution finished: ok=True, code=0, out_bytes=42, error=none` |
-| **Hub** | Result Received | `[INFO] [a1b2c3d4] Received result from agent 'PC-OLO': ok=True, code=0, out_bytes=42, error=none` |
+| **Hub** | Result Received | `[DEBUG] [a1b2c3d4] Received result from agent 'PC-OLO': ok=True, code=0, out_bytes=42, error=none` |
 
 ---
 
