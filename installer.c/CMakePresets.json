@@ -82,7 +82,7 @@
         "CMAKE_CXX_COMPILER": "armv6-linux-musleabihf-g++",
         "CMAKE_STRIP": "armv6-linux-musleabihf-strip",
         "CMAKE_C_FLAGS": "-marm -march=armv6zk -mfloat-abi=hard -mfpu=vfp",
-        "CMAKE_CXX_FLAGS": "-marm -march=armv6zk -mfloat-abi=hard -mfpu=vfp",
+        "CMAKE_CXX_FLAGS": "-marm -march=armv6zk -mfloat-abi=hard -mfpu=vfp -Wno-psabi",
         "CMAKE_EXE_LINKER_FLAGS": "-static",
         "CMAKE_CROSSCOMPILING_EMULATOR": "qemu-arm-static;-cpu;arm1176"
       }
