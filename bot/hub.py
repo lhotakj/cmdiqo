@@ -114,12 +114,7 @@ class Hub:
         try:
             raw_hello = await asyncio.wait_for(ws.recv(), timeout=10)
             hello = json.loads(raw_hello)
-        except (
-            TimeoutError,
-            asyncio.TimeoutError,
-            json.JSONDecodeError,
-            websockets.ConnectionClosed,
-        ) as exc:
+        except (TimeoutError, json.JSONDecodeError, websockets.ConnectionClosed) as exc:
             log.warning("Failed receiving hello from %s: %s", addr, exc)
             await ws.close(code=4002, reason="expected hello")
             return

@@ -269,7 +269,7 @@ async def execute(msg: dict[str, Any]) -> tuple[bool, int | None, str, str | Non
         )
         try:
             out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except (TimeoutError, asyncio.TimeoutError):
+        except TimeoutError:
             proc.kill()
             await proc.wait()
             return False, -1, "", f"timed out after {timeout}s"
@@ -387,14 +387,9 @@ async def run_agent(
                     try:
                         raw = await asyncio.wait_for(ws.recv(), timeout=1.0)
                         await handle(ws, raw)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         continue
-        except (
-            websockets.ConnectionClosed,
-            OSError,
-            TimeoutError,
-            asyncio.TimeoutError,
-        ) as exc:
+        except (websockets.ConnectionClosed, OSError, TimeoutError) as exc:
             if stop_event and stop_event.is_set():
                 break
             log.warning("Connection lost: %s; retrying in %.1fs", exc, delay)
