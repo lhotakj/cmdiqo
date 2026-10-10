@@ -4,6 +4,7 @@
 #include "cmdiqo/agent/logger.hpp"
 
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -12,9 +13,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
-#include <future>
 #include <string>
-#include <thread>
 #include <vector>
 
 namespace cmdiqo::agent {
@@ -77,27 +76,46 @@ ProcessResult execute_process(
     // Parent process
     close(pipe_fd[1]);
 
-    auto read_future = std::async(std::launch::async, [read_fd = pipe_fd[0]]() -> std::string {
-        std::string output;
-        char buffer[4096];
-        ssize_t bytes_read = 0;
-        while ((bytes_read = read(read_fd, buffer, sizeof(buffer))) > 0) {
-            output.append(buffer, static_cast<size_t>(bytes_read));
-        }
-        close(read_fd);
-        return output;
-    });
+    int flags = fcntl(pipe_fd[0], F_GETFL, 0);
+    if (flags != -1) {
+        fcntl(pipe_fd[0], F_SETFL, flags | O_NONBLOCK);
+    }
 
+    std::string output;
+    char buffer[4096];
     auto start_time = std::chrono::steady_clock::now();
     int status = 0;
+    bool child_exited = false;
     bool timed_out = false;
 
     while (true) {
-        pid_t res = waitpid(pid, &status, WNOHANG);
-        if (res == pid) {
-            break;
+        if (!child_exited) {
+            pid_t res = waitpid(pid, &status, WNOHANG);
+            if (res == pid || res < 0) {
+                child_exited = true;
+            }
         }
-        if (res < 0) {
+
+        struct pollfd pfd{};
+        pfd.fd = pipe_fd[0];
+        pfd.events = POLLIN | POLLHUP;
+        int poll_res = poll(&pfd, 1, 50);
+
+        if (poll_res > 0 && (pfd.revents & (POLLIN | POLLHUP | POLLERR))) {
+            ssize_t bytes_read = read(pipe_fd[0], buffer, sizeof(buffer));
+            if (bytes_read > 0) {
+                output.append(buffer, static_cast<size_t>(bytes_read));
+            } else if (bytes_read == 0 && child_exited) {
+                break;
+            }
+        } else if (child_exited) {
+            while (true) {
+                ssize_t bytes_read = read(pipe_fd[0], buffer, sizeof(buffer));
+                if (bytes_read <= 0) {
+                    break;
+                }
+                output.append(buffer, static_cast<size_t>(bytes_read));
+            }
             break;
         }
 
@@ -106,21 +124,18 @@ ProcessResult execute_process(
                            .count();
         if (elapsed >= effective_timeout) {
             timed_out = true;
-            // Kill entire process group
             kill(-pid, SIGKILL);
             waitpid(pid, &status, 0);
             break;
         }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
+    close(pipe_fd[0]);
+
     if (timed_out) {
-        read_future.wait_for(std::chrono::milliseconds(200));
         return {false, -1, "", "timed out after " + std::to_string(effective_timeout) + "s"};
     }
 
-    std::string output = read_future.get();
     int exit_code = 0;
     if (WIFEXITED(status)) {
         exit_code = WEXITSTATUS(status);

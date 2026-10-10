@@ -108,6 +108,7 @@ RUN apt-get update \
         libgtk-3-dev \
         libharfbuzz-dev \
         libjpeg-dev \
+        libltdl-dev \
         liblzma-dev \
         libncurses-dev \
         libnotify-dev \
@@ -120,8 +121,6 @@ RUN apt-get update \
         libtiff-dev \
         libtool \
         libtool-bin \
-        libltdl-dev \
-        libzip-dev \
         libwayland-dev \
         libwebp-dev \
         libx11-dev \
@@ -133,6 +132,7 @@ RUN apt-get update \
         libxkbcommon-dev \
         libxkbcommon-x11-dev \
         libxrandr-dev \
+        libzip-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /tmp/vcpkg-binary-cache \
@@ -199,20 +199,21 @@ LABEL org.opencontainers.image.title="Cmdiqo native-installer unified multi-plat
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
-        g++-mingw-w64-x86-64 \
-        gcc-mingw-w64-x86-64 \
+        binutils-aarch64-linux-gnu \
         binutils-mingw-w64-x86-64 \
+        g++-aarch64-linux-gnu \
+        g++-mingw-w64-x86-64 \
+        gcc-aarch64-linux-gnu \
+        gcc-mingw-w64-x86-64 \
         mingw-w64 \
         mingw-w64-tools \
+        qemu-user-static \
         wine \
         wine64 \
-        gcc-aarch64-linux-gnu \
-        g++-aarch64-linux-gnu \
-        binutils-aarch64-linux-gnu \
-        qemu-user-static \
     && update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix \
     && update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix \
     && curl -fsSL -o /tmp/armv6-musl.tgz "https://musl.cc/armv6-linux-musleabihf-cross.tgz" \
+    && echo "bcf47e82ec0c0c620c7b47aeb03355fe3f22d9dd9f719a77e2b21322291e04f7a35d1592275f487db4f754f3aede7f51bb0c2f07c1a3b3ce880b3341ec947bea  /tmp/armv6-musl.tgz" | sha512sum --check --strict \
     && tar -xzf /tmp/armv6-musl.tgz -C /opt \
     && for f in /opt/armv6-linux-musleabihf-cross/bin/*; do ln -sf "$f" "/usr/local/bin/$(basename "$f")"; done \
     && rm -f /tmp/armv6-musl.tgz \

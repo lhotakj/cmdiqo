@@ -117,7 +117,7 @@ if(WIN32)
     target_compile_definitions(cmdiqo_agent_core PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX _WIN32_WINNT=0x0601)
 else()
     find_package(Threads REQUIRED)
-    target_link_libraries(cmdiqo_agent_core PRIVATE Threads::Threads)
+    target_link_libraries(cmdiqo_agent_core PUBLIC Threads::Threads)
 endif()
 
 # -----------------------------------------------------------------------------
