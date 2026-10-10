@@ -650,21 +650,25 @@ build_native_installer() {
     local artifact="cmdiqo-agent-setup"
     local destination="cmdiqo-agent-linux-x64-setup"
     local installed_dir_var="VCPKG_INSTALLED_DIR_LINUX"
+    local agent_binary="cmdiqo-agent"
     if [[ "$platform" == win64 ]]; then
         preset="windows-x64-mingw"
         artifact="cmdiqo-agent-setup.exe"
         destination="cmdiqo-agent-windows-x64-setup.exe"
         installed_dir_var="VCPKG_INSTALLED_DIR_WINDOWS"
+        agent_binary="cmdiqo-agent.exe"
     elif [[ "$platform" == linux-arm64 ]]; then
         preset="linux-arm64"
         artifact="cmdiqo-agent-setup"
         destination="cmdiqo-agent-linux-arm64-setup"
         installed_dir_var="VCPKG_INSTALLED_DIR_LINUX_ARM64"
+        agent_binary="cmdiqo-agent-linux-arm64"
     elif [[ "$platform" == linux-armv6 ]]; then
         preset="linux-armv6"
         artifact="cmdiqo-agent-setup"
         destination="cmdiqo-agent-linux-armv6-setup"
         installed_dir_var="VCPKG_INSTALLED_DIR_LINUX_ARMV6"
+        agent_binary="cmdiqo-agent-linux-armv6"
     fi
     info "=== Building native $platform installer (Release) ==="
     rm -f "$DIST_DIR/$destination"
@@ -676,6 +680,7 @@ build_native_installer() {
         --env "PRESET=$preset"
         --env "INSTALLED_DIR_VAR=$installed_dir_var"
         --env "CMDIQO_BUILD_VERSION=$payload_version"
+        --env "AGENT_BINARY=$agent_binary"
     )
     if [[ "$PYTHON_PLATFORM" != "windows "* ]]; then
         docker_args+=(--user "$(id -u):$(id -g)")
@@ -704,7 +709,8 @@ build_native_installer() {
         cmake --fresh --preset "$PRESET" \
             "-DVCPKG_INSTALLED_DIR=$installed_dir" \
             -DVCPKG_MANIFEST_INSTALL=OFF \
-            "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}"
+            "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}" \
+            "-DCMDIQO_AGENT_BINARY=/workspace/dist/${AGENT_BINARY}"
         cmake --build --preset "build-$PRESET" --config Release
         ctest --preset "test-$PRESET" -C Release --output-on-failure
     '
