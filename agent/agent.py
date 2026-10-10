@@ -36,7 +36,24 @@ IS_WINDOWS = platform.system().lower() == "windows"
 
 
 def get_version() -> str:
-    """Return current agent version from bundled _version.py module."""
+    """Return current agent version from version.txt (single source of truth) or bundled _version.py module."""
+    try:
+        from pathlib import Path
+
+        candidates = (
+            Path(__file__).resolve().parent.parent / "version.txt",  # repo root
+            Path(__file__).resolve().parent / "version.txt",         # package directory
+            Path("version.txt"),                                    # current working dir
+            Path("/config/version.txt"),                            # container mounted config
+            Path("/app/version.txt"),                               # container app dir
+        )
+        for cand in candidates:
+            if cand.is_file():
+                raw = cand.read_text(encoding="utf-8").strip()
+                if raw:
+                    return raw
+    except Exception:
+        pass
     try:
         from agent._version import __version__
 
@@ -57,6 +74,26 @@ def get_version() -> str:
     except ImportError:
         pass
     return "1.0.0"
+
+
+def get_agent_arch() -> str:
+    """Determine standardized agent architecture: win64 | linux64 | arm64 | armv6."""
+    env_arch = os.environ.get("CMDIQO_AGENT_ARCH") or os.environ.get("AGENT_ARCH")
+    if env_arch:
+        arch_norm = env_arch.strip().lower()
+        if arch_norm in ("win64", "linux64", "arm64", "armv6"):
+            return arch_norm
+
+    sys_platform = platform.system().lower()
+    machine = platform.machine().lower()
+
+    if "armv6" in machine or machine in ("armv6l", "armv7l", "armhf"):
+        return "armv6"
+    if "arm" in machine or "aarch64" in machine:
+        return "arm64"
+    if "win" in sys_platform:
+        return "win64"
+    return "linux64"
 
 
 __version__ = get_version()
@@ -361,6 +398,13 @@ async def run_agent(
     if config is None:
         config = AgentConfig.load()
 
+    log.info(
+        "Starting Cmdiqo Agent v%s (target hub: %s, name: %s)",
+        get_version(),
+        config.hub_url,
+        config.name,
+    )
+
     delay = config.reconnect_delay
     while not (stop_event and stop_event.is_set()):
         try:
@@ -372,7 +416,7 @@ async def run_agent(
                             "name": config.name,
                             "version": get_version(),
                             "platform": f"{platform.system()}/{platform.release()}",
-                            "arch": platform.machine(),
+                            "arch": get_agent_arch(),
                             "agent_connection_notify": config.agent_connection_notify,
                         }
                     )

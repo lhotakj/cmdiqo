@@ -39,6 +39,47 @@ def _validate_token(expected_token: str | None, auth_header: str | None) -> bool
     return hmac.compare_digest(expected_token, provided)
 
 
+def get_version() -> str:
+    """Return current bot/hub version from version.txt (single source of truth) or bundled _version.py."""
+    try:
+        from pathlib import Path
+
+        candidates = (
+            Path(__file__).resolve().parent.parent / "version.txt",  # repo root
+            Path(__file__).resolve().parent / "version.txt",         # package directory
+            Path("version.txt"),                                    # current working dir
+            Path("/config/version.txt"),                            # container mounted config
+            Path("/app/version.txt"),                               # container app dir
+        )
+        for cand in candidates:
+            if cand.is_file():
+                raw = cand.read_text(encoding="utf-8").strip()
+                if raw:
+                    return raw
+    except Exception:
+        pass
+    try:
+        from bot._version import __version__
+
+        return str(__version__)
+    except ImportError:
+        pass
+    try:
+        from ._version import __version__
+
+        return str(__version__)
+    except (ImportError, ValueError):
+        pass
+    try:
+        import _version
+
+        if hasattr(_version, "__version__"):
+            return str(_version.__version__)
+    except ImportError:
+        pass
+    return "1.0.0"
+
+
 DEFAULT_BIND_HOST = "0.0.0.0"  # nosec: B104
 
 
@@ -46,11 +87,16 @@ class Hub:
     """WebSocket Hub server that manages connections to distributed LAN agents."""
 
     def __init__(
-        self, host: str = DEFAULT_BIND_HOST, port: int = 8765, token: str | None = None
+        self,
+        host: str = DEFAULT_BIND_HOST,
+        port: int = 8765,
+        token: str | None = None,
+        version: str | None = None,
     ) -> None:
         self.host = host
         self.port = port
         self.token = token
+        self.version = version or get_version()
         self.agents: dict[
             str, dict[str, Any]
         ] = {}  # name -> {ws, platform, since, addr}
@@ -71,7 +117,8 @@ class Hub:
         ) as server:
             self._server = server
             log.info(
-                "Hub listening on ws://%s:%d (agents connect outbound to this)",
+                "Hub v%s listening on ws://%s:%d (agents connect outbound to this)",
+                self.version,
                 self.host,
                 self.port,
             )
@@ -140,19 +187,22 @@ class Hub:
 
         name = str(hello["name"]).strip()
         version = str(hello.get("version", "?"))
+        arch = str(hello.get("arch", "?"))
         self.agents[name] = {
             "ws": ws,
             "version": version,
             "platform": str(hello.get("platform", "?")),
+            "arch": arch,
             "since": time.strftime("%Y-%m-%d %H:%M:%S"),
             "addr": addr,
             "hello": hello,
         }
         log.info(
-            "Agent connected: %s (v%s, %s) from %s",
+            "Agent connected: %s (v%s, %s, %s) from %s",
             name,
             version,
             self.agents[name]["platform"],
+            arch,
             addr,
         )
 
@@ -196,6 +246,7 @@ class Hub:
                 n: {
                     "version": str(i.get("version", "?")),
                     "platform": str(i.get("platform", "?")),
+                    "arch": str(i.get("arch") or (i.get("hello", {}).get("arch", "?") if isinstance(i.get("hello"), dict) else "?")),
                     "since": str(i.get("since", "")),
                     "addr": str(i.get("addr", "")),
                 }
@@ -340,15 +391,22 @@ class Hub:
         """Format connected agents as a clean ASCII table."""
         if not self.agents:
             return "No agents connected."
-        header = ("AGENT", "VERSION", "PLATFORM", "CONNECTED SINCE", "ADDRESS")
+        header = ("AGENT", "VERSION", "PLATFORM", "ARCH", "CONNECTED SINCE", "ADDRESS")
         rows = [
-            (n, i.get("version", "?"), i["platform"], i["since"], i["addr"])
+            (
+                n,
+                str(i.get("version", "?")),
+                str(i.get("platform", "?")),
+                str(i.get("arch") or (i.get("hello", {}).get("arch", "?") if isinstance(i.get("hello"), dict) else "?")),
+                str(i.get("since", "")),
+                str(i.get("addr", "")),
+            )
             for n, i in sorted(self.agents.items())
         ]
         data = [header] + rows
-        widths = [max(len(r[i]) for r in data) for i in range(5)]
+        widths = [max(len(r[col]) for r in data) for col in range(6)]
         return "\n".join(
-            "  ".join(cell.ljust(widths[i]) for i, cell in enumerate(row)).rstrip()
+            "  ".join(cell.ljust(widths[col]) for col, cell in enumerate(row)).rstrip()
             for row in data
         )
 

@@ -55,23 +55,43 @@ DEFAULT_BIND_HOST = "0.0.0.0"  # nosec: B104
 
 
 def get_version() -> str:
-    """Return current bot version from bundled _version.py module."""
+    """Return current bot version from version.txt (single source of truth) or bundled _version.py."""
+    # 1. Prefer version.txt if present (repository root or container paths)
+    try:
+        from pathlib import Path
+
+        for candidate in (
+            Path(__file__).resolve().parent.parent / "version.txt",  # repo root
+            Path(__file__).resolve().parent / "version.txt",         # package directory
+            Path("version.txt"),                                    # current working dir
+            Path("/config/version.txt"),                            # container mounted config
+            Path("/app/version.txt"),                               # container app dir
+        ):
+            if candidate.is_file():
+                v = candidate.read_text(encoding="utf-8").strip()
+                if v:
+                    return v
+    except Exception:
+        pass
+
+    # 2. Fall back to bundled module if running without version.txt (e.g. standalone binary)
     try:
         from bot._version import __version__
 
-        return __version__
+        return str(__version__)
     except ImportError:
         pass
     try:
         from ._version import __version__
 
-        return __version__
-    except ImportError:
+        return str(__version__)
+    except (ImportError, ValueError):
         pass
     try:
-        from _version import __version__
+        import _version
 
-        return __version__
+        if hasattr(_version, "__version__"):
+            return str(_version.__version__)
     except ImportError:
         pass
     return "1.0.0"
@@ -1023,7 +1043,10 @@ def create_bot_app(
     hub: Hub | None = None
     if config.hub_enabled:
         hub = Hub(
-            host=config.hub_host, port=config.hub_port, token=config.agent_token or None
+            host=config.hub_host,
+            port=config.hub_port,
+            token=config.agent_token or None,
+            version=__version__,
         )
         if not config.agent_token:
             log.warning(
@@ -1299,6 +1322,8 @@ async def main() -> None:
     config = BotConfig.from_env()
     config.validate()
 
+    log.info("Starting Cmdiqo Bot / Hub v%s", __version__)
+
     webgui_state = None
     if config.web_port is not None:
         from bot.webgui import HubWebLogHandler, WebGuiState, start_webgui_thread
@@ -1309,7 +1334,7 @@ async def main() -> None:
         start_webgui_thread(
             webgui_state, port=config.web_port, bot_version=__version__
         )
-        log.info("Cmdiqo Hub WebGUI active on http://0.0.0.0:%d", config.web_port)
+        log.info("Cmdiqo Hub v%s WebGUI active on http://0.0.0.0:%d", __version__, config.web_port)
 
     app, hub, _ = create_bot_app(config, webgui_state=webgui_state)
     tasks: list[asyncio.Task] = []
@@ -1318,7 +1343,7 @@ async def main() -> None:
 
     handler = AsyncSocketModeHandler(app, config.slack_app_token)
     tasks.append(asyncio.create_task(handler.start_async()))
-    log.info("Starting Socket Mode handler (outbound WebSocket only - NAT friendly)")
+    log.info("Starting Socket Mode handler v%s (outbound WebSocket only - NAT friendly)", __version__)
     await asyncio.gather(*tasks)
 
 

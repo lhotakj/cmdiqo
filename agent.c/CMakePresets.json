@@ -27,7 +27,8 @@
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "VCPKG_TARGET_TRIPLET": "x64-windows"
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMDIQO_AGENT_ARCH": "win64"
       }
     },
     {
@@ -36,6 +37,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "VCPKG_TARGET_TRIPLET": "x64-mingw-static-release",
+        "CMDIQO_AGENT_ARCH": "win64",
         "CMAKE_SYSTEM_NAME": "Windows",
         "CMAKE_C_COMPILER": "x86_64-w64-mingw32-gcc",
         "CMAKE_CXX_COMPILER": "x86_64-w64-mingw32-g++",
@@ -53,7 +55,8 @@
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "VCPKG_TARGET_TRIPLET": "x64-linux-release"
+        "VCPKG_TARGET_TRIPLET": "x64-linux-release",
+        "CMDIQO_AGENT_ARCH": "linux64"
       }
     },
     {
@@ -62,6 +65,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "VCPKG_TARGET_TRIPLET": "arm64-linux-release",
+        "CMDIQO_AGENT_ARCH": "arm64",
         "CMAKE_SYSTEM_NAME": "Linux",
         "CMAKE_SYSTEM_PROCESSOR": "aarch64",
         "CMAKE_C_COMPILER": "aarch64-linux-gnu-gcc",
@@ -76,6 +80,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "VCPKG_TARGET_TRIPLET": "armv6-linux-release",
+        "CMDIQO_AGENT_ARCH": "armv6",
         "CMAKE_SYSTEM_NAME": "Linux",
         "CMAKE_SYSTEM_PROCESSOR": "armv6l",
         "CMAKE_C_COMPILER": "armv6-linux-musleabihf-gcc",

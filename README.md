@@ -49,7 +49,7 @@ nothing to expose, TLS handled for you. Ideal for a home server.
   - **Windows Agent (x86_64)**: only **~3.3 MB RAM** working set
   - **Windows Installer GUI**: only **~5.2 MB RAM**
   - Instant cold boot (<10 ms), zero Python runtime dependency on target nodes
-- 🌐 **Integrated Real-time WebGUI** — optional single-page dashboard (`WEB_PORT=8080`) styled with Obsidian Cyberpunk design, displaying connected agents with 32x32 WebP architecture badges (`ARM64`, `ARMv6`, `WIN64`, `Linux`), standardized zero-padded uptime with client-side 1Hz local refresh, and last 50 events live-streamed via Server-Sent Events (SSE).
+- 🌐 **Integrated Real-time WebGUI** — optional single-page dashboard (`WEB_PORT=8080`) styled with Obsidian Cyberpunk design, displaying connected agents with sortable columns (`Host Name`, `Arch`, `OS`, `Uptime`), `localStorage` sort preference persistence, 32x32 WebP architecture badges (`WIN64`, `Linux64`, `ARM64`, `ARMv6`), standardized zero-padded uptime with client-side 1Hz local refresh, and last 50 events live-streamed via Server-Sent Events (SSE).
 
 ## Repository layout
 

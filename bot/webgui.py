@@ -28,7 +28,7 @@ STATIC_DIR = PACKAGE_DIR / "static"
 
 
 def normalize_arch(arch_str: str, platform_str: str = "") -> str:
-    """Normalize reported machine architecture to one of arm64, armv6, win64, linux."""
+    """Normalize reported machine architecture to one of win64, linux64, arm64, armv6."""
     a = (arch_str or "").strip().lower()
     p = (platform_str or "").strip().lower()
 
@@ -36,14 +36,14 @@ def normalize_arch(arch_str: str, platform_str: str = "") -> str:
         return "arm64"
     if a in ("armv6", "armv6l", "armv7", "armv7l", "armhf"):
         return "armv6"
-    if "win" in p or a in ("win64", "amd64", "x86_64") and "win" in p:
+    if a in ("win64", "amd64", "x86_64") and "win" in p or "win" in a or "win" in p:
         return "win64"
-    if a in ("x86_64", "amd64", "x64", "i386", "i686"):
-        return "linux"
+    if a in ("linux64", "linux", "x86_64", "amd64", "x64", "i386", "i686"):
+        return "linux64"
     if "linux" in p:
-        return "linux"
+        return "linux64"
 
-    return "linux"
+    return "linux64"
 
 
 def format_uptime_zero_padded(total_seconds: float) -> str:
@@ -290,8 +290,12 @@ class HubWebLogHandler(logging.Handler):
             self.handleError(record)
 
 
-def create_webgui_app(state: WebGuiState, bot_version: str = "1.0.0") -> Flask:
+def create_webgui_app(state: WebGuiState, bot_version: str | None = None) -> Flask:
     """Create Flask application configured for the Cmdiqo Hub WebGUI."""
+    if not bot_version:
+        from bot.app import get_version
+
+        bot_version = get_version()
     app = Flask(
         "cmdiqo-webgui",
         template_folder=str(TEMPLATES_DIR),
@@ -314,7 +318,10 @@ def create_webgui_app(state: WebGuiState, bot_version: str = "1.0.0") -> Flask:
 
     @app.route("/")
     def index() -> str:
-        agents = state.get_agents()
+        agents = sorted(
+            state.get_agents(),
+            key=lambda a: a.get("name", "").lower(),
+        )
         logs = state.get_logs()
         return render_template(
             "index.html",
@@ -365,17 +372,25 @@ def create_webgui_app(state: WebGuiState, bot_version: str = "1.0.0") -> Flask:
 
 
 def start_webgui_thread(
-    state: WebGuiState, port: int, host: str = "0.0.0.0", bot_version: str = "1.0.0"
+    state: WebGuiState, port: int, host: str = "0.0.0.0", bot_version: str | None = None
 ) -> threading.Thread:
     """Start the WebGUI Flask server in a dedicated background daemon thread."""
     from werkzeug.serving import make_server
+
+    if not bot_version:
+        from bot.app import get_version
+
+        bot_version = get_version()
 
     app = create_webgui_app(state, bot_version=bot_version)
     # Quiet werkzeug request logs to keep terminal logs clean
     logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
     server = make_server(host, port, app, threaded=True)
-    log.info("Starting WebGUI server on http://%s:%d", host, port)
+    log.info("Starting WebGUI server v%s on http://%s:%d", bot_version, host, port)
+
+    if not state.get_logs():
+        state.add_log("INFO", "hub", f"Cmdiqo Hub v{bot_version} started")
 
     t = threading.Thread(target=server.serve_forever, daemon=True, name="WebGUI-Server")
     t.start()

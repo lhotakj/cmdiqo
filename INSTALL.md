@@ -303,10 +303,11 @@ docker compose logs -f cmdiqo-bot
 
 You should see:
 ```text
+INFO [cmdiqo-bot] Starting Cmdiqo Bot / Hub v1.0.0
 INFO [cmdiqo-bot] Loaded 22 command(s) from /config/commands.yaml
 INFO [cmdiqo-bot] Loaded 2 alias(es) from /config/commands.yaml
-INFO [cmdiqo-bot.hub] Hub listening on ws://0.0.0.0:8765 (agents connect outbound to this)
-INFO [cmdiqo-bot] Starting Socket Mode handler (outbound WebSocket only - NAT friendly)
+INFO [cmdiqo-bot.hub] Hub v1.0.0 listening on ws://0.0.0.0:8765 (agents connect outbound to this)
+INFO [cmdiqo-bot] Starting Socket Mode handler v1.0.0 (outbound WebSocket only - NAT friendly)
 ```
 
 ---

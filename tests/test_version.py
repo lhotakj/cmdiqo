@@ -80,9 +80,12 @@ def test_update_versions_override():
 
 
 def test_update_versions_local_override_preserves_hex_timestamp():
-    version = update_versions(override_version="2.5.devel+6A9C0B2D")
-    assert version == "2.5.devel+6A9C0B2D"
-    assert "filevers=(2, 5, 2861, 0)" in AGENT_VERSION_INFO.read_text(encoding="utf-8")
+    try:
+        version = update_versions(override_version="2.5.devel+6A9C0B2D")
+        assert version == "2.5.devel+6A9C0B2D"
+        assert "filevers=(2, 5, 2861, 0)" in AGENT_VERSION_INFO.read_text(encoding="utf-8")
+    finally:
+        update_versions(silent=True)
 
 
 def test_generate_version_info_txt():
@@ -106,3 +109,26 @@ def test_bundled_version_modules_without_version_txt():
     assert bot.app.get_version() == bot.app.__version__
     assert agent.agent.get_version() == agent.agent.__version__
     assert slacksim.__version__ == slacksim._version.__version__
+
+
+def test_get_version_reads_version_txt():
+    """Verify that get_version prioritizes version.txt as the single source of truth."""
+    import agent.agent
+    import bot.app
+    import bot.hub
+
+    expected = get_base_version()
+    assert bot.app.get_version().startswith(expected)
+    assert bot.hub.get_version().startswith(expected)
+    assert agent.agent.get_version().startswith(expected)
+
+
+def test_get_version_fallback_when_version_txt_missing():
+    """Verify get_version falls back to bundled _version module when version.txt is missing."""
+    import bot.app
+    from unittest.mock import patch
+
+    with patch("pathlib.Path.is_file", return_value=False):
+        ver = bot.app.get_version()
+        assert ver != ""
+

@@ -29,9 +29,14 @@ class TestWebGui(unittest.TestCase):
         self.assertEqual(normalize_arch("x86_64", "Windows/11.0"), "win64")
         self.assertEqual(normalize_arch("", "Windows/Server"), "win64")
 
-        self.assertEqual(normalize_arch("x86_64", "Linux/6.8"), "linux")
-        self.assertEqual(normalize_arch("amd64", "Linux/Generic"), "linux")
-        self.assertEqual(normalize_arch("", "Linux/5.15"), "linux")
+        self.assertEqual(normalize_arch("x86_64", "Linux/6.8"), "linux64")
+        self.assertEqual(normalize_arch("amd64", "Linux/Generic"), "linux64")
+        self.assertEqual(normalize_arch("", "Linux/5.15"), "linux64")
+        self.assertEqual(normalize_arch("linux64"), "linux64")
+        self.assertEqual(normalize_arch("linux"), "linux64")
+        self.assertEqual(normalize_arch("win64"), "win64")
+        self.assertEqual(normalize_arch("arm64"), "arm64")
+        self.assertEqual(normalize_arch("armv6"), "armv6")
 
     def test_format_uptime_zero_padded(self) -> None:
         self.assertEqual(format_uptime_zero_padded(0), "00d 00h 00m 00s")
@@ -219,6 +224,67 @@ class TestWebGui(unittest.TestCase):
 
         fav_resp = client.get("/favicon.ico")
         self.assertIn(fav_resp.status_code, (200, 204))
+
+    def test_sortable_table_headers_and_initial_data(self) -> None:
+        state = WebGuiState()
+        state.register_agent(
+            name="host-charlie",
+            hello={"platform": "Linux/6.6", "arch": "x86_64", "version": "1.0.0"},
+            addr="192.168.1.10:8765",
+            boot_time=3000.0,
+            uptime_str="03d 00h 00m 00s",
+        )
+        state.register_agent(
+            name="host-alpha",
+            hello={"platform": "Windows/11.0", "arch": "AMD64", "version": "1.0.0"},
+            addr="192.168.1.11:8765",
+            boot_time=1000.0,
+            uptime_str="01d 00h 00m 00s",
+        )
+        state.register_agent(
+            name="host-bravo",
+            hello={"platform": "Linux/6.6", "arch": "aarch64", "version": "1.0.0"},
+            addr="192.168.1.12:8765",
+            boot_time=2000.0,
+            uptime_str="02d 00h 00m 00s",
+        )
+
+        app = create_webgui_app(state, bot_version="2.0.0")
+        client = app.test_client()
+        resp = client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.data.decode("utf-8")
+
+        # 1. Verify sortable headers and columns
+        self.assertIn('th-sortable text-center" data-sort-key="arch"', html)
+        self.assertIn('th-sortable" data-sort-key="name"', html)
+        self.assertIn('th-sortable" data-sort-key="platform"', html)
+        self.assertIn('th-sortable text-right" data-sort-key="uptime"', html)
+
+        # 2. Verify ▲ and ▼ arrow icons
+        self.assertIn('class="arrow-up" data-dir="asc"', html)
+        self.assertIn('class="arrow-down" data-dir="desc"', html)
+        self.assertIn("▲", html)
+        self.assertIn("▼", html)
+
+        # 3. Verify localStorage key and default sort constants in JS
+        self.assertIn("cmdiqo_agents_sort", html)
+        self.assertIn("DEFAULT_SORT = { col: 'name', dir: 'asc' }", html)
+
+        # 4. Verify initial JSON payload script tag is present with all agents
+        self.assertIn('<script id="initial-agents-data" type="application/json">', html)
+        self.assertIn('"name": "host-alpha"', html)
+        self.assertIn('"name": "host-bravo"', html)
+        self.assertIn('"name": "host-charlie"', html)
+
+        # 5. Verify server-side default sort order (alpha, bravo, charlie)
+        pos_alpha = html.find("host-alpha")
+        pos_bravo = html.find("host-bravo")
+        pos_charlie = html.find("host-charlie")
+        # 6. Verify auto-scroll localStorage key and persistence logic
+        self.assertIn("cmdiqo_autoscroll", html)
+        self.assertIn("loadAutoScrollPreference", html)
+        self.assertIn("saveAutoScrollPreference", html)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,7 +9,9 @@
   <link rel="icon" type="image/webp" href="/static/img/cmdiqo-logo.webp">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
   <style>
     :root {
       --bg-obsidian: #050914;
@@ -36,7 +39,9 @@
       --transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
-    *, *::before, *::after {
+    *,
+    *::before,
+    *::after {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
@@ -141,8 +146,17 @@
     }
 
     @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.4; transform: scale(0.85); }
+
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      50% {
+        opacity: 0.4;
+        transform: scale(0.85);
+      }
     }
 
     /* Cards */
@@ -209,8 +223,85 @@
       border-bottom: 1px solid var(--border-subtle);
     }
 
-    thead th.text-center { text-align: center; }
-    thead th.text-right { text-align: right; }
+    thead th.text-center {
+      text-align: center;
+    }
+
+    thead th.text-right {
+      text-align: right;
+    }
+
+    thead th.th-sortable {
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.15s ease;
+    }
+
+    thead th.th-sortable:hover {
+      color: var(--text-main);
+    }
+
+    .th-content {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .th-content.center {
+      justify-content: center;
+      width: 100%;
+    }
+
+    .th-content.right {
+      justify-content: flex-end;
+      width: 100%;
+    }
+
+    .sort-arrows {
+      display: inline-flex;
+      flex-direction: row;
+      gap: 2px;
+      font-size: 0.7rem;
+      line-height: 1;
+      vertical-align: middle;
+    }
+
+    .sort-arrows .arrow-up,
+    .sort-arrows .arrow-down {
+      display: inline-block;
+      color: var(--text-dim);
+      opacity: 0.4;
+      padding: 1px 2px;
+      border-radius: 2px;
+      cursor: pointer;
+      transition: color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+    }
+
+    .sort-arrows .arrow-up:hover,
+    .sort-arrows .arrow-down:hover {
+      color: var(--cyan);
+      opacity: 0.9;
+    }
+
+    thead th[data-sort-active="true"] {
+      color: var(--cyan);
+    }
+
+    thead th[data-sort-dir="asc"] .sort-arrows .arrow-up {
+      color: var(--cyan);
+      opacity: 1;
+      font-weight: 700;
+      text-shadow: 0 0 8px rgba(0, 242, 254, 0.7);
+      transform: scale(1.15);
+    }
+
+    thead th[data-sort-dir="desc"] .sort-arrows .arrow-down {
+      color: var(--cyan);
+      opacity: 1;
+      font-weight: 700;
+      text-shadow: 0 0 8px rgba(0, 242, 254, 0.7);
+      transform: scale(1.15);
+    }
 
     tbody tr {
       border-bottom: 1px solid rgba(255, 255, 255, 0.04);
@@ -227,8 +318,13 @@
       vertical-align: middle;
     }
 
-    tbody td.text-center { text-align: center; }
-    tbody td.text-right { text-align: right; }
+    tbody td.text-center {
+      text-align: center;
+    }
+
+    tbody td.text-right {
+      text-align: right;
+    }
 
     .arch-icon {
       width: 32px;
@@ -325,9 +421,18 @@
       height: 11px;
       border-radius: 50%;
     }
-    .dot-red { background: #ff5f56; }
-    .dot-yellow { background: #ffbd2e; }
-    .dot-green { background: #27c93f; }
+
+    .dot-red {
+      background: #ff5f56;
+    }
+
+    .dot-yellow {
+      background: #ffbd2e;
+    }
+
+    .dot-green {
+      background: #27c93f;
+    }
 
     .terminal-title {
       font-size: 0.9rem;
@@ -368,13 +473,16 @@
     .log-viewport::-webkit-scrollbar {
       width: 6px;
     }
+
     .log-viewport::-webkit-scrollbar-track {
       background: transparent;
     }
+
     .log-viewport::-webkit-scrollbar-thumb {
       background: rgba(255, 255, 255, 0.12);
       border-radius: 4px;
     }
+
     .log-viewport::-webkit-scrollbar-thumb:hover {
       background: rgba(0, 242, 254, 0.3);
     }
@@ -415,13 +523,15 @@
       border: 1px solid rgba(0, 242, 254, 0.25);
     }
 
-    .level-warn, .level-warning {
+    .level-warn,
+    .level-warning {
       background: rgba(245, 158, 11, 0.15);
       color: var(--color-amber);
       border: 1px solid rgba(245, 158, 11, 0.3);
     }
 
-    .level-error, .level-critical {
+    .level-error,
+    .level-critical {
       background: rgba(239, 68, 68, 0.15);
       color: var(--color-red);
       border: 1px solid rgba(239, 68, 68, 0.3);
@@ -456,20 +566,41 @@
     }
 
     @media (max-width: 768px) {
-      body { padding: 16px 12px; }
-      .card { padding: 18px 14px; }
-      .card-header { flex-direction: column; align-items: flex-start; gap: 8px; }
-      thead th, tbody td { padding: 10px 8px; font-size: 0.82rem; }
-      .uptime-ticker { font-size: 0.82rem; padding: 2px 6px; }
+      body {
+        padding: 16px 12px;
+      }
+
+      .card {
+        padding: 18px 14px;
+      }
+
+      .card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
+      thead th,
+      tbody td {
+        padding: 10px 8px;
+        font-size: 0.82rem;
+      }
+
+      .uptime-ticker {
+        font-size: 0.82rem;
+        padding: 2px 6px;
+      }
     }
   </style>
 </head>
+
 <body>
   <div class="container">
     <!-- Header -->
     <header>
       <div class="brand">
-        <img src="/static/img/cmdiqo-logo.webp" alt="Cmdiqo Logo" class="brand-logo" onerror="this.style.display='none'">
+        <img src="/static/img/cmdiqo-logo.webp" alt="Cmdiqo Logo" class="brand-logo"
+          onerror="this.style.display='none'">
         <div class="brand-title">
           Cmdiqo Hub
           <span class="version-tag">v{{ bot_version }}</span>
@@ -478,7 +609,7 @@
       <div class="header-status">
         <div class="status-pill" id="sse-status">
           <span class="pulse-dot"></span>
-          <span id="sse-status-text">Live SSE Connected</span>
+          <span id="sse-status-text">connected</span>
         </div>
       </div>
     </header>
@@ -496,44 +627,79 @@
         <table id="agents-table">
           <thead>
             <tr>
-              <th class="text-center" style="width: 56px;">Arch</th>
-              <th>Host Name</th>
-              <th>Operating System</th>
-              <th class="text-right">Uptime</th>
+              <th class="th-sortable text-center" data-sort-key="arch" style="width: 70px;"
+                title="Sort by Architecture">
+                <div class="th-content center">
+                  <span>Arch</span>
+                  <span class="sort-arrows" aria-hidden="true">
+                    <span class="arrow-up" data-dir="asc" title="Sort ascending">▲</span>
+                    <span class="arrow-down" data-dir="desc" title="Sort descending">▼</span>
+                  </span>
+                </div>
+              </th>
+              <th class="th-sortable" data-sort-key="name" title="Sort by Host Name">
+                <div class="th-content">
+                  <span>Host Name</span>
+                  <span class="sort-arrows" aria-hidden="true">
+                    <span class="arrow-up" data-dir="asc" title="Sort ascending">▲</span>
+                    <span class="arrow-down" data-dir="desc" title="Sort descending">▼</span>
+                  </span>
+                </div>
+              </th>
+              <th class="th-sortable" data-sort-key="platform" title="Sort by Operating System">
+                <div class="th-content">
+                  <span>Operating System</span>
+                  <span class="sort-arrows" aria-hidden="true">
+                    <span class="arrow-up" data-dir="asc" title="Sort ascending">▲</span>
+                    <span class="arrow-down" data-dir="desc" title="Sort descending">▼</span>
+                  </span>
+                </div>
+              </th>
+              <th class="th-sortable text-right" data-sort-key="uptime" title="Sort by Uptime">
+                <div class="th-content right">
+                  <span>Uptime</span>
+                  <span class="sort-arrows" aria-hidden="true">
+                    <span class="arrow-up" data-dir="asc" title="Sort ascending">▲</span>
+                    <span class="arrow-down" data-dir="desc" title="Sort descending">▼</span>
+                  </span>
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody id="agents-tbody">
             {% if agents %}
-              {% for a in agents %}
-                <tr data-host="{{ a.name }}">
-                  <td class="text-center">
-                    <img src="{{ a.arch_icon }}" alt="{{ a.arch }}" class="arch-icon" title="{{ a.arch }}">
-                  </td>
-                  <td>
-                    <div class="host-name">{{ a.name }}</div>
-                    <div class="host-meta">v{{ a.version }} &bull; {{ a.addr }}</div>
-                  </td>
-                  <td>
-                    <span class="os-badge">{{ a.platform }}</span>
-                  </td>
-                  <td class="text-right">
-                    <span class="uptime-ticker" data-boot="{{ a.boot_time }}">{{ a.uptime_str }}</span>
-                  </td>
-                </tr>
-              {% endfor %}
+            {% for a in agents %}
+            <tr data-host="{{ a.name }}">
+              <td class="text-center">
+                <img src="{{ a.arch_icon }}" alt="{{ a.arch }}" class="arch-icon" title="{{ a.arch }}">
+              </td>
+              <td>
+                <div class="host-name">{{ a.name }}</div>
+                <div class="host-meta">v{{ a.version }} &bull; {{ a.addr }}</div>
+              </td>
+              <td>
+                <span class="os-badge">{{ a.platform }}</span>
+              </td>
+              <td class="text-right">
+                <span class="uptime-ticker" data-boot="{{ a.boot_time }}">{{ a.uptime_str }}</span>
+              </td>
+            </tr>
+            {% endfor %}
             {% else %}
-              <tr id="empty-row">
-                <td colspan="4">
-                  <div class="empty-state">
-                    <div class="empty-icon">&#128225;</div>
-                    <div class="empty-title">No agents connected yet</div>
-                    <div class="empty-desc">LAN agents connect outbound to this Hub WebSocket. Once connected, they will appear here automatically.</div>
-                  </div>
-                </td>
-              </tr>
+            <tr id="empty-row">
+              <td colspan="4">
+                <div class="empty-state">
+                  <div class="empty-icon">&#128225;</div>
+                  <div class="empty-title">No agents connected yet</div>
+                  <div class="empty-desc">LAN agents connect outbound to this Hub WebSocket. Once connected, they will
+                    appear here automatically.</div>
+                </div>
+              </td>
+            </tr>
             {% endif %}
           </tbody>
         </table>
+        <script id="initial-agents-data" type="application/json">{{ agents | tojson }}</script>
       </div>
     </main>
 
@@ -549,7 +715,8 @@
         </div>
         <div class="terminal-controls">
           <label for="auto-scroll-toggle">
-            <input type="checkbox" id="auto-scroll-toggle" aria-label="Toggle automatic scrolling of log output" checked>
+            <input type="checkbox" id="auto-scroll-toggle" aria-label="Toggle automatic scrolling of log output"
+              checked>
             <span>Auto-scroll</span>
           </label>
         </div>
@@ -557,33 +724,34 @@
 
       <div class="log-viewport" id="log-viewport">
         {% if logs %}
-          {% for l in logs %}
-            <div class="log-row">
-              <span class="log-ts">{{ l.ts }}</span>
-              <span class="log-level level-{{ l.level | lower }}">{{ l.level }}</span>
-              <span class="log-source">[{{ l.source }}]</span>
-              <span class="log-msg">{{ l.message }}</span>
-            </div>
-          {% endfor %}
+        {% for l in logs %}
+        <div class="log-row">
+          <span class="log-ts">{{ l.ts }}</span>
+          <span class="log-level level-{{ l.level | lower }}">{{ l.level }}</span>
+          <span class="log-source">[{{ l.source }}]</span>
+          <span class="log-msg">{{ l.message }}</span>
+        </div>
+        {% endfor %}
         {% else %}
-          <div class="log-row" id="empty-log-row">
-            <span class="log-ts">--:--:--</span>
-            <span class="log-level level-info">INFO</span>
-            <span class="log-source">[hub]</span>
-            <span class="log-msg">Waiting for events...</span>
-          </div>
+        <div class="log-row" id="empty-log-row">
+          <span class="log-ts">--:--:--</span>
+          <span class="log-level level-info">INFO</span>
+          <span class="log-source">[hub]</span>
+          <span class="log-msg">Waiting for events...</span>
+        </div>
         {% endif %}
       </div>
     </section>
 
     <!-- Footer -->
     <footer>
-      <span>Cmdiqo Hub WebGUI &bull; Real-time status via SSE</span>
+      <span>&copy; 2026 Jaroslav Lhot&aacute;k &bull; Cmdiqo Hub WebGUI &bull; <a href="https://cmdiqo.dev"
+          target="_blank">cmdiqo.dev</a></span>
     </footer>
   </div>
 
   <script>
-    (function() {
+    (function () {
       // 1. Live Uptime Ticker (ticks every second in browser without backend requests)
       function updateUptimes() {
         const nowSec = Math.floor(Date.now() / 1000);
@@ -601,7 +769,123 @@
       }
       setInterval(updateUptimes, 1000);
 
-      // 2. DOM Rendering Helpers
+      // 2. Client-side Sort & State Management
+      const STORAGE_KEY = 'cmdiqo_agents_sort';
+      const DEFAULT_SORT = { col: 'name', dir: 'asc' };
+      const VALID_COLS = ['arch', 'name', 'platform', 'uptime'];
+      const VALID_DIRS = ['asc', 'desc'];
+
+      function loadSortPreference() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && VALID_COLS.includes(parsed.col) && VALID_DIRS.includes(parsed.dir)) {
+              return { col: parsed.col, dir: parsed.dir };
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to load sort preference from localStorage', err);
+        }
+        return { ...DEFAULT_SORT };
+      }
+
+      function saveSortPreference(sortState) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(sortState));
+        } catch (err) {
+          console.warn('Failed to save sort preference to localStorage', err);
+        }
+      }
+
+      function sortAgents(agents, col, dir) {
+        if (!Array.isArray(agents)) return [];
+        const sorted = [...agents];
+        const multiplier = dir === 'desc' ? -1 : 1;
+
+        sorted.sort((a, b) => {
+          let diff = 0;
+          if (col === 'uptime') {
+            const now = Date.now() / 1000;
+            const bootA = Number.parseFloat(a.boot_time) || 0;
+            const bootB = Number.parseFloat(b.boot_time) || 0;
+            const uptimeA = bootA > 0 ? Math.max(0, now - bootA) : 0;
+            const uptimeB = bootB > 0 ? Math.max(0, now - bootB) : 0;
+            diff = uptimeA - uptimeB;
+          } else {
+            const valA = String(a[col] || '').toLowerCase();
+            const valB = String(b[col] || '').toLowerCase();
+            diff = valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' });
+          }
+
+          if (diff !== 0) {
+            return diff * multiplier;
+          }
+          const nameA = String(a.name || '').toLowerCase();
+          const nameB = String(b.name || '').toLowerCase();
+          return nameA.localeCompare(nameB);
+        });
+
+        return sorted;
+      }
+
+      function updateSortHeaders(currentSort) {
+        document.querySelectorAll('thead th.th-sortable').forEach(th => {
+          const key = th.getAttribute('data-sort-key');
+          if (key === currentSort.col) {
+            th.setAttribute('data-sort-active', 'true');
+            th.setAttribute('data-sort-dir', currentSort.dir);
+            th.setAttribute('aria-sort', currentSort.dir === 'asc' ? 'ascending' : 'descending');
+          } else {
+            th.removeAttribute('data-sort-active');
+            th.removeAttribute('data-sort-dir');
+            th.removeAttribute('aria-sort');
+          }
+        });
+      }
+
+      let currentSort = loadSortPreference();
+      let currentAgents = [];
+      try {
+        const initEl = document.getElementById('initial-agents-data');
+        if (initEl && initEl.textContent) {
+          currentAgents = JSON.parse(initEl.textContent);
+        }
+      } catch (err) {
+        console.warn('Failed parsing initial agents', err);
+      }
+
+      function applySort(col, dir) {
+        currentSort = { col, dir };
+        saveSortPreference(currentSort);
+        updateSortHeaders(currentSort);
+        renderAgents(currentAgents);
+      }
+
+      function initSortableHeaders() {
+        document.querySelectorAll('thead th.th-sortable').forEach(th => {
+          th.addEventListener('click', function (e) {
+            const col = th.getAttribute('data-sort-key');
+            if (!col) return;
+
+            const arrowTarget = e.target.closest('.arrow-up, .arrow-down');
+            if (arrowTarget) {
+              e.stopPropagation();
+              const targetDir = arrowTarget.getAttribute('data-dir');
+              applySort(col, targetDir === 'desc' ? 'desc' : 'asc');
+              return;
+            }
+
+            let nextDir = 'asc';
+            if (currentSort.col === col) {
+              nextDir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+            }
+            applySort(col, nextDir);
+          });
+        });
+      }
+
+      // 3. DOM Rendering Helpers
       const tbody = document.getElementById('agents-tbody');
       const badge = document.getElementById('agent-count-badge');
       const logViewport = document.getElementById('log-viewport');
@@ -609,8 +893,44 @@
       const sseStatus = document.getElementById('sse-status');
       const sseStatusText = document.getElementById('sse-status-text');
 
+      // Auto-scroll Persistence
+      const AUTOSCROLL_KEY = 'cmdiqo_autoscroll';
+
+      function loadAutoScrollPreference() {
+        try {
+          const val = localStorage.getItem(AUTOSCROLL_KEY);
+          if (val !== null) {
+            return val === 'true';
+          }
+        } catch (err) {
+          console.warn('Failed to load auto-scroll preference from localStorage', err);
+        }
+        return true;
+      }
+
+      function saveAutoScrollPreference(enabled) {
+        try {
+          localStorage.setItem(AUTOSCROLL_KEY, String(enabled));
+        } catch (err) {
+          console.warn('Failed to save auto-scroll preference to localStorage', err);
+        }
+      }
+
+      if (autoScrollToggle) {
+        autoScrollToggle.checked = loadAutoScrollPreference();
+        autoScrollToggle.addEventListener('change', function () {
+          saveAutoScrollPreference(autoScrollToggle.checked);
+          if (autoScrollToggle.checked) {
+            logViewport.scrollTop = logViewport.scrollHeight;
+          }
+        });
+      }
+
       function renderAgents(agents) {
-        if (!agents || agents.length === 0) {
+        currentAgents = Array.isArray(agents) ? agents : [];
+        const sorted = sortAgents(currentAgents, currentSort.col, currentSort.dir);
+
+        if (!sorted || sorted.length === 0) {
           tbody.innerHTML = `
             <tr id="empty-row">
               <td colspan="4">
@@ -625,9 +945,9 @@
           return;
         }
 
-        badge.textContent = `${agents.length} Active`;
+        badge.textContent = `${sorted.length} Active`;
         let html = '';
-        agents.forEach(a => {
+        sorted.forEach(a => {
           html += `
             <tr data-host="${escapeHtml(a.name)}">
               <td class="text-center">
@@ -706,52 +1026,61 @@
       function connectSSE() {
         const es = new EventSource('/api/events');
 
-        es.onopen = function() {
+        es.onopen = function () {
           sseStatus.classList.remove('disconnected');
-          sseStatusText.textContent = 'Live SSE Connected';
+          sseStatusText.textContent = 'connected';
         };
 
-        es.addEventListener('init', function(e) {
+        es.addEventListener('init', function (e) {
           try {
             const data = JSON.parse(e.data);
             if (data.agents) renderAgents(data.agents);
             if (data.logs) renderLogs(data.logs);
-          } catch(err) {
+          } catch (err) {
             console.error('Failed parsing init SSE event', err);
           }
         });
 
-        es.addEventListener('agent_update', function(e) {
+        es.addEventListener('agent_update', function (e) {
           try {
             const data = JSON.parse(e.data);
             if (data.agents) renderAgents(data.agents);
-          } catch(err) {
+          } catch (err) {
             console.error('Failed parsing agent_update SSE event', err);
           }
         });
 
-        es.addEventListener('log_entry', function(e) {
+        es.addEventListener('log_entry', function (e) {
           try {
             const data = JSON.parse(e.data);
             if (data.log) appendLog(data.log);
-          } catch(err) {
+          } catch (err) {
             console.error('Failed parsing log_entry SSE event', err);
           }
         });
 
-        es.onerror = function() {
+        es.onerror = function () {
           sseStatus.classList.add('disconnected');
           sseStatusText.textContent = 'Reconnecting...';
         };
       }
 
       // Initialize
+      if (autoScrollToggle) {
+        autoScrollToggle.checked = loadAutoScrollPreference();
+      }
+      updateSortHeaders(currentSort);
+      initSortableHeaders();
+      if (currentAgents && currentAgents.length > 0) {
+        renderAgents(currentAgents);
+      }
       connectSSE();
       updateUptimes();
-      if (autoScrollToggle.checked) {
+      if (autoScrollToggle && autoScrollToggle.checked) {
         logViewport.scrollTop = logViewport.scrollHeight;
       }
     })();
   </script>
 </body>
+
 </html>

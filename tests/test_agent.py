@@ -307,3 +307,28 @@ def test_agent_version_cli(capsys):
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
     assert "cmdiqo-agent" in captured.out
+
+
+def test_agent_get_agent_arch(monkeypatch):
+    import platform
+    from agent.agent import get_agent_arch
+
+    monkeypatch.delenv("CMDIQO_AGENT_ARCH", raising=False)
+    monkeypatch.delenv("AGENT_ARCH", raising=False)
+
+    monkeypatch.setattr(platform, "system", lambda: "Windows")
+    monkeypatch.setattr(platform, "machine", lambda: "AMD64")
+    assert get_agent_arch() == "win64"
+
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
+    monkeypatch.setattr(platform, "machine", lambda: "x86_64")
+    assert get_agent_arch() == "linux64"
+
+    monkeypatch.setattr(platform, "machine", lambda: "aarch64")
+    assert get_agent_arch() == "arm64"
+
+    monkeypatch.setattr(platform, "machine", lambda: "armv6l")
+    assert get_agent_arch() == "armv6"
+
+    monkeypatch.setenv("CMDIQO_AGENT_ARCH", "arm64")
+    assert get_agent_arch() == "arm64"

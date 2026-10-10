@@ -408,3 +408,32 @@ async def test_hub_on_agent_event_callbacks():
     assert events[1] == ("disconnected", "test-agent", True)
 
 
+def test_hub_version():
+    from bot.hub import get_version
+
+    ver = get_version()
+    assert isinstance(ver, str)
+    assert len(ver) > 0
+
+    hub = Hub(version="2.5.0")
+    assert hub.version == "2.5.0"
+
+
+@pytest.mark.asyncio
+async def test_hub_startup_logs_version(caplog):
+    hub = Hub(host="127.0.0.1", port=9998, version="3.1.4")
+    hub._stop_event.set()
+
+    with caplog.at_level("INFO"):
+        with patch("websockets.serve") as mock_serve:
+            mock_ctx = AsyncMock()
+            mock_ctx.__aenter__.return_value = AsyncMock()
+            mock_ctx.__aexit__.return_value = None
+            mock_serve.return_value = mock_ctx
+
+            await hub.run()
+
+    assert any("Hub v3.1.4 listening on ws://127.0.0.1:9998" in record.message for record in caplog.records)
+
+
+

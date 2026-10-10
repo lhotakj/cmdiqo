@@ -218,7 +218,8 @@ def run_single(script_path: Path, name: str, extra_args: list[str]) -> int:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(ROOT)
 
-    log_info(f"Starting {name} ({' '.join(cmd)})...")
+    ver = _resolve_cli_version()
+    log_info(f"Starting {name} v{ver} ({' '.join(cmd)})...")
     try:
         proc = subprocess.Popen(cmd, cwd=str(ROOT), env=env)
     except PermissionError as exc:
@@ -294,8 +295,10 @@ def run_both(extra_args: list[str]) -> int:
     if hasattr(signal, "SIGBREAK"):
         signal.signal(signal.SIGBREAK, shutdown_all)
 
+    ver = _resolve_cli_version()
+
     # 1. Start Hub / Bot
-    log_info("Starting Cmdiqo Bot & Hub server...")
+    log_info(f"Starting Cmdiqo Bot & Hub server v{ver}...")
     hub_cmd = [sys.executable, str(hub_script)]
     try:
         hub_proc = subprocess.Popen(hub_cmd, cwd=str(ROOT), env=env)
@@ -314,7 +317,7 @@ def run_both(extra_args: list[str]) -> int:
         return hub_proc.returncode
 
     # 2. Start Agent
-    log_info("Starting Cmdiqo Remote Agent...")
+    log_info(f"Starting Cmdiqo Remote Agent v{ver}...")
     agent_cmd = [sys.executable, str(agent_script)] + extra_args
     try:
         agent_proc = subprocess.Popen(agent_cmd, cwd=str(ROOT), env=env)

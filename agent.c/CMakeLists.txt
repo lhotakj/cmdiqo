@@ -102,7 +102,32 @@ target_link_libraries(cmdiqo_agent_core
         ixwebsocket::ixwebsocket
 )
 
-target_compile_definitions(cmdiqo_agent_core PUBLIC CMDIQO_AGENT_VERSION="${CMDIQO_BUILD_VERSION}")
+if(NOT CMDIQO_AGENT_ARCH)
+    if(WIN32)
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64")
+            set(CMDIQO_AGENT_ARCH "arm64")
+        else()
+            set(CMDIQO_AGENT_ARCH "win64")
+        endif()
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "armv6|armv6l|armv6zk")
+        set(CMDIQO_AGENT_ARCH "armv6")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
+        set(CMDIQO_AGENT_ARCH "arm64")
+    elseif(VCPKG_TARGET_TRIPLET MATCHES "armv6")
+        set(CMDIQO_AGENT_ARCH "armv6")
+    elseif(VCPKG_TARGET_TRIPLET MATCHES "arm64")
+        set(CMDIQO_AGENT_ARCH "arm64")
+    elseif(VCPKG_TARGET_TRIPLET MATCHES "x64-windows")
+        set(CMDIQO_AGENT_ARCH "win64")
+    else()
+        set(CMDIQO_AGENT_ARCH "linux64")
+    endif()
+endif()
+
+target_compile_definitions(cmdiqo_agent_core PUBLIC
+    CMDIQO_AGENT_VERSION="${CMDIQO_BUILD_VERSION}"
+    CMDIQO_AGENT_ARCH="${CMDIQO_AGENT_ARCH}"
+)
 
 if(WIN32)
     target_link_libraries(cmdiqo_agent_core PRIVATE

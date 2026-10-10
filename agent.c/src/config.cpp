@@ -85,20 +85,20 @@ std::string get_platform_string() {
 }
 
 std::string get_arch_string() {
-#if defined(_WIN32)
+#if defined(CMDIQO_AGENT_ARCH)
+    return CMDIQO_AGENT_ARCH;
+#elif defined(_WIN32)
     #if defined(_M_ARM64)
-        return "ARM64";
-    #elif defined(_M_X64) || defined(_WIN64)
-        return "AMD64";
+        return "arm64";
     #else
-        return "x86";
+        return "win64";
     #endif
+#elif defined(__aarch64__)
+    return "arm64";
+#elif defined(__arm__) || defined(__thumb__)
+    return "armv6";
 #else
-    struct utsname buf{};
-    if (uname(&buf) == 0) {
-        return std::string(buf.machine);
-    }
-    return "unknown";
+    return "linux64";
 #endif
 }
 
