@@ -16,6 +16,7 @@ struct HelloMessage {
     std::string name;                     ///< Agent hostname or user-defined alias.
     std::string version;                  ///< Agent binary semver string.
     std::string platform;                 ///< OS platform identifier (e.g. "Windows/10.0" or "Linux/6.8").
+    std::string arch;                     ///< Machine architecture (e.g. "x86_64", "aarch64", "ARM64").
     bool agent_connection_notify{false};  ///< Whether to dispatch connection notifications to Slack.
 
     /**
@@ -23,13 +24,17 @@ struct HelloMessage {
      * @return nlohmann::json representation.
      */
     [[nodiscard]] nlohmann::json to_json() const {
-        return nlohmann::json{
+        nlohmann::json j = {
             {"type", type},
             {"name", name},
             {"version", version},
             {"platform", platform},
             {"agent_connection_notify", agent_connection_notify}
         };
+        if (!arch.empty()) {
+            j["arch"] = arch;
+        }
+        return j;
     }
 };
 

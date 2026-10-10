@@ -23,7 +23,7 @@ graph TD
         BotApp --> Dispatcher["Command Dispatcher\n(Regex & Sanitization)"]
         SlackSim --> Dispatcher
         Dispatcher -->|Local python / shell| LocalExec["Local Execution\n(ARP scan, Docker CLI)"]
-        Dispatcher -->|Remote target| Hub["Agent Hub Server\n(ws://0.0.0.0:8765)"]
+        Dispatcher -->|Remote target| Hub["Agent Hub Server\n(ws://0.0.0.0:8765 / HUB_PORT)"]
     end
 
     subgraph RemoteAgents ["Distributed LAN Machines (Behind NAT)"]
@@ -92,7 +92,7 @@ sequenceDiagram
 
 ### Connection & Authentication Handshake
 1. **Agent Initiates Outbound Connection**:
-   - `ws://<hub_ip>:8765`
+   - `ws://<hub_ip>:8765` (configurable via `export HUB_PORT=8765`, default: `8765`)
    - Headers: `Authorization: Bearer <AGENT_TOKEN>`
 2. **Hub Token Verification**:
    - Evaluated via `hmac.compare_digest(expected, provided)` to eliminate timing side-channel attacks.
@@ -103,11 +103,12 @@ sequenceDiagram
      "type": "hello",
      "name": "PC-OLO",
      "version": "1.0.devel+6AB4BAC9",
-     "platform": "windows"
+     "platform": "windows",
+     "arch": "x86_64"
    }
    ```
 4. **Registration**:
-   - Hub stores the WebSocket reference, version, platform, remote IP, and connection timestamp in `self.agents["PC-OLO"]`.
+   - Hub stores the WebSocket reference, version, platform, arch, remote IP, and connection timestamp in `self.agents["PC-OLO"]`.
 
 ### Execution Message Schema (`Hub` $\rightarrow$ `Agent`)
 ```json
@@ -188,3 +189,33 @@ Commands defined in `config/commands.yaml` (under `aliases:` and `commands:`) ar
 - **WebSocket Keepalives**: Both Hub and Agent configure `ping_interval=20` and `ping_timeout=20` to prevent NAT timeouts and stateful firewall drops.
 - **Mid-Flight Disconnect Protection**: If an agent disconnects while executing a command, `_cancel_pending_for_agent()` instantly cancels the awaiting `asyncio.Future` with `ConnectionResetError`, preventing the Slack caller from hanging until timeout.
 - **Subprocess Timeout Guard**: If a command exceeds its configured `timeout`, the agent process tree is forcibly terminated (`proc.kill()`) and a failure result is returned.
+
+---
+
+## 7. Integrated Real-Time WebGUI (`WEB_PORT=<port>`)
+
+When the `WEB_PORT` environment variable is defined with a valid port number (e.g. `WEB_PORT=8080`), the Cmdiqo Hub spawns an integrated Flask web server running concurrently in a background daemon thread:
+
+```mermaid
+flowchart LR
+    subgraph Hub["Cmdiqo Bot Process"]
+        HubWs["WebSocket Hub"] -->|Connect / Disconnect| State["WebGuiState Cache"]
+        Logs["Log Records"] -->|emit| Handler["HubWebLogHandler"]
+        Handler --> State
+        State -->|SSE /api/events| SSEStream["Server-Sent Events"]
+    end
+
+    subgraph Browser["Web Browser (http://<host>:<WEB_PORT>)"]
+        Page["Single-Page Dashboard"] <-- SSEStream
+        Page --> LocalTimer["1Hz Local JS Uptime Ticker\n(Zero Backend Polls)"]
+    end
+```
+
+- **Connected Agents Table**:
+  - Displays host name, architecture badge with 32x32 WebP icons (`ARM64`, `ARMv6`, `WIN64`, `Linux`), operating system, and live standardized uptime (`<days>d <hours>h <m>m <s>s`).
+  - Architecture and boot epoch timestamps are cached in-memory upon agent connection; reconnects/disconnects automatically update or purge the cache.
+  - Client JavaScript ticks uptime every second locally without generating periodic network requests.
+- **Latest Events Log**:
+  - Maintained as a 50-entry ring buffer (`collections.deque(maxlen=50)`).
+  - Automatically captures bot lifecycle events, agent connections/disconnections, and command executions via `HubWebLogHandler`.
+  - Pushes real-time `log_entry` events to connected browsers via SSE.

@@ -50,6 +50,7 @@ void AgentRunner::run(std::atomic<bool>& stop_signal) {
                     .name = config_.name,
                     .version = std::string(get_version()),
                     .platform = get_platform_string(),
+                    .arch = get_arch_string(),
                     .agent_connection_notify = config_.agent_connection_notify
                 };
 

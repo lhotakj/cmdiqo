@@ -504,6 +504,53 @@ def test_bot_config_validate_invalid_port():
         cfg.validate()
 
 
+def test_bot_config_from_env_hub_port_override(monkeypatch):
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+    monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-test")
+
+    # 1. Default port is 8765
+    monkeypatch.delenv("HUB_PORT", raising=False)
+    cfg_default = BotConfig.from_env()
+    assert cfg_default.hub_port == 8765
+
+    # 2. HUB_PORT sets port
+    monkeypatch.setenv("HUB_PORT", "9000")
+    cfg_hub = BotConfig.from_env()
+    assert cfg_hub.hub_port == 9000
+
+    # 3. Invalid HUB_PORT causes validation error
+    monkeypatch.setenv("HUB_PORT", "invalid")
+    cfg_invalid = BotConfig.from_env()
+    assert cfg_invalid.hub_port == -1
+    with pytest.raises(BotConfigurationError, match="HUB_PORT"):
+        cfg_invalid.validate()
+
+
+def test_bot_config_from_env_web_port(monkeypatch):
+    monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-test")
+    monkeypatch.setenv("SLACK_APP_TOKEN", "xapp-test")
+
+    # 1. Default web_port is None
+    monkeypatch.delenv("WEB_PORT", raising=False)
+    monkeypatch.delenv("WEBGUI", raising=False)
+    cfg = BotConfig.from_env()
+    assert cfg.web_port is None
+
+    # 2. WEB_PORT configures port
+    monkeypatch.setenv("WEB_PORT", "8888")
+    cfg_web = BotConfig.from_env()
+    assert cfg_web.web_port == 8888
+
+    # 3. Invalid WEB_PORT caught on validate
+    cfg_invalid = BotConfig(
+        slack_bot_token="xoxb-test",
+        slack_app_token="xapp-test",
+        web_port=0,
+    )
+    with pytest.raises(BotConfigurationError, match="WEB_PORT"):
+        cfg_invalid.validate()
+
+
 def test_format_bot_preflight_error():
     issues = [
         (

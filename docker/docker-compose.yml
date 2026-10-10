@@ -14,7 +14,8 @@ services:
 
     # Only used if you switch back to bridge networking:
     ports:
-      - "${HUB_PORT:-8765}:8765"
+      - "${HUB_PORT:-8765}:${HUB_PORT:-8765}"
+      - "${WEB_PORT:-8080}:${WEB_PORT:-8080}"
 
     environment:
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:?set SLACK_BOT_TOKEN in .env}
@@ -25,9 +26,11 @@ services:
       # Restrict which channels the bot answers in (channel IDs, start with C...):
       # ALLOWED_CHANNELS: "C0123CHANNEL"
       # Hub / agent proxy:
-      # AGENT_TOKEN: "change-me-long-random-string"   # shared secret for agents
-      # HUB_PORT: "8765"
-      # HUB_ENABLED: "true"
+      AGENT_TOKEN: ${AGENT_TOKEN:-}
+      HUB_PORT: ${HUB_PORT:-8765}
+      HUB_ENABLED: ${HUB_ENABLED:-true}
+      # Real-time WebGUI dashboard port (e.g. WEB_PORT=8080 in .env; disabled if unset):
+      WEB_PORT: ${WEB_PORT:-${WEBGUI:-}}
       # SHELL_TIMEOUT: "120"
       # LOG_LEVEL: "INFO"
 

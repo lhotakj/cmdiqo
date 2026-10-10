@@ -102,6 +102,14 @@ class BotConfig:
     slack_bot_token: str = ""
     slack_app_token: str = ""
     agent_connection_notify: bool = True
+    web_port: int | None = None
+    webgui_port: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.web_port is None and self.webgui_port is not None:
+            self.web_port = self.webgui_port
+        elif self.webgui_port is None and self.web_port is not None:
+            self.webgui_port = self.web_port
 
     def validate(self) -> None:
         """Perform preflight checks on critical configuration."""
@@ -130,6 +138,14 @@ class BotConfig:
                     "Must be a valid TCP port number (e.g. 8765)",
                 )
             )
+        if self.web_port is not None and self.web_port <= 0:
+            issues.append(
+                (
+                    "WEB_PORT",
+                    f"Invalid WEB_PORT '{self.web_port}'",
+                    "Must be a valid TCP port number (e.g. 8080)",
+                )
+            )
         if issues:
             raise BotConfigurationError(issues)
 
@@ -156,6 +172,15 @@ class BotConfig:
         else:
             agent_notify = config_notify if config_notify_found else True
 
+        web_val = (os.getenv("WEB_PORT") or os.getenv("WEBGUI") or "").strip()
+        web_port = int(web_val) if web_val.isdigit() and int(web_val) > 0 else None
+
+        hub_port_str = os.getenv("HUB_PORT", str(DEFAULT_HUB_PORT))
+        try:
+            hub_port = int(hub_port_str)
+        except ValueError:
+            hub_port = -1
+
         return cls(
             commands_config_path=os.getenv("COMMANDS_CONFIG", DEFAULT_COMMANDS_CONFIG),
             shell_timeout=int(os.getenv("SHELL_TIMEOUT", str(DEFAULT_SHELL_TIMEOUT))),
@@ -171,11 +196,13 @@ class BotConfig:
             },
             hub_enabled=os.getenv("HUB_ENABLED", "true").lower() == "true",
             hub_host=os.getenv("HUB_HOST", DEFAULT_BIND_HOST),
-            hub_port=int(os.getenv("HUB_PORT", str(DEFAULT_HUB_PORT))),
+            hub_port=hub_port,
             agent_token=os.getenv("AGENT_TOKEN", ""),
             slack_bot_token=os.getenv("SLACK_BOT_TOKEN", ""),
             slack_app_token=os.getenv("SLACK_APP_TOKEN", ""),
             agent_connection_notify=agent_notify,
+            web_port=web_port,
+            webgui_port=web_port,
         )
 
 
@@ -470,7 +497,22 @@ WINDOWS_COMMAND_FALLBACKS: dict[str, tuple[str, str]] = {
 }
 
 
-async def execute_command(
+def _standardize_uptime_if_applicable(spec: dict[str, Any], output: str) -> str:
+    """Format uptime command output to standardized '<days>d <hours>h <m>m <s>s' with zero pads."""
+    if spec.get("name") == "host-uptime" or str(spec.get("trigger", "")).lower().endswith(" uptime"):
+        if isinstance(output, str) and not output.startswith(("Error", "ℹ️", ":warning:", "kind 'ps1'")):
+            try:
+                from bot.webgui import parse_and_standardize_uptime_checked
+
+                _, formatted, ok = parse_and_standardize_uptime_checked(output)
+                if ok:
+                    return f"Uptime: {formatted}"
+            except Exception:  # noqa: BLE001
+                pass
+    return output
+
+
+async def _execute_command_raw(
     spec: dict[str, Any],
     params: dict[str, str],
     hub: Hub | None = None,
@@ -571,6 +613,17 @@ async def execute_command(
             cmdline = format_params(sh_cmd, params, config=config)
             return await hub.exec(agent_name, "shell", cmdline, cwd=cwd, timeout=timeout)
         return "ℹ️ Sorry, this command is not available for the target OS"
+
+
+async def execute_command(
+    spec: dict[str, Any],
+    params: dict[str, str],
+    hub: Hub | None = None,
+    default_timeout: int = 120,
+) -> str:
+    """Route a command to the container or to an agent, standardizing uptime if applicable."""
+    res = await _execute_command_raw(spec, params, hub=hub, default_timeout=default_timeout)
+    return _standardize_uptime_if_applicable(spec, res)
 
 
 # ---------------------------------------------------------------------------
@@ -823,6 +876,7 @@ async def handle_command(
     allowed_channels: set[str] | None = None,
     default_timeout: int = 120,
     aliases: list[dict[str, Any]] | None = None,
+    webgui_state: Any = None,
 ) -> None:
     """Authorize and route incoming Slack messages."""
     if allowed_users and user_id not in allowed_users:
@@ -921,6 +975,15 @@ async def handle_command(
                     hub=hub,
                     default_timeout=default_timeout,
                 )
+                if webgui_state is not None and (spec.get("name") == "host-uptime" or str(spec.get("trigger", "")).lower().endswith(" uptime")):
+                    try:
+                        from bot.webgui import parse_and_standardize_uptime_checked
+
+                        boot_epoch, formatted, ok = parse_and_standardize_uptime_checked(output)
+                        if ok and target_name:
+                            webgui_state.update_agent_uptime(target_name, boot_epoch, formatted)
+                    except Exception:  # noqa: BLE001
+                        pass
             except Exception as exc:
                 log.exception("Command %s failed", spec["name"])
                 output = f"Error: {exc}"
@@ -951,6 +1014,7 @@ def _make_post_respond(respond: Any) -> Callable[[str], Coroutine[Any, Any, None
 
 def create_bot_app(
     config: BotConfig | None = None,
+    webgui_state: Any = None,
 ) -> tuple[AsyncApp, Hub | None, list[dict[str, Any]]]:
     """Factory creating and wiring the Slack AsyncApp and optional Hub."""
     if config is None:
@@ -976,7 +1040,43 @@ def create_bot_app(
     active_channels: set[str] = set()
 
     if hub is not None:
+        async def _probe_agent_uptime(
+            agent_name: str, hello_msg: dict[str, Any]
+        ) -> None:
+            if webgui_state is None:
+                return
+            platform_str = str(hello_msg.get("platform", "")).lower()
+            is_windows = "win" in platform_str
+            try:
+                if is_windows:
+                    cmd = (
+                        "$b = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime; $u = (Get-Date) - $b; "
+                        "'Uptime: {0}d {1}h {2}m {3}s (Booted: {4:yyyy-MM-dd HH:mm:ss})' -f [int]$u.TotalDays, $u.Hours, $u.Minutes, $u.Seconds, $b"
+                    )
+                    raw = await hub.exec(agent_name, "ps1", cmd, timeout=10)
+                else:
+                    raw = await hub.exec(agent_name, "shell", "uptime", timeout=10)
+                from bot.webgui import parse_and_standardize_uptime_checked
+
+                boot_epoch, formatted, ok = parse_and_standardize_uptime_checked(
+                    raw, "win" if is_windows else "linux"
+                )
+                if ok:
+                    webgui_state.update_agent_uptime(agent_name, boot_epoch, formatted)
+            except Exception as exc:  # noqa: BLE001
+                log.debug("Initial uptime probe for '%s' failed: %s", agent_name, exc)
+
         async def _on_hub_agent_event(event_type: str, name: str, hello: dict[str, Any]) -> None:
+            if webgui_state is not None:
+                if event_type == "connected":
+                    addr = ""
+                    if isinstance(getattr(hub, "agents", None), dict) and name in hub.agents:
+                        addr = str(hub.agents[name].get("addr", ""))
+                    webgui_state.register_agent(name, hello, addr=addr)
+                    asyncio.create_task(_probe_agent_uptime(name, hello))
+                elif event_type == "disconnected":
+                    webgui_state.unregister_agent(name)
+
             agent_notify = hello.get("agent_connection_notify") if isinstance(hello, dict) else None
             if agent_notify is False or (agent_notify is None and not config.agent_connection_notify):
                 return
@@ -1056,6 +1156,7 @@ def create_bot_app(
             allowed_channels=config.allowed_channels,
             default_timeout=config.shell_timeout,
             aliases=aliases,
+            webgui_state=webgui_state,
         )
 
     @app.command("/lan")
@@ -1073,6 +1174,7 @@ def create_bot_app(
             allowed_channels=config.allowed_channels,
             default_timeout=config.shell_timeout,
             aliases=aliases,
+            webgui_state=webgui_state,
         )
 
     @app.command("/help")
@@ -1089,6 +1191,7 @@ def create_bot_app(
             allowed_channels=config.allowed_channels,
             default_timeout=config.shell_timeout,
             aliases=aliases,
+            webgui_state=webgui_state,
         )
 
     @app.command("/wol")
@@ -1105,6 +1208,7 @@ def create_bot_app(
             allowed_channels=config.allowed_channels,
             default_timeout=config.shell_timeout,
             aliases=aliases,
+            webgui_state=webgui_state,
         )
 
     @app.command("/home")
@@ -1121,6 +1225,7 @@ def create_bot_app(
             allowed_channels=config.allowed_channels,
             default_timeout=config.shell_timeout,
             aliases=aliases,
+            webgui_state=webgui_state,
         )
 
     @app.event("message")
@@ -1148,6 +1253,7 @@ def create_bot_app(
             allowed_channels=config.allowed_channels,
             default_timeout=config.shell_timeout,
             aliases=aliases,
+            webgui_state=webgui_state,
         )
 
     return app, hub, commands
@@ -1193,7 +1299,19 @@ async def main() -> None:
     config = BotConfig.from_env()
     config.validate()
 
-    app, hub, _ = create_bot_app(config)
+    webgui_state = None
+    if config.web_port is not None:
+        from bot.webgui import HubWebLogHandler, WebGuiState, start_webgui_thread
+
+        webgui_state = WebGuiState()
+        hub_log_handler = HubWebLogHandler(webgui_state)
+        logging.getLogger().addHandler(hub_log_handler)
+        start_webgui_thread(
+            webgui_state, port=config.web_port, bot_version=__version__
+        )
+        log.info("Cmdiqo Hub WebGUI active on http://0.0.0.0:%d", config.web_port)
+
+    app, hub, _ = create_bot_app(config, webgui_state=webgui_state)
     tasks: list[asyncio.Task] = []
     if hub is not None:
         tasks.append(asyncio.create_task(hub.run()))
@@ -1204,10 +1322,36 @@ async def main() -> None:
     await asyncio.gather(*tasks)
 
 
+def print_bot_help() -> None:
+    """Print command-line help for cmdiqo-bot."""
+    print(f"""Usage: cmdiqo-bot [OPTIONS]
+
+  Cmdiqo Slack Bot & WebSocket Hub.
+
+Options:
+  -v, --version  Show the version and exit.
+  -h, --help     Show this message and exit.
+
+Environment Variables:
+  SLACK_BOT_TOKEN   Slack Bot User OAuth Token (xoxb-...) [Required]
+  SLACK_APP_TOKEN   Slack App-Level Token for Socket Mode (xapp-...) [Required]
+  ALLOWED_USERS     Comma-separated authorized Slack member IDs (e.g. U0123ABCDEF)
+  AGENT_TOKEN       Shared authentication token for remote agents
+  WEB_PORT          Port for real-time WebGUI dashboard (e.g. 8080)
+  HUB_PORT          WebSocket Hub listen port (default: 8765)
+  HUB_ENABLED       Enable Hub server (default: true)
+  COMMANDS_CONFIG   Path to commands.yaml (default: config/commands.yaml)
+  LOG_LEVEL         Log verbosity: DEBUG, INFO, WARNING, ERROR (default: INFO)
+""")
+
+
 def run_main() -> None:
     """Entry point for cmdiqo-bot with preflight error handling and clean exit."""
     if len(sys.argv) > 1 and sys.argv[1].lower() in ("-v", "--version", "version"):
         print(f"cmdiqo-bot {get_version()}")
+        sys.exit(0)
+    if len(sys.argv) > 1 and sys.argv[1].lower() in ("-h", "--help", "help"):
+        print_bot_help()
         sys.exit(0)
     try:
         asyncio.run(main())

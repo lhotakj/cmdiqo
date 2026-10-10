@@ -18,8 +18,10 @@ TEST_CASE("Protocol: HelloMessage serialization", "[protocol]") {
     REQUIRE(j["agent_connection_notify"] == true);
 
     hello.agent_connection_notify = false;
-    auto j_false = hello.to_json();
-    REQUIRE(j_false["agent_connection_notify"] == false);
+    hello.arch = "x86_64";
+    auto j_with_arch = hello.to_json();
+    REQUIRE(j_with_arch["agent_connection_notify"] == false);
+    REQUIRE(j_with_arch["arch"] == "x86_64");
 }
 
 TEST_CASE("Protocol: ExecRequest deserialization valid", "[protocol]") {

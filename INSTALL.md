@@ -210,7 +210,8 @@ You do not need to clone the entire development repository to run the bot. You c
 
        # Only used if switching to bridge networking:
        ports:
-         - "${HUB_PORT:-8765}:8765"
+         - "${HUB_PORT:-8765}:${HUB_PORT:-8765}"
+         - "${WEB_PORT:-8080}:${WEB_PORT:-8080}"
 
        environment:
          SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:?set SLACK_BOT_TOKEN in .env}
@@ -221,8 +222,9 @@ You do not need to clone the entire development repository to run the bot. You c
          # ALLOWED_CHANNELS: "C0123CHANNEL"
          # Shared secret for remote LAN agents:
          AGENT_TOKEN: ${AGENT_TOKEN:-}
-         HUB_PORT: "8765"
+         HUB_PORT: ${HUB_PORT:-8765}
          HUB_ENABLED: "true"
+         # WEB_PORT: "8080"  # Optional: Start integrated real-time WebGUI
          SHELL_TIMEOUT: "120"
          LOG_LEVEL: "INFO"
 
@@ -249,6 +251,14 @@ You do not need to clone the entire development repository to run the bot. You c
 
    # Shared Secret for Agents (Must match on all agent machines)
    AGENT_TOKEN=your-random-agent-token-here
+
+   # Optional WebSocket Hub Port Override (Default is 8765)
+   # export HUB_PORT=8765
+   # HUB_PORT=8765
+
+   # Optional Real-time WebGUI Dashboard Port (Disabled if unset)
+   # export WEB_PORT=8080
+   # WEB_PORT=8080
    ```
    ```bash
    chmod 600 .env

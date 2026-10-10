@@ -372,6 +372,7 @@ async def run_agent(
                             "name": config.name,
                             "version": get_version(),
                             "platform": f"{platform.system()}/{platform.release()}",
+                            "arch": platform.machine(),
                             "agent_connection_notify": config.agent_connection_notify,
                         }
                     )

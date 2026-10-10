@@ -402,7 +402,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-p", "--port",
         type=int,
-        help="Hub WebSocket port (default: 8765).",
+        help="Hub WebSocket port (default: 8765, env: HUB_PORT).",
     )
     parser.add_argument(
         "-t", "--token",

@@ -102,5 +102,6 @@ struct AgentConfig {
  * @return Platform identifier string.
  */
 [[nodiscard]] std::string get_platform_string();
+[[nodiscard]] std::string get_arch_string();
 
 }  // namespace cmdiqo::agent

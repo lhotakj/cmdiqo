@@ -84,6 +84,24 @@ std::string get_platform_string() {
 #endif
 }
 
+std::string get_arch_string() {
+#if defined(_WIN32)
+    #if defined(_M_ARM64)
+        return "ARM64";
+    #elif defined(_M_X64) || defined(_WIN64)
+        return "AMD64";
+    #else
+        return "x86";
+    #endif
+#else
+    struct utsname buf{};
+    if (uname(&buf) == 0) {
+        return std::string(buf.machine);
+    }
+    return "unknown";
+#endif
+}
+
 std::string AgentConfig::format_preflight_error(const std::vector<ConfigIssue>& issues) {
     const size_t width = 76;
     const std::string sep(width, '=');

@@ -1,5 +1,16 @@
 # Example standalone docker-compose.yml for Cmdiqo
 # Deploy this file alongside your .env file and a ./config directory.
+#
+# Ports Explanation:
+#   - HUB_PORT (default: 8765): The WebSocket port on which remote agents connect to the Hub.
+#   - WEB_PORT (default: disabled, e.g. 8080): Optional HTTP port for the integrated real-time WebGUI.
+#
+# Networking Note:
+#   - Host networking (`network_mode: host`) is recommended on Linux so that ARP LAN discovery
+#     (`/lan devices list`) can directly inspect local physical network interfaces without bridge isolation.
+#   - If you switch to bridge networking (e.g. comment out `network_mode: host`), the `ports`
+#     mappings below will forward both the WebSocket Hub and WebGUI dashboard to your host.
+
 services:
   cmdiqo-bot:
     image: lhotakj/cmdiqo-bot:latest
@@ -11,26 +22,45 @@ services:
 
     # Only used if switching to bridge networking:
     ports:
-      - "${HUB_PORT:-8765}:8765"
+      # WebSocket Hub listen port for inbound agent connections
+      - "${HUB_PORT:-8765}:${HUB_PORT:-8765}"
+      # Real-time WebGUI dashboard HTTP port (if WEB_PORT is enabled)
+      - "${WEB_PORT:-8080}:${WEB_PORT:-8080}"
 
     environment:
+      # Slack Socket Mode credentials (Required)
       SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:?set SLACK_BOT_TOKEN in .env}
       SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:?set SLACK_APP_TOKEN in .env}
-      # Restrict commands to specific Slack user IDs:
+
+      # Security: Restrict command execution to specific Slack member IDs (Recommended)
+      # Get Member ID: Slack -> Right click user -> Copy member ID (starts with U...)
       # ALLOWED_USERS: "U0123ABCDEF,U0456GHIJKL"
-      # Restrict bot to specific channels:
+
+      # Optional: Restrict bot replies to specific channel IDs (starts with C...)
       # ALLOWED_CHANNELS: "C0123CHANNEL"
-      # Shared secret for remote LAN agents connecting to the embedded Hub:
-      # AGENT_TOKEN: "change-me-long-random-string"
-      # HUB_PORT: "8765"
-      # HUB_ENABLED: "true"
+
+      # Shared secret for remote LAN agents connecting to the embedded WebSocket Hub
+      AGENT_TOKEN: ${AGENT_TOKEN:-}
+
+      # WebSocket Hub listen port (default: 8765). Agents connect to ws://<server-ip>:<HUB_PORT>
+      HUB_PORT: ${HUB_PORT:-8765}
+
+      # Enable or disable the embedded WebSocket Hub server (default: true)
+      HUB_ENABLED: ${HUB_ENABLED:-true}
+
+      # Real-time WebGUI dashboard port (e.g. WEB_PORT=8080 or WEB_PORT=9999; disabled if unset)
+      WEB_PORT: ${WEB_PORT:-${WEBGUI:-}}
+
+      # Shell command execution timeout in seconds (default: 120)
       # SHELL_TIMEOUT: "120"
+
+      # Logging verbosity: DEBUG, INFO, WARNING, ERROR (default: INFO)
       # LOG_LEVEL: "INFO"
 
     volumes:
-      # Host Docker daemon management:
+      # Host Docker daemon socket for /host home docker ... commands
       - /var/run/docker.sock:/var/run/docker.sock
-      # Host docker compose project directory:
+      # Host docker compose project directory (optional)
       - /docker:/docker
-      # External custom command configuration:
+      # External custom command configuration (optional commands.yaml)
       - ./config:/config:ro

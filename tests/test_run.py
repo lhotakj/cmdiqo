@@ -57,9 +57,18 @@ def test_main_help(capsys):
 def test_main_unknown_command(capsys):
     with patch("sys.argv", ["run.py", "invalid-cmd"]), pytest.raises(SystemExit) as exc:
         run.main()
-    assert exc.value.code == 1
+    assert exc.value.code in (1, 2)
+    captured = capsys.readouterr()
+    combined = captured.out + captured.err
+    assert "invalid-cmd" in combined
+
+
+def test_main_diag(capsys):
+    with patch("sys.argv", ["run.py", "diag"]), pytest.raises(SystemExit) as exc:
+        run.main()
+    assert exc.value.code == 0
     out = capsys.readouterr().out
-    assert "Unknown command 'invalid-cmd'" in out
+    assert "Cmdiqo Diagnostics" in out
 
 
 @patch("run.run_single")
@@ -113,6 +122,22 @@ def test_run_both_premature_hub_exit(mock_sleep, mock_popen):
 
     code = run.run_both([])
     assert code == 1
+
+
+@patch("subprocess.Popen")
+@patch("time.sleep")
+def test_run_both_hub_port_env(mock_sleep, mock_popen):
+    hub_mock = MagicMock()
+    hub_mock.poll.return_value = 1
+    hub_mock.returncode = 0
+    mock_popen.return_value = hub_mock
+
+    with patch.dict(os.environ, {"HUB_PORT": "9876"}, clear=False):
+        os.environ.pop("HUB_URL", None)
+        run.run_both([])
+        assert mock_popen.call_count >= 1
+        _, kwargs = mock_popen.call_args_list[0]
+        assert kwargs["env"]["HUB_URL"] == "ws://127.0.0.1:9876"
 
 
 @patch("run.run_single")

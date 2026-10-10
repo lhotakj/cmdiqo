@@ -49,6 +49,7 @@ nothing to expose, TLS handled for you. Ideal for a home server.
   - **Windows Agent (x86_64)**: only **~3.3 MB RAM** working set
   - **Windows Installer GUI**: only **~5.2 MB RAM**
   - Instant cold boot (<10 ms), zero Python runtime dependency on target nodes
+- 🌐 **Integrated Real-time WebGUI** — optional single-page dashboard (`WEB_PORT=8080`) styled with Obsidian Cyberpunk design, displaying connected agents with 32x32 WebP architecture badges (`ARM64`, `ARMv6`, `WIN64`, `Linux`), standardized zero-padded uptime with client-side 1Hz local refresh, and last 50 events live-streamed via Server-Sent Events (SSE).
 
 ## Repository layout
 
@@ -129,6 +130,12 @@ SLACK_APP_TOKEN=xapp-your-app-token
 
 # OPTIONAL: default timeout for shell commands in seconds
 # SHELL_TIMEOUT=120
+
+# OPTIONAL: WebSocket Hub port override (default is 8765)
+# export HUB_PORT=8765
+
+# OPTIONAL: start real-time WebGUI dashboard on specified port (e.g. 8080)
+# export WEB_PORT=8080
 ```
 
 Edit `config/commands.yaml` to define your commands and aliases (see **Adding your own commands** below). The defaults give you:
@@ -679,7 +686,8 @@ docker push youruser/cmdiqo-bot:latest
 | `AGENT_TOKEN`      | no (recommended) | *(empty)*      | Shared secret for hub agent connections         |
 | `HUB_ENABLED`      | no       | `true`                 | Enable/disable the agent hub                          |
 | `HUB_HOST`         | no       | `0.0.0.0`              | Hub bind address                                      |
-| `HUB_PORT`         | no       | `8765`                 | Hub port (agents connect here)                        |
+| `HUB_PORT`         | no       | `8765`                 | WebSocket Hub port (agents connect here, e.g. `export HUB_PORT=8765`) |
+| `WEB_PORT`         | no       | *(disabled)*           | Optional: Port to host integrated real-time WebGUI (e.g. `export WEB_PORT=8080`) |
 | `LOG_LEVEL`        | no       | `INFO`                 | Logging level                             |
 
 ## Security notes
