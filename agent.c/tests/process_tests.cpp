@@ -64,20 +64,21 @@ TEST_CASE("Process: Timeout watchdog cancellation", "[process]") {
     REQUIRE(res.error->find("timed out") != std::string::npos);
 }
 
-TEST_CASE("Process: build_argv ps1 Base64 encoding", "[process]") {
+TEST_CASE("Process: build_argv ps1 arguments", "[process]") {
     auto ps_argv = cmdiqo::agent::build_argv("ps1", "Write-Output \"test_quoted_output_456\"");
-    REQUIRE(!ps_argv.empty());
-#if defined(_WIN32)
     REQUIRE(ps_argv.size() == 5);
+#if defined(_WIN32)
     REQUIRE(ps_argv[0] == "powershell.exe");
     REQUIRE(ps_argv[1] == "-NoProfile");
     REQUIRE(ps_argv[2] == "-NonInteractive");
     REQUIRE(ps_argv[3] == "-EncodedCommand");
     REQUIRE(!ps_argv[4].empty());
 #else
-    REQUIRE(ps_argv.size() == 3);
     REQUIRE(ps_argv[0] == "pwsh");
-    REQUIRE(ps_argv[1] == "-Command");
+    REQUIRE(ps_argv[1] == "-NoProfile");
+    REQUIRE(ps_argv[2] == "-NonInteractive");
+    REQUIRE(ps_argv[3] == "-Command");
+    REQUIRE(ps_argv[4] == "Write-Output \"test_quoted_output_456\"");
 #endif
 }
 
