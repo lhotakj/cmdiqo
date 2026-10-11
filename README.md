@@ -290,8 +290,9 @@ Cmdiqo features a built-in, dynamically generated command manual:
 - `/help windows` — Windows agent PowerShell command specifications.
 - `/help parental` — Guidance for domain distraction blocking in hosts file.
 - `/help blockapp` or `/help appblock` — Guidance for executable process blocking via IFEO & Flatpak.
+- `/help restrict` — Guidance for user logon hours restriction, schedule syntax (M-F,08:00-20:00), and resetting to 24/7 unlimited (/restrict off).
 - `/help home` or `/help wol` — Details on configured aliases and their targets.
-- Appending `help` to any category prefix (e.g. `/lan help`, `/host help`, `/docker help`, `/parental help`, `/blockapp help`) directly routes to that topic's detailed breakdown.
+- Appending `help` to any category prefix (e.g. `/lan help`, `/host help`, `/docker help`, `/parental help`, `/blockapp help`, `/restrict help`) directly routes to that topic's detailed breakdown.
 
 ### Adding Your Own Commands (`config/commands.yaml`)
 
@@ -364,6 +365,18 @@ commands:
         - roblox.com
         - minecraft.net
         - discord.com
+
+  # Logon hours restriction (Windows SAM net user /time and Linux PAM time.conf)
+  - name: host-restrict-set
+    trigger: "/host {host} restrict set {schedule}"
+    description: "Enforce allowed logon hours on {host} (e.g. M-F,08:00-20:00;Sa-Su,09:00-21:00)"
+    details: "Restricts allowed logon hours on remote host. Use '/host {host} restrict status' to inspect, and '/host {host} restrict off' to restore 24/7 unlimited access."
+    examples:
+      - "/host PC-KIDS restrict set M-F,08:00-20:00;Sa-Su,09:00-21:00"
+      - "/host PC-KIDS restrict status"
+      - "/host PC-KIDS restrict off"
+    command:
+      python: "commands.restrict:manage_restrict"
 ```
 
 ### Python Command Handlers
@@ -614,7 +627,7 @@ commands:
     description: "Check storage on host"
     command:
       shell: "df -h"
-      ps1: 'Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID, VolumeName, @{Name=''Total_GB'';Expression={[math]::Round($_.Size/1GB,2)}}, @{Name=''Free_GB'';Expression={[math]::Round($_.FreeSpace/1GB,2)}}, @{Name=''Used_GB'';Expression={[math]::Round(($_.Size - $_.FreeSpace)/1GB,2)}} | Format-Table -AutoSize'
+      ps1: 'Get-CimInstance Win32_LogicalDisk -Filter ''DriveType=3'' | Select-Object DeviceID, VolumeName, @{Name=''Total_GB'';Expression={[math]::Round($_.Size/1GB,2)}}, @{Name=''Free_GB'';Expression={[math]::Round($_.FreeSpace/1GB,2)}}, @{Name=''Used_GB'';Expression={[math]::Round(($_.Size - $_.FreeSpace)/1GB,2)}} | Format-Table -AutoSize'
 
   # Windows-only updates inspection
   - name: host-win-updates

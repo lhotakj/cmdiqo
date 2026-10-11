@@ -156,7 +156,7 @@ Quick setup alternatives:
 
 * **Command Line Construction:**
   * If `kind == "ps1"`:
-    * Windows: `powershell.exe -NoProfile -NonInteractive -Command "<cmd>"`
+    * Windows: `powershell.exe -NoProfile -NonInteractive -EncodedCommand <base64_cmd>`
     * Linux: `pwsh -NoProfile -NonInteractive -Command "<cmd>"`
   * If `kind == "shell"` (or fallback):
     * Windows: `cmd.exe /c "<cmd>"`

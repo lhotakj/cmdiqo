@@ -63,3 +63,12 @@ TEST_CASE("Process: Timeout watchdog cancellation", "[process]") {
     REQUIRE(res.error.has_value());
     REQUIRE(res.error->find("timed out") != std::string::npos);
 }
+
+#if defined(_WIN32)
+TEST_CASE("Process: PowerShell execution with quotes", "[process]") {
+    auto res = cmdiqo::agent::execute_process("ps1", "Write-Output \"test_quoted_output_456\"", std::nullopt, 10);
+    REQUIRE(res.ok == true);
+    REQUIRE(res.returncode == 0);
+    REQUIRE(res.output.find("test_quoted_output_456") != std::string::npos);
+}
+#endif

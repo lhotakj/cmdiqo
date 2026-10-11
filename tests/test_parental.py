@@ -61,9 +61,10 @@ def test_build_parental_script_windows_on():
     assert "$action = 'on'.ToLower()" in script
     assert "# parental:start" in script
     assert "# parental:end" in script
-    assert "0.0.0.0 $d" in script
+    assert "'0.0.0.0 ' + $d" in script
     assert "Clear-DnsClientCache" in script
     assert "ipconfig /flushdns" in script
+    assert '"' not in script
 
 
 def test_build_parental_script_windows_off():
@@ -71,13 +72,15 @@ def test_build_parental_script_windows_off():
     assert "$action = 'off'.ToLower()" in script
     assert "# parental:start" in script
     assert "# parental:end" in script
-    assert "# 0.0.0.0 $d" in script
+    assert "'# 0.0.0.0 ' + $d" in script
+    assert '"' not in script
 
 
 def test_build_parental_script_windows_status():
     script = build_parental_script_windows("status", ["youtube.com"])
     assert "$action = 'status'.ToLower()" in script
-    assert 'Write-Output "STATUS:NOT_CONFIGURED"' in script
+    assert "Write-Output 'STATUS:NOT_CONFIGURED'" in script
+    assert '"' not in script
 
 
 def test_build_parental_script_linux_on():

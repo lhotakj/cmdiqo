@@ -110,6 +110,100 @@ commands:
     command:
       python: "commands.users:manage_users"
 
+  - name: host-screentime
+    trigger: "/host {host} screentime"
+    description: "Show active logged-in user sessions, state, and idle time on {host}"
+    details: "Queries active logged in console and remote desktop sessions on Windows (quser) or Linux (w/who), displaying username, session state, idle time, and logon timestamp."
+    examples:
+      - "/host PC-KIDS screentime"
+      - "/host home screentime"
+    command:
+      shell: "w -h 2>/dev/null || who -u"
+      ps1: "if (Get-Command quser.exe -ErrorAction SilentlyContinue) { quser.exe } else { Get-CimInstance Win32_LoggedOnUser | Select-Object -ExpandProperty Antecedent | Where-Object { $_ -like '*Name=*' } | Select-Object -Unique }"
+
+  - name: host-restrict-user-set
+    trigger: "/host {host} restrict {user} set {schedule}"
+    description: "Enforce allowed logon hours for {user} on {host}"
+    details: "Restricts allowed login hours for a specific user on Windows (net user /time) or Linux (/etc/security/time.conf). Days: M, T, W, Th, F, Sa, Su. Range: M-F, Sa-Su. Hours: 24h format (e.g. 08:00-20:00). Separate multiple rules with semicolon."
+    examples:
+      - "/host PC-KIDS restrict jonas set M-F,08:00-20:00;Sa-Su,09:00-21:00"
+      - "/host PC-KIDS restrict jonas set M-F,16:00-20:00"
+    command:
+      python: "commands.restrict:manage_restrict"
+
+  - name: host-restrict-user-status
+    trigger: "/host {host} restrict {user} status"
+    description: "Check allowed logon hours status for {user} on {host}"
+    details: "Displays the active logon hours restrictions for a specific user on the target host."
+    examples:
+      - "/host PC-KIDS restrict jonas status"
+    command:
+      python: "commands.restrict:manage_restrict"
+
+  - name: host-restrict-user-off
+    trigger: "/host {host} restrict {user} off"
+    description: "Remove logon hours restriction for {user} on {host} (restore 24/7)"
+    details: "Clears logon time limits for a specific user, restoring unlimited 24/7 access (/time:all)."
+    examples:
+      - "/host PC-KIDS restrict jonas off"
+    command:
+      python: "commands.restrict:manage_restrict"
+
+  - name: host-restrict-set
+    trigger: "/host {host} restrict set {schedule}"
+    description: "Enforce allowed logon hours on {host}"
+    details: "Restricts allowed login hours for non-admin accounts on Windows (net user /time) or Linux (/etc/security/time.conf). Days: M, T, W, Th, F, Sa, Su. Range: M-F, Sa-Su. Hours: 24h format (e.g. 08:00-20:00). Separate multiple rules with semicolon."
+    examples:
+      - "/host PC-KIDS restrict set M-F,08:00-20:00;Sa-Su,09:00-21:00"
+      - "/host PC-KIDS restrict set M-F,16:00-20:00"
+    command:
+      python: "commands.restrict:manage_restrict"
+
+  - name: host-restrict-status
+    trigger: "/host {host} restrict status"
+    description: "Check allowed logon hours status for accounts on {host}"
+    details: "Displays the active logon hours restrictions for user accounts on the target host."
+    examples:
+      - "/host PC-KIDS restrict status"
+    command:
+      python: "commands.restrict:manage_restrict"
+
+  - name: host-restrict-off
+    trigger: "/host {host} restrict off"
+    description: "Remove logon hours restrictions on {host} (restore 24/7)"
+    details: "Clears all logon time limits on user accounts, restoring unlimited 24/7 access (/time:all)."
+    examples:
+      - "/host PC-KIDS restrict off"
+    command:
+      python: "commands.restrict:manage_restrict"
+
+  - name: direct-restrict-set
+    trigger: "/restrict {host} set {schedule}"
+    description: "Enforce allowed logon hours on {host} (shortcut)"
+    details: "Shortcut for /host {host} restrict set {schedule}."
+    examples:
+      - "/restrict PC-KIDS set M-F,08:00-20:00;Sa-Su,09:00-21:00"
+    command:
+      python: "commands.restrict:manage_restrict"
+
+  - name: direct-restrict-status
+    trigger: "/restrict {host} status"
+    description: "Check allowed logon hours status on {host} (shortcut)"
+    details: "Shortcut for /host {host} restrict status."
+    examples:
+      - "/restrict PC-KIDS status"
+    command:
+      python: "commands.restrict:manage_restrict"
+
+  - name: direct-restrict-off
+    trigger: "/restrict {host} off"
+    description: "Remove logon hours restrictions on {host} (shortcut)"
+    details: "Shortcut for /host {host} restrict off."
+    examples:
+      - "/restrict PC-KIDS off"
+    command:
+      python: "commands.restrict:manage_restrict"
+
   # ---- System Health & Performance (OS Agnostic) ---------------------------
   - name: host-uptime
     trigger: "/host {host} uptime"
@@ -142,7 +236,7 @@ commands:
       - "/host AMD disk"
     command:
       shell: "df -h"
-      ps1: 'Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID, VolumeName, @{Name=''Total_GB'';Expression={[math]::Round($_.Size/1GB,2)}}, @{Name=''Free_GB'';Expression={[math]::Round($_.FreeSpace/1GB,2)}}, @{Name=''Used_GB'';Expression={[math]::Round(($_.Size - $_.FreeSpace)/1GB,2)}}, @{Name=''PercentFree'';Expression={[math]::Round(($_.FreeSpace/$_.Size)*100,1)}} | Format-Table -AutoSize'
+      ps1: 'Get-CimInstance Win32_LogicalDisk -Filter ''DriveType=3'' | Select-Object DeviceID, VolumeName, @{Name=''Total_GB'';Expression={[math]::Round($_.Size/1GB,2)}}, @{Name=''Free_GB'';Expression={[math]::Round($_.FreeSpace/1GB,2)}}, @{Name=''Used_GB'';Expression={[math]::Round(($_.Size - $_.FreeSpace)/1GB,2)}}, @{Name=''PercentFree'';Expression={[math]::Round(($_.FreeSpace/$_.Size)*100,1)}} | Format-Table -AutoSize'
 
   - name: host-top
     trigger: "/host {host} top"
@@ -177,6 +271,76 @@ commands:
     command:
       shell: "shutdown -h +1 'Shutdown requested from Slack'"
       ps1: "shutdown /s /t 10 /c 'Shutdown requested from Slack'"
+    timeout: 60
+
+  - name: host-lock
+    trigger: "/host {host} lock"
+    description: "Lock active graphical user session on {host}"
+    details: "Instantly locks the active graphical desktop workstation session on Windows or Linux without closing applications or losing unsaved work."
+    examples:
+      - "/host PC-KIDS lock"
+      - "/host home lock"
+    command:
+      shell: "loginctl lock-sessions 2>/dev/null && echo 'Workstation session locked.' || echo 'Workstation lock signal sent.'"
+      ps1: "rundll32.exe user32.dll,LockWorkStation; 'Workstation locked.'"
+
+  - name: host-msg
+    trigger: "/host {host} msg {message}"
+    description: "Send desktop notification or popup message to {host}"
+    details: "Displays a desktop notification or popup dialog on the user screen of the target machine."
+    examples:
+      - "/host PC-KIDS msg Dinner is ready!"
+      - "/host PC-KIDS msg Please save your game."
+    command:
+      shell: "notify-send 'Cmdiqo Alert' '{message}' 2>/dev/null || wall 'Cmdiqo Alert: {message}' 2>/dev/null || true; echo 'Message delivered: {message}'"
+      ps1: "if (Get-Command msg.exe -ErrorAction SilentlyContinue) { msg.exe * '{message}' 2>$null } else { $w = New-Object -ComObject Wscript.Shell; $w.Popup('{message}', 7, 'Cmdiqo Alert', 64) | Out-Null }; Write-Output ('Message delivered: ' + '{message}')"
+
+  - name: host-events
+    trigger: "/host {host} events"
+    description: "Show recent system error and warning events on {host}"
+    details: "Retrieves the most recent system warnings and errors from the Windows Event Log (System) or Linux systemd journal."
+    examples:
+      - "/host home events"
+      - "/host AMD events"
+    command:
+      shell: "journalctl -p 4 -xb -n 12 --no-pager 2>/dev/null || dmesg -l err,warn 2>/dev/null | tail -n 12"
+      ps1: "Get-WinEvent -FilterHashtable @{LogName='System'; Level=1,2,3} -MaxEvents 10 -ErrorAction SilentlyContinue | Select-Object TimeCreated, Id, LevelDisplayName, @{Name='Message';Expression={$_.Message.Split([char]10)[0].Trim()}} | Format-Table -AutoSize"
+    timeout: 60
+
+  # ---- Host Network & Diagnostics (OS Agnostic) ----------------------------
+  - name: host-ping
+    trigger: "/host {host} ping {target}"
+    description: "Ping an IP or domain from {host} perspective"
+    details: "Sends ICMP echo requests from the remote agent host to verify network routing, latency, and DNS resolution from that specific machine's network interface."
+    examples:
+      - "/host home ping 1.1.1.1"
+      - "/host AMD ping google.com"
+      - "/host PC-KIDS ping router.lan"
+    command:
+      shell: "ping -c 4 -W 2 {target}"
+      ps1: "Test-Connection -ComputerName '{target}' -Count 4 | Select-Object Address, ResponseTime, StatusCode | Format-Table -AutoSize"
+
+  - name: host-ports
+    trigger: "/host {host} ports"
+    description: "List listening network ports and owning processes on {host}"
+    details: "Inspects open listening TCP and UDP sockets and reports the local port, bind address, PID, and owning process name."
+    examples:
+      - "/host home ports"
+      - "/host AMD ports"
+    command:
+      shell: "ss -tulnp 2>/dev/null | grep LISTEN | head -n 30 || netstat -tuln 2>/dev/null | grep LISTEN | head -n 30"
+      ps1: "Get-NetTCPConnection -State Listen | Select-Object -First 25 LocalAddress, LocalPort, OwningProcess, @{Name='Process';Expression={(Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName}} | Sort-Object LocalPort | Format-Table -AutoSize"
+
+  - name: host-speedtest
+    trigger: "/host {host} speedtest"
+    description: "Run internet download speed & latency test directly on {host}"
+    details: "Downloads a benchmark payload from Cloudflare CDN and computes real-time download throughput in Megabits per second (Mbps)."
+    examples:
+      - "/host home speedtest"
+      - "/host AMD speedtest"
+    command:
+      shell: "res=$(curl -s -w '%{time_total} %{speed_download}' -o /dev/null https://speed.cloudflare.com/__down?bytes=10000000 2>/dev/null); t=$(echo $res | cut -d' ' -f1); s=$(echo $res | cut -d' ' -f2); mbps=$(awk \"BEGIN {printf \\\"%.2f\\\", ($s * 8) / 1000000}\" 2>/dev/null || echo 'N/A'); echo \"Cloudflare Speedtest: 10 MB in ${t}s (${mbps} Mbps)\""
+      ps1: "$url = 'https://speed.cloudflare.com/__down?bytes=10000000'; $sw = [System.Diagnostics.Stopwatch]::StartNew(); $wc = New-Object System.Net.WebClient; $null = $wc.DownloadData($url); $sw.Stop(); $sec = $sw.Elapsed.TotalSeconds; $mbps = [math]::Round((10 * 8) / $sec, 2); 'Cloudflare Speedtest: 10 MB downloaded in {0:N2}s ({1} Mbps)' -f $sec, $mbps"
     timeout: 60
 
   # ---- Service Management (OS Agnostic) -------------------------------------

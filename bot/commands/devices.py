@@ -111,7 +111,7 @@ def list_devices(
     with ThreadPoolExecutor(max_workers=min(32, max(len(ips), 1))) as executor:
         hostnames = list(executor.map(resolver, ips))
 
-    rows = [(ip, mac, host) for (ip, mac, _), host in zip(raw_rows, hostnames)]
+    rows = [(ip, mac, host) for (ip, mac, _), host in zip(raw_rows, hostnames, strict=True)]
     return format_device_table(rows)
 
 

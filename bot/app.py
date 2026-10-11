@@ -40,6 +40,11 @@ log = logging.getLogger("cmdiqo-bot")
 
 MAX_BLOCK = 3500  # Slack message limit is ~4000 chars
 SAFE_PARAM_RE = re.compile(r"^[a-zA-Z0-9_\-\.:]+$")
+SAFE_SCHEDULE_RE = re.compile(
+    r"^(?:all|(?:(?:(?:[A-Za-z]{1,2}(?:-[A-Za-z]{1,2})?|\*),\d{1,2}(?::\d{2})?(?:am|pm)?-\d{1,2}(?::\d{2})?(?:am|pm)?)(?:;\s*)?)+)$",
+    re.IGNORECASE,
+)
+SAFE_MESSAGE_RE = re.compile(r"^[\w\s\.\,\!\?\-\:\;\(\)\'\"\/@#%+=]+$")
 DEFAULT_COMMANDS_CONFIG = (
     "/config/commands.yaml"
     if os.path.exists("/config/commands.yaml")
@@ -240,7 +245,13 @@ def trigger_to_regex(trigger: str) -> re.Pattern[str]:
     for part in re.split(r"(\{\w+\})", trigger):
         m = re.fullmatch(r"\{(\w+)\}", part)
         if m:
-            out += rf"(?P<{m.group(1)}>[a-zA-Z0-9_\-\.:]+)"
+            name = m.group(1)
+            if name in ("schedule", "time", "times"):
+                out += rf"(?P<{name}>[a-zA-Z0-9_\-\.:,;]+)"
+            elif name in ("message", "msg", "text"):
+                out += rf"(?P<{name}>.+)"
+            else:
+                out += rf"(?P<{name}>[a-zA-Z0-9_\-\.:]+)"
         else:
             out += re.escape(part)
     return re.compile(out + r"\s*$", re.IGNORECASE)
@@ -249,7 +260,17 @@ def trigger_to_regex(trigger: str) -> re.Pattern[str]:
 def validate_params(params: dict[str, str]) -> None:
     """Validate that parameters do not contain shell injection characters."""
     for key, val in params.items():
-        if not SAFE_PARAM_RE.match(val):
+        if key in ("schedule", "time", "times"):
+            if not SAFE_SCHEDULE_RE.match(val):
+                raise ValueError(
+                    f"Invalid parameter value for '{key}': '{val}' contains unsafe schedule characters."
+                )
+        elif key in ("message", "msg", "text"):
+            if not SAFE_MESSAGE_RE.match(val):
+                raise ValueError(
+                    f"Invalid parameter value for '{key}': contains unsafe message characters."
+                )
+        elif not SAFE_PARAM_RE.match(val):
             raise ValueError(
                 f"Invalid parameter value for '{key}': '{val}' contains unsafe characters."
             )
@@ -497,7 +518,7 @@ WINDOWS_COMMAND_FALLBACKS: dict[str, tuple[str, str]] = {
     "df -h": (
         "ps1",
         (
-            'Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | Select-Object DeviceID, VolumeName, '
+            "Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | Select-Object DeviceID, VolumeName, "
             "@{Name='Total_GB';Expression={[math]::Round($_.Size/1GB,2)}}, "
             "@{Name='Free_GB';Expression={[math]::Round($_.FreeSpace/1GB,2)}}, "
             "@{Name='Used_GB';Expression={[math]::Round(($_.Size - $_.FreeSpace)/1GB,2)}}, "

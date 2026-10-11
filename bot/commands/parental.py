@@ -161,48 +161,49 @@ def build_parental_script_windows(action: str, domains: list[str] | None = None)
     domain_list = domains if domains is not None else PARENTAL_DOMAINS
     domain_items = ", ".join(f"'{d}'" for d in domain_list)
 
-    return f"""$ErrorActionPreference = "Stop"
+    return f"""$ErrorActionPreference = 'Stop'
 try {{
     $action = '{action}'.ToLower()
-    $hostsPath = "$env:SystemRoot\\System32\\drivers\\etc\\hosts"
-    $content = if (Test-Path $hostsPath) {{ [IO.File]::ReadAllText($hostsPath) }} else {{ "" }}
-    $hasBlock = $content -match "(?s)# parental:start.*?# parental:end"
+    $hostsPath = Join-Path $env:SystemRoot 'System32\\drivers\\etc\\hosts'
+    $content = if (Test-Path $hostsPath) {{ [IO.File]::ReadAllText($hostsPath) }} else {{ '' }}
+    $hasBlock = $content -match '(?s)# parental:start.*?# parental:end'
 
-    if ($action -eq "status") {{
+    if ($action -eq 'status') {{
         if (-not $hasBlock) {{
-            Write-Output "STATUS:NOT_CONFIGURED"
+            Write-Output 'STATUS:NOT_CONFIGURED'
             exit 0
         }}
-        $block = [regex]::Match($content, "(?s)# parental:start(.*?)# parental:end").Groups[1].Value
-        $active = @([regex]::Matches($block, "(?m)^\\s*0\\.0\\.0\\.0\\s+")).Count
-        $commented = @([regex]::Matches($block, "(?m)^\\s*#\\s*0\\.0\\.0\\.0\\s+")).Count
+        $block = [regex]::Match($content, '(?s)# parental:start(.*?)# parental:end').Groups[1].Value
+        $active = @([regex]::Matches($block, '(?m)^\\s*0\\.0\\.0\\.0\\s+')).Count
+        $commented = @([regex]::Matches($block, '(?m)^\\s*#\\s*0\\.0\\.0\\.0\\s+')).Count
         if ($active -gt 0 -and $commented -eq 0) {{
-            Write-Output "STATUS:ON:$active"
+            Write-Output ('STATUS:ON:' + $active)
         }} elseif ($commented -gt 0 -and $active -eq 0) {{
-            Write-Output "STATUS:OFF:$commented"
+            Write-Output ('STATUS:OFF:' + $commented)
         }} else {{
-            Write-Output "STATUS:PARTIAL:active=$active:commented=$commented"
+            Write-Output ('STATUS:PARTIAL:active=' + $active + ':commented=' + $commented)
         }}
         exit 0
     }}
 
-    $clean = ($content -replace "(?s)# parental:start.*?# parental:end\\r?\\n?", "").TrimEnd()
+    $clean = ($content -replace '(?s)# parental:start.*?# parental:end\\r?\\n?', '').TrimEnd()
     $domains = @({domain_items})
-    $blockLines = @("# parental:start")
+    $blockLines = @('# parental:start')
     foreach ($d in $domains) {{
-        if ($action -eq "on") {{
-            $blockLines += "0.0.0.0 $d"
+        if ($action -eq 'on') {{
+            $blockLines += ('0.0.0.0 ' + $d)
         }} else {{
-            $blockLines += "# 0.0.0.0 $d"
+            $blockLines += ('# 0.0.0.0 ' + $d)
         }}
     }}
-    $blockLines += "# parental:end"
+    $blockLines += '# parental:end'
 
-    $finalContent = ($clean + "`r`n`r`n" + ($blockLines -join "`r`n")).Trim() + "`r`n"
+    $nl = [Environment]::NewLine
+    $finalContent = ($clean + $nl + $nl + ($blockLines -join $nl)).Trim() + $nl
     [IO.File]::WriteAllText($hostsPath, $finalContent, (New-Object System.Text.UTF8Encoding($false)))
     Clear-DnsClientCache -ErrorAction SilentlyContinue
     & ipconfig /flushdns | Out-Null
-    Write-Output "SUCCESS:${{action}}:$($domains.Count)"
+    Write-Output ('SUCCESS:' + $action + ':' + $domains.Count)
 }} catch {{
     Write-Error $_
     exit 1
@@ -217,7 +218,7 @@ build_parental_script = build_parental_script_windows
 def build_parental_script_linux(action: str, domains: list[str] | None = None) -> str:
     """Generate the self-contained Bash script payload to execute on a Linux agent."""
     domain_list = domains if domains is not None else PARENTAL_DOMAINS
-    prefix = "0.0.0.0" if action == "on" else "# 0.0.0.0"
+    prefix = "0.0.0.0" if action == "on" else "# 0.0.0.0"  # nosec: B104
     block_lines = "\n".join(f"{prefix} {d}" for d in domain_list)
 
     return f"""set -e

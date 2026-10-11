@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <future>
 #include <string>
 #include <vector>
@@ -21,9 +22,31 @@ static std::wstring utf8_to_wide(std::string_view str) {
     return result;
 }
 
+static std::string base64_encode(const uint8_t* data, size_t len) {
+    if (!data || len == 0) return {};
+    static constexpr std::string_view table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve(((len + 2) / 3) * 4);
+    for (size_t i = 0; i < len; i += 3) {
+        uint32_t b = (static_cast<uint32_t>(data[i]) << 16);
+        if (i + 1 < len) b |= (static_cast<uint32_t>(data[i + 1]) << 8);
+        if (i + 2 < len) b |= static_cast<uint32_t>(data[i + 2]);
+        out.push_back(table[(b >> 18) & 0x3F]);
+        out.push_back(table[(b >> 12) & 0x3F]);
+        out.push_back((i + 1 < len) ? table[(b >> 6) & 0x3F] : '=');
+        out.push_back((i + 2 < len) ? table[b & 0x3F] : '=');
+    }
+    return out;
+}
+
 std::vector<std::string> build_argv(std::string_view kind, std::string_view cmd) {
     if (kind == "ps1") {
-        return {"powershell.exe", "-NoProfile", "-NonInteractive", "-Command", std::string(cmd)};
+        std::wstring wide = utf8_to_wide(cmd);
+        std::string b64 = base64_encode(
+            reinterpret_cast<const uint8_t*>(wide.data()),
+            wide.size() * sizeof(wchar_t)
+        );
+        return {"powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", b64};
     }
     return {"cmd.exe", "/c", std::string(cmd)};
 }

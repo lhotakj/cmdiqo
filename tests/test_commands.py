@@ -44,6 +44,8 @@ def test_validate_params_safe():
         "pc": "DESKTOP-1234",
         "version": "1.2.3",
         "ip_port": "192.168.1.1:8080",
+        "schedule": "M-F,08:00-20:00;Sa-Su,09:00-21:00",
+        "message": "Dinner is ready! Please save your game.",
     }
     # Should not raise
     validate_params(safe_params)
@@ -57,9 +59,11 @@ def test_validate_params_unsafe():
         {"service": "`whoami`"},
         {"service": "$(whoami)"},
         {"service": "plex\nreboot"},
+        {"schedule": "M-F;calc.exe"},
+        {"message": "Hello `calc.exe`"},
     ]
     for param in unsafe_candidates:
-        with pytest.raises(ValueError, match="contains unsafe characters"):
+        with pytest.raises(ValueError, match="contains unsafe"):
             validate_params(param)
 
 
@@ -77,6 +81,16 @@ def test_load_commands_valid_file():
     assert "/host {host} reboot" in triggers
     assert "/host {host} shutdown" in triggers
     assert "/host {host} services" in triggers
+    assert "/host {host} lock" in triggers
+    assert "/host {host} msg {message}" in triggers
+    assert "/host {host} screentime" in triggers
+    assert "/host {host} events" in triggers
+    assert "/host {host} ping {target}" in triggers
+    assert "/host {host} ports" in triggers
+    assert "/host {host} speedtest" in triggers
+    assert "/host {host} restrict set {schedule}" in triggers
+    assert "/host {host} restrict status" in triggers
+    assert "/host {host} restrict off" in triggers
     # Verify no legacy /home commands remain in commands:
     assert not any(t.startswith("/home") for t in triggers)
 
@@ -92,6 +106,13 @@ def test_load_commands_valid_file():
         "host-services",
         "host-service-status",
         "host-service-restart",
+        "host-lock",
+        "host-msg",
+        "host-screentime",
+        "host-events",
+        "host-ping",
+        "host-ports",
+        "host-speedtest",
     ):
         assert name in specs_by_name
         cmd = specs_by_name[name]["command"]
@@ -203,9 +224,11 @@ async def test_manage_users_handlers():
     # Test script generators
     win_script = build_user_script_windows("users")
     assert "Get-LocalUser" in win_script
+    assert '"' not in win_script
 
     win_status = build_user_script_windows("status", "john")
     assert "john" in win_status
+    assert '"' not in win_status
 
     linux_script = build_user_script_linux("users")
     assert "getent passwd" in linux_script

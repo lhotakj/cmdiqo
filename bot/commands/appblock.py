@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 from typing import TYPE_CHECKING, Any
@@ -205,18 +206,17 @@ DEFAULT_APPS: dict[str, dict[str, Any]] = {
 def build_appblock_script_windows(action: str, target_apps: dict[str, dict[str, Any]]) -> str:
     """Generate PowerShell script payload to manage app execution blocks on Windows via IFEO and AppX."""
     apps_json = json.dumps(target_apps)
+    apps_b64 = base64.b64encode(apps_json.encode("utf-8")).decode("ascii")
 
-    return f"""$ErrorActionPreference = "SilentlyContinue"
+    return f"""$ErrorActionPreference = 'SilentlyContinue'
 try {{
     $action = '{action}'.ToLower()
-    $appsJson = @'
-{apps_json}
-'@
+    $appsJson = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('{apps_b64}'))
     $apps = $appsJson | ConvertFrom-Json
 
-    $ifeoBase = "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options"
+    $ifeoBase = 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options'
 
-    if ($action -eq "status") {{
+    if ($action -eq 'status') {{
         foreach ($prop in $apps.PSObject.Properties) {{
             $appKey = $prop.Name
             $appDef = $prop.Value
@@ -226,7 +226,7 @@ try {{
                 foreach ($exe in $appDef.windows.executables) {{
                     $keyPath = Join-Path $ifeoBase $exe
                     if (Test-Path $keyPath) {{
-                        $dbg = (Get-ItemProperty -Path $keyPath -Name "Debugger" -ErrorAction SilentlyContinue).Debugger
+                        $dbg = (Get-ItemProperty -Path $keyPath -Name 'Debugger' -ErrorAction SilentlyContinue).Debugger
                         if ($dbg) {{
                             $isBlocked = $true
                             break
@@ -237,8 +237,13 @@ try {{
 
             if (-not $isBlocked -and $appDef.windows -and $appDef.windows.appx_packages) {{
                 foreach ($pkg in $appDef.windows.appx_packages) {{
-                    $found = Get-AppxPackage -AllUsers "*$pkg*" -ErrorAction SilentlyContinue | Select-Object -First 1
-                    if ($found -and $found.Status -and ($found.Status -like "*Blocked*" -or $found.Status -like "*Disabled*")) {{
+                    try {{
+                        $pattern = '*' + $pkg + '*'
+                        $found = Get-AppxPackage -AllUsers $pattern -ErrorAction SilentlyContinue | Select-Object -First 1
+                    }} catch {{
+                        $found = $null
+                    }}
+                    if ($found -and $found.Status -and ($found.Status -like '*Blocked*' -or $found.Status -like '*Disabled*')) {{
                         $isBlocked = $true
                         break
                     }}
@@ -246,9 +251,9 @@ try {{
             }}
 
             if ($isBlocked) {{
-                Write-Output "STATUS:$appKey:BLOCKED"
+                Write-Output ('STATUS:' + $appKey + ':BLOCKED')
             }} else {{
-                Write-Output "STATUS:$appKey:ALLOWED"
+                Write-Output ('STATUS:' + $appKey + ':ALLOWED')
             }}
         }}
         exit 0
@@ -258,7 +263,7 @@ try {{
         $appKey = $prop.Name
         $appDef = $prop.Value
 
-        if ($action -eq "on") {{
+        if ($action -eq 'on') {{
             # 1. Set IFEO Debugger trap
             if ($appDef.windows -and $appDef.windows.executables) {{
                 foreach ($exe in $appDef.windows.executables) {{
@@ -266,14 +271,17 @@ try {{
                     if (-not (Test-Path $keyPath)) {{
                         New-Item -Path $keyPath -Force | Out-Null
                     }}
-                    Set-ItemProperty -Path $keyPath -Name "Debugger" -Value "systray.exe" -Force | Out-Null
+                    Set-ItemProperty -Path $keyPath -Name 'Debugger' -Value 'systray.exe' -Force | Out-Null
                 }}
             }}
 
             # 2. Block AppX packages if configured
             if ($appDef.windows -and $appDef.windows.appx_packages) {{
                 foreach ($pkg in $appDef.windows.appx_packages) {{
-                    Get-AppxPackage -AllUsers "*$pkg*" -ErrorAction SilentlyContinue | Set-AppxPackage -Status Blocked -ErrorAction SilentlyContinue | Out-Null
+                    try {{
+                        $pattern = '*' + $pkg + '*'
+                        Get-AppxPackage -AllUsers $pattern -ErrorAction SilentlyContinue | Set-AppxPackage -Status Blocked -ErrorAction SilentlyContinue | Out-Null
+                    }} catch {{}}
                 }}
             }}
 
@@ -285,8 +293,8 @@ try {{
                 }}
             }}
 
-            Write-Output "SUCCESS:on:$appKey"
-        }} elseif ($action -eq "off") {{
+            Write-Output ('SUCCESS:on:' + $appKey)
+        }} elseif ($action -eq 'off') {{
             # 1. Remove IFEO Debugger trap
             if ($appDef.windows -and $appDef.windows.executables) {{
                 foreach ($exe in $appDef.windows.executables) {{
@@ -300,11 +308,14 @@ try {{
             # 2. Unblock AppX packages if configured
             if ($appDef.windows -and $appDef.windows.appx_packages) {{
                 foreach ($pkg in $appDef.windows.appx_packages) {{
-                    Get-AppxPackage -AllUsers "*$pkg*" -ErrorAction SilentlyContinue | Set-AppxPackage -Status Normal -ErrorAction SilentlyContinue | Out-Null
+                    try {{
+                        $pattern = '*' + $pkg + '*'
+                        Get-AppxPackage -AllUsers $pattern -ErrorAction SilentlyContinue | Set-AppxPackage -Status Normal -ErrorAction SilentlyContinue | Out-Null
+                    }} catch {{}}
                 }}
             }}
 
-            Write-Output "SUCCESS:off:$appKey"
+            Write-Output ('SUCCESS:off:' + $appKey)
         }}
     }}
     exit 0

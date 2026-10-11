@@ -59,8 +59,8 @@ def test_build_appblock_script_windows_on():
     assert "systray.exe" in script
     assert "Set-AppxPackage -Status Blocked" in script
     assert "Stop-Process" in script
-    assert '"roblox"' in script
-    assert 'Write-Output "SUCCESS:on:$appKey"' in script
+    assert "Write-Output ('SUCCESS:on:' + $appKey)" in script
+    assert '"' not in script
 
 
 def test_build_appblock_script_windows_off():
@@ -69,16 +69,17 @@ def test_build_appblock_script_windows_off():
     assert "$action = 'off'.ToLower()" in script
     assert "Remove-Item -Path $keyPath -Recurse -Force" in script
     assert "Set-AppxPackage -Status Normal" in script
-    assert '"roblox"' in script
-    assert 'Write-Output "SUCCESS:off:$appKey"' in script
+    assert "Write-Output ('SUCCESS:off:' + $appKey)" in script
+    assert '"' not in script
 
 
 def test_build_appblock_script_windows_status():
     target = {"roblox": DEFAULT_APPS["roblox"], "steam": DEFAULT_APPS["steam"]}
     script = build_appblock_script_windows("status", target)
     assert "$action = 'status'.ToLower()" in script
-    assert 'Write-Output "STATUS:$appKey:BLOCKED"' in script
-    assert 'Write-Output "STATUS:$appKey:ALLOWED"' in script
+    assert "Write-Output ('STATUS:' + $appKey + ':BLOCKED')" in script
+    assert "Write-Output ('STATUS:' + $appKey + ':ALLOWED')" in script
+    assert '"' not in script
 
 
 def test_build_appblock_script_linux_on():

@@ -343,7 +343,7 @@ class SlackSimulator:
   {green}WebSocket Hub:{reset}  {"ws://" + self.config.hub_host + ":" + str(self.config.hub_port) if self.config.hub_enabled else "disabled"}
   {green}Loaded Specs:{reset}   {len(self.commands)} commands, {len(self.aliases)} aliases
 
-  {gray}Type any Slack command (e.g. /help, /lan devices list, /host AMD uptime){reset}
+  {gray}Type any Slack command (e.g. /help, /lan devices list, /host AMD uptime, /host PC lock, /host PC restrict status){reset}
   {gray}Type /whoami for context, /clear to clear screen, exit to quit.{reset}
   {gray}Keys: Up/Down for command history, Esc to clear current message.{reset}
 {cyan}----------------------------------------------------------------------{reset}

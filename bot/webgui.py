@@ -375,7 +375,7 @@ def create_webgui_app(state: WebGuiState, bot_version: str | None = None) -> Fla
 
 
 def start_webgui_thread(
-    state: WebGuiState, port: int, host: str = "0.0.0.0", bot_version: str | None = None
+    state: WebGuiState, port: int, host: str = "0.0.0.0", bot_version: str | None = None  # nosec: B104
 ) -> threading.Thread:
     """Start the WebGUI Flask server in a dedicated background daemon thread."""
     from werkzeug.serving import make_server

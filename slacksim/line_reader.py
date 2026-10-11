@@ -100,7 +100,7 @@ class ConsoleLineReader:
         if os.name == "nt":
             with contextlib.suppress(Exception):
                 # Trigger Windows console VT100 processing mode
-                os.system("")
+                os.system("")  # nosec: B605, B607
 
     def start_line(self) -> None:
         """Initialize state for reading a new input line."""

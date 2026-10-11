@@ -15,70 +15,74 @@ log = logging.getLogger("cmdiqo-bot.commands.users")
 def build_user_script_windows(action: str, username: str = "") -> str:
     """Generate PowerShell script payload for Windows user management."""
     clean_user = username.replace("'", "''")
-    return f"""$ErrorActionPreference = "Stop"
+    return f"""$ErrorActionPreference = 'Stop'
 try {{
     $action = '{action}'.ToLower()
     $targetUser = '{clean_user}'
 
-    if ($action -eq "users") {{
+    if ($action -eq 'users') {{
         $users = Get-LocalUser | Sort-Object Name
         $lines = @()
         foreach ($u in $users) {{
-            $icon = if ($u.Enabled) {{ "✔️" }} else {{ "🚫" }}
-            $statusStr = if ($u.Enabled) {{ "active" }} else {{ "locked" }}
-            $lines += "$icon $($u.Name) ($statusStr)"
+            $icon = if ($u.Enabled) {{ '✔️' }} else {{ '🚫' }}
+            $statusStr = if ($u.Enabled) {{ 'active' }} else {{ 'locked' }}
+            $lines += ($icon + ' ' + $u.Name + ' (' + $statusStr + ')')
         }}
-        Write-Output ("USERS_LIST:`n" + ($lines -join "`n"))
+        $nl = [Environment]::NewLine
+        Write-Output ('USERS_LIST:' + $nl + ($lines -join $nl))
         exit 0
     }}
 
-    if ($action -eq "status") {{
+    if ($action -eq 'status') {{
         $u = Get-LocalUser -Name $targetUser -ErrorAction SilentlyContinue
         if (-not $u) {{
-            Write-Output "ERROR:User '$targetUser' not found."
+            Write-Output ('ERROR:User ''' + $targetUser + ''' not found.')
             exit 1
         }}
-        $fullName = if ($u.FullName) {{ $u.FullName }} else {{ "N/A" }}
-        $homeDir = (Get-CimInstance Win32_UserProfile -ErrorAction SilentlyContinue | Where-Object LocalPath -like "*\\$targetUser").LocalPath
-        if (-not $homeDir) {{ $homeDir = "$env:SystemDrive\\Users\\$targetUser" }}
-        $statusStr = if ($u.Enabled) {{ "active" }} else {{ "locked" }}
-        $icon = if ($u.Enabled) {{ "✔️" }} else {{ "🚫" }}
+        $fullName = if ($u.FullName) {{ $u.FullName }} else {{ 'N/A' }}
+        $pattern = '*\\\\' + $targetUser
+        $homeDir = (Get-CimInstance Win32_UserProfile -ErrorAction SilentlyContinue | Where-Object LocalPath -like $pattern).LocalPath
+        if (-not $homeDir) {{ $homeDir = (Join-Path $env:SystemDrive ('Users\\\\' + $targetUser)) }}
+        $statusStr = if ($u.Enabled) {{ 'active' }} else {{ 'locked' }}
+        $icon = if ($u.Enabled) {{ '✔️' }} else {{ '🚫' }}
 
-        $sessTime = "Not logged in"
+        $sessTime = 'Not logged in'
         try {{
             $sessions = Get-CimInstance Win32_LogonSession -ErrorAction SilentlyContinue | Where-Object LogonType -in (2,10)
             foreach ($s in $sessions) {{
                 $sessId = $s.LogonId
-                $loggedOn = Get-CimInstance Win32_LoggedOnUser -ErrorAction SilentlyContinue | Where-Object {{ $_.Dependent.Antecedent -like "*$sessId*" }}
-                if ($loggedOn -and $loggedOn.Antecedent -like "*Name=`"$targetUser`"*") {{
+                $sessPattern = '*' + $sessId + '*'
+                $loggedOn = Get-CimInstance Win32_LoggedOnUser -ErrorAction SilentlyContinue | Where-Object {{ $_.Dependent.Antecedent -like $sessPattern }}
+                $userPattern = '*Name=' + [char]34 + $targetUser + [char]34 + '*'
+                if ($loggedOn -and $loggedOn.Antecedent -like $userPattern) {{
                     $diff = (Get-Date) - $s.StartTime
                     $hours = [int]$diff.TotalHours
                     $mins = $diff.Minutes
                     $secs = $diff.Seconds
-                    $sessTime = "$hours" + "h " + "$mins" + "m " + "$secs" + "s"
+                    $sessTime = ('' + $hours + 'h ' + $mins + 'm ' + $secs + 's')
                     break
                 }}
             }}
         }} catch {{}}
 
-        Write-Output "USER_STATUS|$($u.Name)|$fullName|$homeDir|$statusStr|$icon|$sessTime"
+        Write-Output ('USER_STATUS|' + $u.Name + '|' + $fullName + '|' + $homeDir + '|' + $statusStr + '|' + $icon + '|' + $sessTime)
         exit 0
     }}
 
-    if ($action -eq "disable") {{
+    if ($action -eq 'disable') {{
         Disable-LocalUser -Name $targetUser
-        Write-Output "SUCCESS:disabled:$targetUser"
+        Write-Output ('SUCCESS:disabled:' + $targetUser)
         exit 0
     }}
 
-    if ($action -eq "enable") {{
+    if ($action -eq 'enable') {{
         Enable-LocalUser -Name $targetUser
         try {{ Unlock-LocalUser -Name $targetUser -ErrorAction SilentlyContinue }} catch {{}}
-        Write-Output "SUCCESS:enabled:$targetUser"
+        Write-Output ('SUCCESS:enabled:' + $targetUser)
         exit 0
     }}
 
-    Write-Error "Invalid action: $action"
+    Write-Error ('Invalid action: ' + $action)
     exit 1
 }} catch {{
     Write-Error $_
