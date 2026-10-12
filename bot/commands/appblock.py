@@ -111,6 +111,7 @@ DEFAULT_APPS: dict[str, dict[str, Any]] = {
                 "MinecraftLauncher.exe",
                 "PrismLauncher.exe",
                 "CurseForge.exe",
+                "TLauncher.exe",
             ],
             "appx_packages": [
                 "Microsoft.4297207D2250C",
@@ -124,6 +125,25 @@ DEFAULT_APPS: dict[str, dict[str, Any]] = {
             "process_names": [
                 "minecraft-launcher",
                 "prismlauncher",
+            ],
+        },
+    },
+    "tlauncher": {
+        "name": "TLauncher",
+        "description": "TLauncher Minecraft Launcher",
+        "windows": {
+            "executables": [
+                "TLauncher.exe",
+                "TLauncherBeta.exe",
+                "tlauncher.exe",
+            ],
+        },
+        "linux": {
+            "process_names": [
+                "TLauncher",
+                "tlauncher",
+                "TLauncher.jar",
+                "TLauncher.exe",
             ],
         },
     },
@@ -441,6 +461,12 @@ async def manage_appblock(
 
     if not host:
         return ":no_entry_sign: Target host is required."
+
+    # When action is omitted (e.g. /host {host} blockapp all or /host {host} blockapp), default to status
+    if not action:
+        action = "status"
+        if not app_query:
+            app_query = "all"
 
     if not app_query:
         return (

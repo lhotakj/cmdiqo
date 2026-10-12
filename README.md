@@ -168,7 +168,7 @@ Edit `config/commands.yaml` to define your commands and aliases (see **Adding yo
 | `/host <host> parental on`         | Remote host (Linux/Win) | Blocks configured domains in hosts file & flushes DNS    |
 | `/host <host> parental off`        | Remote host (Linux/Win) | Unblocks configured domains in hosts file & flushes DNS  |
 | `/host <host> parental status`     | Remote host (Linux/Win) | Displays active parental blocking status & domain count  |
-| `/host <host> blockapp <app> <on\|off\|status>` | Remote host (Linux/Win) | Blocks/unblocks apps via IFEO, AppX & Flatpak (`appblock` alias) |
+| `/host <host> blockapp [app|all] [on|off|status]` | Remote host (Linux/Win) | Blocks/unblocks apps (Roblox, Minecraft, TLauncher...) via IFEO & Flatpak (`appblock` alias; defaults to status) |
 | `/wol <target>`                    | *(alias)*               | Auto-translates to `/lan wake <target>`                  |
 | `/home <command>`                  | *(alias)*               | Auto-translates to `/host home <command>`                |
 | `/help [topic]`                    | Bot App                 | Interactive manual with nested topics (`lan`, `docker`...)|

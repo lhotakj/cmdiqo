@@ -172,7 +172,7 @@ Commands defined in `config/commands.yaml` (under `aliases:` and `commands:`) ar
 | `/host {host} service status {service}` | `shell` + `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl status` / Windows `Get-Service` |
 | `/host {host} service restart {service}` | `shell` + `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl restart` / Windows `Restart-Service` |
 | `/host {host} parental {action}` | `python` (with `config.domains`) | `{host}` | Host / Agent | Configurable parental domain blocker with DNS flush (Win & Linux) |
-| `/host {host} blockapp {app} {action}` | `python` (with `config.apps`) | `{host}` | Host / Agent | Multi-process execution blocker via IFEO/AppX on Windows and Flatpak overrides on Linux (`commands.appblock:manage_appblock`, alias: `appblock`) |
+| `/host {host} blockapp [app|all] [action]` | `python` (with `config.apps`) | `{host}` | Host / Agent | Multi-process execution blocker via IFEO/AppX on Windows and Flatpak overrides on Linux (`commands.appblock:manage_appblock`, alias: `appblock`; defaults to status) |
 | `/host {host} docker ps` | `shell` | `{host}` | Host / Agent | Linux `docker ps --format ...` |
 | `/host {host} docker stats` | `shell` | `{host}` | Host / Agent | Linux `docker stats --no-stream ...` |
 | `/host {host} win updates` | `ps1` | `{host}` | Windows Agent | Remote `powershell.exe` Get-CimInstance Win32_QuickFixEngineering |

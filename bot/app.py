@@ -894,21 +894,51 @@ async def reply_help(
         await post(chunk)
 
 
+def is_tabular_or_code(output: str) -> bool:
+    """Determine whether command output should be rendered in a code block or plain text."""
+    if not output:
+        return True
+    stripped = output.strip()
+    if "```" in stripped:
+        return False
+
+    status_emojis = (
+        "✅", "🚫", "🛡️", "🔓", "🔒", "💬", "✨", "⚡",
+        "✔️", "👤", "⏰", "⏱️", "ℹ️", "⚠️", "❓", "❌", "•"
+    )
+    return not any(e in stripped for e in status_emojis)
+
+
 async def reply_output(
     post: Callable[[str], Coroutine[Any, Any, None]],
     header: str,
     output: str,
+    use_code: bool | None = None,
 ) -> None:
     """Post structured output back to Slack in chunks within the message size limit."""
-    output = (output or "(no output)").replace("```", "\u200b```")
-    chunks = [output[i : i + MAX_BLOCK] for i in range(0, len(output), MAX_BLOCK)] or [
-        "(no output)"
-    ]
-    if len(chunks) == 1:
-        await post(f"{header}\n```{chunks[0]}```")
+    output = output or "(no output)"
+    if use_code is None:
+        use_code = is_tabular_or_code(output)
+
+    if use_code:
+        sanitized = output.replace("```", "\u200b```")
+        chunks = [sanitized[i : i + MAX_BLOCK] for i in range(0, len(sanitized), MAX_BLOCK)] or [
+            "(no output)"
+        ]
+        if len(chunks) == 1:
+            await post(f"{header}\n```{chunks[0]}```")
+        else:
+            for i, chunk in enumerate(chunks, 1):
+                await post(f"{header} (part {i}/{len(chunks)})\n```{chunk}```")
     else:
-        for i, chunk in enumerate(chunks, 1):
-            await post(f"{header} (part {i}/{len(chunks)})\n```{chunk}```")
+        chunks = [output[i : i + MAX_BLOCK] for i in range(0, len(output), MAX_BLOCK)] or [
+            "(no output)"
+        ]
+        if len(chunks) == 1:
+            await post(f"{header}\n{chunks[0]}")
+        else:
+            for i, chunk in enumerate(chunks, 1):
+                await post(f"{header} (part {i}/{len(chunks)})\n{chunk}")
 
 
 async def handle_command(
@@ -1033,7 +1063,7 @@ async def handle_command(
             except Exception as exc:
                 log.exception("Command %s failed", spec["name"])
                 output = f"Error: {exc}"
-            await reply_output(post, f":white_check_mark: `{spec['name']}`", output)
+            await reply_output(post, f":white_check_mark: `{text}`{tgt}", output)
             return
 
     sub = help_text(commands, topic=text, aliases=aliases)
@@ -1053,7 +1083,10 @@ async def handle_command(
 
 def _make_post_respond(respond: Any) -> Callable[[str], Coroutine[Any, Any, None]]:
     async def post(text: str) -> None:
-        await respond(text=text)
+        try:
+            await respond(text=text, response_type="in_channel")
+        except TypeError:
+            await respond(text=text)
 
     return post
 

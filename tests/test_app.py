@@ -69,6 +69,32 @@ async def test_reply_output_chunks():
     post_mock.assert_awaited_once_with(":star: Title\n```(no output)```")
 
 
+def test_is_tabular_or_code():
+    from bot.app import is_tabular_or_code
+
+    # Rich status updates with emojis and bullets should be plain text
+    assert not is_tabular_or_code("✅ 🚫 Application execution BLOCKED on `PC-KIDS`")
+    assert not is_tabular_or_code("🛡️ [PC-KIDS] Parental Guard Status: ACTIVE")
+    assert not is_tabular_or_code("• Roblox (roblox): 🚫 BLOCKED\n• Steam (steam): ✅ ALLOWED")
+    assert not is_tabular_or_code("🔒 Workstation locked.")
+    assert not is_tabular_or_code("💬 Message delivered: Hello!")
+
+    # Raw tables, code, logs without emojis should be code blocks
+    assert is_tabular_or_code("CONTAINER ID   IMAGE                 STATUS\nb8f9e0a12c4d   plex                  Up 14 days")
+    assert is_tabular_or_code("IP ADDRESS     MAC ADDRESS        HOST NAME\n192.168.1.1    aa:bb:cc:dd:ee:ff  router.home")
+    assert is_tabular_or_code("short message")
+    assert is_tabular_or_code("")
+
+
+@pytest.mark.asyncio
+async def test_reply_output_plain_text_with_emojis():
+    post_mock = AsyncMock()
+    status_msg = "✅ 🚫 Application execution BLOCKED on `PC-KIDS`"
+    await reply_output(post_mock, ":white_check_mark: `/blockapp PC-KIDS all`", status_msg)
+    # Must NOT be wrapped in code block triple backticks
+    post_mock.assert_awaited_once_with(f":white_check_mark: `/blockapp PC-KIDS all`\n{status_msg}")
+
+
 def test_run_python_handler():
     spec = {"handler": "commands.devices:format_device_table"}
     out = _run_python(spec, {})

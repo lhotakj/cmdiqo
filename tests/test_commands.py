@@ -150,7 +150,12 @@ def test_load_commands_valid_file():
     assert isinstance(blockapp_spec.get("config"), dict)
     assert "apps" in blockapp_spec["config"]
     assert "roblox" in blockapp_spec["config"]["apps"]
+    assert "tlauncher" in blockapp_spec["config"]["apps"]
     assert "host-appblock" in specs_by_name
+    assert "host-blockapp-query" in specs_by_name
+    assert "host-blockapp-all" in specs_by_name
+    assert "direct-blockapp-query" in specs_by_name
+    assert "direct-blockapp-all" in specs_by_name
 
 
 def test_load_commands_nonexistent_file():

@@ -24,6 +24,7 @@ def test_default_apps_structure():
     assert "battlenet" in DEFAULT_APPS
     assert "tiktok" in DEFAULT_APPS
     assert "gfn" in DEFAULT_APPS
+    assert "tlauncher" in DEFAULT_APPS
 
     roblox = DEFAULT_APPS["roblox"]
     assert "RobloxPlayerBeta.exe" in roblox["windows"]["executables"]
@@ -32,6 +33,16 @@ def test_default_apps_structure():
     assert "org.sober.Sober" in roblox["linux"]["flatpaks"]
     assert "org.vinegarhq.Vinegar" in roblox["linux"]["flatpaks"]
     assert "sober" in roblox["linux"]["process_names"]
+
+    minecraft = DEFAULT_APPS["minecraft"]
+    assert "TLauncher.exe" in minecraft["windows"]["executables"]
+
+    tlauncher = DEFAULT_APPS["tlauncher"]
+    assert "TLauncher.exe" in tlauncher["windows"]["executables"]
+    assert "TLauncherBeta.exe" in tlauncher["windows"]["executables"]
+    assert "tlauncher.exe" in tlauncher["windows"]["executables"]
+    assert "TLauncher" in tlauncher["linux"]["process_names"]
+    assert "TLauncher.jar" in tlauncher["linux"]["process_names"]
 
     riot = DEFAULT_APPS["riot"]
     assert "RiotClientServices.exe" in riot["windows"]["executables"]
@@ -334,6 +345,90 @@ async def test_handle_command_blockapp_integration():
     assert len(posted) == 2
     assert "Running `/blockapp PC-KIDS roblox on` on `PC-KIDS`" in posted[0]
     assert "Application execution BLOCKED on `PC-KIDS`" in posted[1]
+
+    # Test /host {host} blockapp all (omitted action defaults to status)
+    mock_hub.exec = AsyncMock(
+        return_value="STATUS:roblox:BLOCKED\nSTATUS:tlauncher:BLOCKED\nSTATUS:steam:ALLOWED"
+    )
+    posted.clear()
+    await handle_command(
+        "/host PC-KIDS blockapp all",
+        user_id="U1",
+        channel_id="C1",
+        post=post,
+        commands=commands,
+        hub=mock_hub,
+    )
+    assert len(posted) == 2
+    assert "Running `/host PC-KIDS blockapp all` on `PC-KIDS`" in posted[0]
+    assert "Application Execution Status on `PC-KIDS`" in posted[1]
+    assert "• **TLauncher** (`tlauncher`): :no_entry: `BLOCKED`" in posted[1]
+
+    # Test /blockapp {host} all (shortcut omitted action defaults to status)
+    posted.clear()
+    await handle_command(
+        "/blockapp PC-KIDS all",
+        user_id="U1",
+        channel_id="C1",
+        post=post,
+        commands=commands,
+        hub=mock_hub,
+    )
+    assert len(posted) == 2
+    assert "Running `/blockapp PC-KIDS all` on `PC-KIDS`" in posted[0]
+    assert "Application Execution Status on `PC-KIDS`" in posted[1]
+
+    # Test /host {host} blockapp (bare blockapp defaults to all + status)
+    posted.clear()
+    await handle_command(
+        "/host PC-KIDS blockapp",
+        user_id="U1",
+        channel_id="C1",
+        post=post,
+        commands=commands,
+        hub=mock_hub,
+    )
+    assert len(posted) == 2
+    assert "Running `/host PC-KIDS blockapp` on `PC-KIDS`" in posted[0]
+    assert "Application Execution Status on `PC-KIDS`" in posted[1]
+
+    # Test /host {host} blockapp tlauncher on
+    mock_hub.exec = AsyncMock(return_value="SUCCESS:on:tlauncher")
+    posted.clear()
+    await handle_command(
+        "/host PC-KIDS blockapp tlauncher on",
+        user_id="U1",
+        channel_id="C1",
+        post=post,
+        commands=commands,
+        hub=mock_hub,
+    )
+    assert len(posted) == 2
+    assert "Running `/host PC-KIDS blockapp tlauncher on` on `PC-KIDS`" in posted[0]
+    assert "Application execution BLOCKED on `PC-KIDS`" in posted[1]
+    assert "TLauncher" in posted[1]
+
+
+@pytest.mark.asyncio
+async def test_manage_appblock_default_action():
+    mock_hub = MagicMock()
+    mock_hub.agents = {"PC-KIDS": {"platform": "Windows/11"}}
+    mock_hub.exec = AsyncMock(return_value="STATUS:tlauncher:ALLOWED")
+
+    # app="all", action omitted -> status
+    res = await manage_appblock({"host": "PC-KIDS", "app": "all"}, hub=mock_hub)
+    assert "Application Execution Status on `PC-KIDS`" in res
+    assert "TLauncher" in res
+
+    # app="tlauncher", action omitted -> status
+    res = await manage_appblock({"host": "PC-KIDS", "app": "tlauncher"}, hub=mock_hub)
+    assert "Application Execution Status on `PC-KIDS`" in res
+    assert "• **TLauncher** (`tlauncher`): :white_check_mark: `ALLOWED`" in res
+
+    # bare host, both app and action omitted -> all status
+    res = await manage_appblock({"host": "PC-KIDS"}, hub=mock_hub)
+    assert "Application Execution Status on `PC-KIDS`" in res
+
 
 
 @pytest.mark.asyncio

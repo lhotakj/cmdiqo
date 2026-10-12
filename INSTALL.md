@@ -625,10 +625,11 @@ Once the bot and agents are running, test everything directly inside Slack:
        - `/host MY-WINDOWS-PC parental on` (blocks YouTube, Roblox, Minecraft, and Discord in hosts file & flushes DNS).
        - `/host MY-WINDOWS-PC parental off` (unblocks domains & flushes DNS).
        - `/host MY-WINDOWS-PC parental status` (checks current block status).
-     - Application Execution Blocker (Roblox, Steam, Epic Games, Discord, Minecraft, or all):
+     - Application Execution Blocker (Roblox, Steam, Epic Games, Discord, Minecraft, TLauncher, or all):
        - `/host MY-WINDOWS-PC blockapp roblox on` (or `/host MY-WINDOWS-PC appblock roblox on` — blocks executables & terminates running processes via IFEO on Windows / Flatpak overrides on Linux).
        - `/host MY-WINDOWS-PC blockapp steam off` (unblocks application execution).
-       - `/host MY-WINDOWS-PC blockapp all status` (checks current execution interception status across all configured apps).
+       - `/host MY-WINDOWS-PC blockapp all` (or `/host MY-WINDOWS-PC blockapp all status` — checks current execution interception status across all configured apps).
+       - `/host MY-WINDOWS-PC blockapp tlauncher on` (blocks TLauncher Minecraft launcher execution).
    - **Windows-Specific Hotfixes:**
      - `/host MY-WINDOWS-PC win updates` (queries installed Windows quality updates).
    - **Docker Operations (Linux Host):**

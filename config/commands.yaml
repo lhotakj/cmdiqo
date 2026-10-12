@@ -571,6 +571,7 @@ commands:
       - "/host PC-KIDS blockapp steam status"
       - "/host PC-KIDS blockapp all on"
       - "/host PC-KIDS blockapp all status"
+      - "/host PC-KIDS blockapp tlauncher on"
     command:
       python: "commands.appblock:manage_appblock"
     config:
@@ -651,6 +652,7 @@ commands:
               - "MinecraftLauncher.exe"
               - "PrismLauncher.exe"
               - "CurseForge.exe"
+              - "TLauncher.exe"
             appx_packages:
               - "Microsoft.4297207D2250C"
           linux:
@@ -660,6 +662,21 @@ commands:
             process_names:
               - "minecraft-launcher"
               - "prismlauncher"
+
+        tlauncher:
+          name: "TLauncher"
+          description: "TLauncher Minecraft Launcher"
+          windows:
+            executables:
+              - "TLauncher.exe"
+              - "TLauncherBeta.exe"
+              - "tlauncher.exe"
+          linux:
+            process_names:
+              - "TLauncher"
+              - "tlauncher"
+              - "TLauncher.jar"
+              - "TLauncher.exe"
 
         riot:
           name: "Riot Games"
@@ -716,6 +733,30 @@ commands:
               - "GeForceNOW"
               - "geforcenow"
 
+  - name: host-blockapp-query
+    trigger: "/host {host} blockapp {app}"
+    description: "Check application execution block status on target host (status)"
+    details: "Queries current execution interception status for a specific application or all configured apps on target host (defaults to status)."
+    examples:
+      - "/host PC-KIDS blockapp all"
+      - "/host PC-KIDS blockapp tlauncher"
+      - "/host PC-KIDS blockapp roblox"
+    command:
+      python: "commands.appblock:manage_appblock"
+    config:
+      apps: *apps_config
+
+  - name: host-blockapp-all
+    trigger: "/host {host} blockapp"
+    description: "Check execution status of all applications on target host"
+    details: "Queries current execution interception status across all configured apps on target host."
+    examples:
+      - "/host PC-KIDS blockapp"
+    command:
+      python: "commands.appblock:manage_appblock"
+    config:
+      apps: *apps_config
+
   - name: host-appblock
     trigger: "/host {host} appblock {app} {action}"
     description: "Alias for /host {host} blockapp {app} {action}"
@@ -728,6 +769,29 @@ commands:
     config:
       apps: *apps_config
 
+  - name: host-appblock-query
+    trigger: "/host {host} appblock {app}"
+    description: "Alias for /host {host} blockapp {app}"
+    details: "Alias for /host {host} blockapp {app}. Queries application execution status."
+    examples:
+      - "/host PC-KIDS appblock all"
+      - "/host PC-KIDS appblock tlauncher"
+    command:
+      python: "commands.appblock:manage_appblock"
+    config:
+      apps: *apps_config
+
+  - name: host-appblock-all
+    trigger: "/host {host} appblock"
+    description: "Alias for /host {host} blockapp"
+    details: "Alias for /host {host} blockapp. Queries execution status across all apps."
+    examples:
+      - "/host PC-KIDS appblock"
+    command:
+      python: "commands.appblock:manage_appblock"
+    config:
+      apps: *apps_config
+
   - name: direct-blockapp
     trigger: "/blockapp {host} {app} {action}"
     description: "Block or unblock applications on target host (shortcut)"
@@ -735,6 +799,30 @@ commands:
     examples:
       - "/blockapp PC-KIDS roblox on"
       - "/blockapp PC-KIDS all status"
+      - "/blockapp PC-KIDS tlauncher on"
+    command:
+      python: "commands.appblock:manage_appblock"
+    config:
+      apps: *apps_config
+
+  - name: direct-blockapp-query
+    trigger: "/blockapp {host} {app}"
+    description: "Check application execution block status (shortcut)"
+    details: "Direct shortcut for /host {host} blockapp {app} (defaults to status)."
+    examples:
+      - "/blockapp PC-KIDS all"
+      - "/blockapp PC-KIDS tlauncher"
+    command:
+      python: "commands.appblock:manage_appblock"
+    config:
+      apps: *apps_config
+
+  - name: direct-blockapp-all
+    trigger: "/blockapp {host}"
+    description: "Check execution status of all applications (shortcut)"
+    details: "Direct shortcut for /host {host} blockapp."
+    examples:
+      - "/blockapp PC-KIDS"
     command:
       python: "commands.appblock:manage_appblock"
     config:
@@ -751,4 +839,28 @@ commands:
       python: "commands.appblock:manage_appblock"
     config:
       apps: *apps_config
+
+  - name: direct-appblock-query
+    trigger: "/appblock {host} {app}"
+    description: "Alias for /blockapp {host} {app}"
+    details: "Alias for /blockapp {host} {app}."
+    examples:
+      - "/appblock PC-KIDS all"
+      - "/appblock PC-KIDS tlauncher"
+    command:
+      python: "commands.appblock:manage_appblock"
+    config:
+      apps: *apps_config
+
+  - name: direct-appblock-all
+    trigger: "/appblock {host}"
+    description: "Alias for /blockapp {host}"
+    details: "Alias for /blockapp {host}."
+    examples:
+      - "/appblock PC-KIDS"
+    command:
+      python: "commands.appblock:manage_appblock"
+    config:
+      apps: *apps_config
+
 
