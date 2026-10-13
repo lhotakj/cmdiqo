@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
-    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Outfit:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&display=swap"
     rel="stylesheet">
   <style>
     :root {
@@ -597,6 +597,702 @@
         padding: 2px 6px;
       }
     }
+
+    /* Action Column & Buttons */
+    .action-cell {
+      position: relative;
+    }
+
+    .btn-action {
+      background: rgba(0, 242, 254, 0.06);
+      border: 1px solid rgba(0, 242, 254, 0.24);
+      color: var(--cyan-neon);
+      width: 34px;
+      height: 34px;
+      border-radius: var(--radius-sm);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: var(--transition);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn-action:hover {
+      background: rgba(0, 242, 254, 0.18);
+      border-color: var(--cyan-neon);
+      box-shadow: 0 0 14px rgba(0, 242, 254, 0.45);
+      transform: translateY(-1px) scale(1.05);
+    }
+
+    .btn-action:active,
+    .btn-action.active {
+      background: rgba(0, 242, 254, 0.28);
+      border-color: var(--cyan-neon);
+      box-shadow: 0 0 18px rgba(0, 242, 254, 0.6);
+      transform: scale(0.97);
+    }
+
+    .action-icon {
+      width: 17px;
+      height: 17px;
+      stroke: currentColor;
+      pointer-events: none;
+    }
+
+    /* Action Context Menu */
+    .action-menu {
+      position: absolute;
+      z-index: 9999;
+      background: rgba(8, 14, 32, 0.96);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(0, 242, 254, 0.28);
+      border-radius: var(--radius-md);
+      box-shadow: 0 20px 48px -10px rgba(0, 0, 0, 0.85), 0 0 30px -5px rgba(0, 242, 254, 0.22);
+      width: 250px;
+      padding: 6px;
+      opacity: 0;
+      transform: translateY(-6px) scale(0.97);
+      transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+      visibility: hidden;
+      font-size: 0.85rem;
+      user-select: none;
+    }
+
+    .action-menu.active {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      pointer-events: auto;
+      visibility: visible;
+    }
+
+    .menu-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 10px 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      margin-bottom: 4px;
+    }
+
+    .menu-host-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.78rem;
+      font-family: var(--font-mono);
+      color: var(--cyan-neon);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .menu-platform-badge {
+      font-size: 0.7rem;
+      font-family: var(--font-mono);
+      color: var(--text-dim);
+      background: rgba(255, 255, 255, 0.04);
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .menu-category {
+      position: relative;
+      margin-bottom: 2px;
+    }
+
+    .menu-category-btn {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: var(--text-main);
+      padding: 8px 10px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      font-size: 0.84rem;
+      font-family: var(--font-sans);
+      transition: var(--transition);
+      text-align: left;
+    }
+
+    .menu-category-btn:hover,
+    .menu-category.open .menu-category-btn,
+    .menu-category:hover .menu-category-btn {
+      background: rgba(0, 242, 254, 0.08);
+      color: var(--cyan-neon);
+    }
+
+    .menu-category-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 500;
+    }
+
+    .category-chevron {
+      color: var(--text-dim);
+      font-size: 0.95rem;
+      line-height: 1;
+      transition: transform 0.15s ease, color 0.15s ease;
+    }
+
+    .menu-category-btn:hover .category-chevron,
+    .menu-category:hover .category-chevron {
+      color: var(--cyan-neon);
+      transform: translateX(2px);
+    }
+
+    /* Cascading Submenus */
+    .menu-submenu {
+      position: absolute;
+      top: -4px;
+      left: calc(100% + 6px);
+      width: 280px;
+      background: rgba(8, 14, 32, 0.98);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(0, 242, 254, 0.28);
+      border-radius: var(--radius-md);
+      box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.85), 0 0 25px -5px rgba(0, 242, 254, 0.2);
+      padding: 6px;
+      opacity: 0;
+      transform: translateX(-4px);
+      transition: opacity 0.16s cubic-bezier(0.16, 1, 0.3, 1), transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+      visibility: hidden;
+      z-index: 10001;
+      overflow: visible;
+    }
+
+    .menu-submenu::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: -12px;
+      width: 12px;
+    }
+
+    .menu-submenu.flip-left {
+      left: auto;
+      right: calc(100% + 6px);
+      transform: translateX(4px);
+    }
+
+    .menu-submenu.flip-left::before {
+      left: auto;
+      right: -12px;
+      width: 12px;
+    }
+
+    .menu-category.open .menu-submenu,
+    .menu-category:hover .menu-submenu {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+      visibility: visible;
+    }
+
+    .menu-item {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: var(--text-main);
+      padding: 8px 10px;
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      cursor: pointer;
+      text-align: left;
+      transition: var(--transition);
+      margin-bottom: 2px;
+      font-family: var(--font-sans);
+    }
+
+    .menu-item:hover {
+      background: rgba(0, 242, 254, 0.1);
+    }
+
+    .menu-item.has-sub-actions,
+    .menu-item.has-interactive,
+    .menu-item.has-input {
+      cursor: default;
+    }
+
+    .menu-item.has-sub-actions:hover,
+    .menu-item.has-interactive:hover,
+    .menu-item.has-input:hover {
+      background: rgba(0, 242, 254, 0.04);
+    }
+
+    .menu-item.danger:hover {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    .menu-item.danger .item-cmd {
+      color: #f87171;
+    }
+
+    .item-cmd-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .item-cmd {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--cyan-neon);
+    }
+
+    .item-desc {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      line-height: 1.3;
+    }
+
+    /* Action Pills for Multi-Action Items */
+    .menu-sub-pills {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      padding-top: 5px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .sub-pill-btn {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      font-size: 0.74rem;
+      font-weight: 500;
+      padding: 5px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      text-align: center;
+      transition: var(--transition);
+      white-space: nowrap;
+    }
+
+    .sub-pill-btn:hover {
+      background: rgba(0, 242, 254, 0.18);
+      border-color: var(--cyan-neon);
+      color: var(--cyan-neon);
+      box-shadow: 0 0 10px rgba(0, 242, 254, 0.35);
+      transform: translateY(-1px);
+    }
+
+    .sub-pill-btn.pill-enable:hover {
+      background: rgba(16, 185, 129, 0.18);
+      border-color: var(--color-green);
+      color: var(--color-green);
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.35);
+    }
+
+    .sub-pill-btn.pill-disable:hover {
+      background: rgba(239, 68, 68, 0.18);
+      border-color: var(--color-red);
+      color: var(--color-red);
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.35);
+    }
+
+    /* Inline Input Rows */
+    .menu-input-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      padding-top: 4px;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .menu-text-input {
+      flex: 1;
+      min-width: 0;
+      background: rgba(3, 7, 18, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 4px;
+      color: var(--text-main);
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      padding: 4px 8px;
+      outline: none;
+      transition: var(--transition);
+    }
+
+    .menu-text-input:focus {
+      border-color: var(--cyan-neon);
+      box-shadow: 0 0 8px rgba(0, 242, 254, 0.3);
+    }
+
+    .menu-input-btn {
+      background: linear-gradient(135deg, rgba(0, 242, 254, 0.25), rgba(37, 99, 235, 0.25));
+      border: 1px solid rgba(0, 242, 254, 0.35);
+      color: var(--cyan-neon);
+      font-family: var(--font-sans);
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: var(--transition);
+      white-space: nowrap;
+    }
+
+    .menu-input-btn:hover {
+      background: linear-gradient(135deg, rgba(0, 242, 254, 0.45), rgba(37, 99, 235, 0.45));
+      box-shadow: 0 0 10px rgba(0, 242, 254, 0.4);
+    }
+
+    .menu-input-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      border-color: rgba(255, 255, 255, 0.08);
+      color: var(--text-dim);
+      background: rgba(255, 255, 255, 0.03);
+      box-shadow: none;
+      pointer-events: none;
+    }
+
+    /* Terminal Modal */
+    .terminal-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 7, 18, 0.82);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      padding: 20px;
+    }
+
+    .terminal-modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .terminal-modal-window {
+      background: #040816;
+      border: 1px solid rgba(0, 242, 254, 0.32);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 30px 70px -15px rgba(0, 0, 0, 0.95), 0 0 45px -10px rgba(0, 242, 254, 0.28);
+      width: 100%;
+      max-width: 860px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transform: scale(0.96) translateY(10px);
+      transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .terminal-modal-overlay.active .terminal-modal-window {
+      transform: scale(1) translateY(0);
+    }
+
+    .terminal-modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 18px;
+      background: rgba(10, 18, 42, 0.8);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .terminal-modal-title {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      color: var(--cyan-neon);
+      margin-left: 10px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 440px;
+    }
+
+    .terminal-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .terminal-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .terminal-badge.running {
+      background: rgba(0, 242, 254, 0.12);
+      color: var(--cyan-neon);
+      border: 1px solid rgba(0, 242, 254, 0.3);
+    }
+
+    .terminal-badge.success {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--color-green);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .terminal-badge.error {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--color-red);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .terminal-btn-icon {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      border-radius: var(--radius-sm);
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      font-family: var(--font-mono);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .terminal-btn-icon:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .terminal-btn-icon .btn-svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .terminal-btn-close {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      font-size: 1.4rem;
+      line-height: 1;
+      padding: 2px 6px;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: var(--transition);
+    }
+
+    .terminal-btn-close:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.08);
+      transform: scale(1.1);
+    }
+
+    .terminal-modal-body {
+      padding: 18px 20px;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      line-height: 1.6;
+      color: #e2e8f0;
+      overflow-y: auto;
+      flex: 1;
+      min-height: 220px;
+      max-height: calc(85vh - 110px);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .terminal-prompt-line {
+      color: var(--text-dim);
+      font-size: 0.82rem;
+      word-break: break-all;
+    }
+
+    .prompt-user {
+      color: var(--color-green);
+      font-weight: 600;
+    }
+
+    .prompt-path {
+      color: var(--cyan-mid);
+    }
+
+    .prompt-cmd {
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    .terminal-output-text {
+      font-family: var(--font-mono);
+      font-size: 0.84rem;
+      line-height: 1.6;
+      color: #cbd5e1;
+      font-weight: 400;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 0;
+    }
+
+    /* Terminal Rich Slack mrkdwn & Emoji Elements */
+    .term-emoji {
+      font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+      font-style: normal;
+      font-size: 1.08em;
+      line-height: 1;
+      vertical-align: -0.06em;
+      margin-right: 4px;
+      display: inline-block;
+    }
+
+    .term-bold {
+      font-weight: 700;
+      color: #ffffff;
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.35);
+      letter-spacing: 0.01em;
+    }
+
+    .term-inline-code {
+      font-family: var(--font-mono);
+      color: #e2e8f0;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 0.88em;
+      font-weight: 500;
+      white-space: break-spaces;
+    }
+
+    .term-code-block {
+      margin: 10px 0;
+      border-radius: 6px;
+      background: rgba(2, 6, 20, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-left: 3px solid rgba(255, 255, 255, 0.35);
+      overflow: hidden;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+    }
+
+    .term-code-pre {
+      margin: 0;
+      padding: 10px 14px;
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      line-height: 1.5;
+      color: #94a3b8;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    .term-code-pre code {
+      color: #cbd5e1;
+      font-family: inherit;
+    }
+
+    .term-bullet {
+      color: var(--color-green);
+      font-weight: 700;
+      display: inline-block;
+      margin-right: 4px;
+    }
+
+    .term-italic,
+    i.term-italic,
+    em.term-italic {
+      font-style: italic;
+      color: #93c5fd;
+    }
+
+    .term-strike {
+      text-decoration: line-through;
+      color: var(--text-dim);
+      opacity: 0.7;
+    }
+
+    .term-quote {
+      border-left: 3px solid rgba(0, 242, 254, 0.45);
+      padding: 4px 10px;
+      margin: 6px 0;
+      color: var(--text-muted);
+      background: rgba(0, 242, 254, 0.04);
+      border-radius: 0 4px 4px 0;
+    }
+
+    .term-link {
+      color: var(--cyan-neon);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      transition: var(--transition);
+    }
+
+    .term-link:hover {
+      color: #ffffff;
+      text-shadow: 0 0 8px rgba(0, 242, 254, 0.5);
+    }
+
+    .terminal-spinner-line {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--cyan-neon);
+      font-size: 0.82rem;
+      margin-top: 4px;
+    }
+
+    .terminal-cursor {
+      display: inline-block;
+      color: var(--cyan-neon);
+      animation: cursorBlink 1s infinite;
+    }
+
+    @keyframes cursorBlink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    .terminal-modal-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 18px;
+      background: rgba(6, 12, 28, 0.8);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 0.74rem;
+      font-family: var(--font-mono);
+      color: var(--text-dim);
+    }
+
+    .terminal-footer-hint kbd {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border-subtle);
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-family: inherit;
+      color: var(--text-muted);
+    }
   </style>
 </head>
 
@@ -670,6 +1366,11 @@
                   </span>
                 </div>
               </th>
+              <th class="text-center" style="width: 80px;">
+                <div class="th-content center">
+                  <span>Action</span>
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody id="agents-tbody">
@@ -689,11 +1390,21 @@
               <td class="text-right">
                 <span class="uptime-ticker" data-boot="{{ a.boot_time }}">{{ a.uptime_str }}</span>
               </td>
+              <td class="text-center action-cell">
+                <button type="button" class="btn-action" data-host="{{ a.name }}" data-platform="{{ a.platform }}"
+                  title="Actions for {{ a.name }}" aria-label="Actions for {{ a.name }}">
+                  <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="4 17 10 11 4 5"></polyline>
+                    <line x1="12" y1="19" x2="20" y2="19"></line>
+                  </svg>
+                </button>
+              </td>
             </tr>
             {% endfor %}
             {% else %}
             <tr id="empty-row">
-              <td colspan="4">
+              <td colspan="5">
                 <div class="empty-state">
                   <div class="empty-icon">&#128225;</div>
                   <div class="empty-title">No agents connected yet</div>
@@ -760,6 +1471,59 @@
       <span>&copy; 2026 Jaroslav Lhot&aacute;k &bull; Cmdiqo Hub WebGUI &bull; <a href="https://cmdiqo.dev"
           target="_blank">cmdiqo.dev</a></span>
     </footer>
+  </div>
+
+  <!-- Action Context Menu (Dynamic Floating Popover) -->
+  <div id="action-context-menu" class="action-menu" role="menu" aria-hidden="true"></div>
+
+  <!-- Terminal Output Modal Window -->
+  <div id="terminal-modal" class="terminal-modal-overlay" aria-hidden="true">
+    <div class="terminal-modal-window" role="dialog" aria-modal="true" aria-labelledby="terminal-modal-title">
+      <div class="terminal-modal-header">
+        <div class="terminal-dots">
+          <span class="dot dot-red"></span>
+          <span class="dot dot-yellow"></span>
+          <span class="dot dot-green"></span>
+          <span id="terminal-modal-title" class="terminal-modal-title">$ /host</span>
+        </div>
+        <div class="terminal-header-actions">
+          <span id="terminal-status-badge" class="terminal-badge running">
+            <span class="pulse-dot"></span>
+            <span id="terminal-status-text">RUNNING</span>
+          </span>
+          <button type="button" id="terminal-copy-btn" class="terminal-btn-icon" title="Copy to clipboard"
+            aria-label="Copy terminal output">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round" class="btn-svg">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span class="copy-text">Copy</span>
+          </button>
+          <button type="button" id="terminal-close-btn" class="terminal-btn-close" title="Close (Esc)"
+            aria-label="Close terminal">&times;</button>
+        </div>
+      </div>
+      <div class="terminal-modal-body">
+        <div class="terminal-prompt-line">
+          <span class="prompt-user">cmdiqo@hub</span>:<span class="prompt-path">~</span>$ <span
+            id="terminal-active-cmd" class="prompt-cmd"></span>
+        </div>
+        <div id="terminal-output" class="terminal-output-text"></div>
+        <div id="terminal-spinner-line" class="terminal-spinner-line">
+          <span class="pulse-dot"></span>
+          <span id="terminal-spinnerText">Executing command on remote agent...</span>
+          <span class="terminal-cursor">▋</span>
+        </div>
+      </div>
+      <div class="terminal-modal-footer">
+        <div class="terminal-footer-meta">
+          Target: <span id="terminal-target-host">--</span> &bull; Status: <span
+            id="terminal-footer-status">Waiting</span>
+        </div>
+        <div class="terminal-footer-hint">Press <kbd>Esc</kbd> to exit</div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -997,7 +1761,7 @@
         if (!sorted || sorted.length === 0) {
           tbody.innerHTML = `
             <tr id="empty-row">
-              <td colspan="4">
+              <td colspan="5">
                 <div class="empty-state">
                   <div class="empty-icon">&#128225;</div>
                   <div class="empty-title">No agents connected yet</div>
@@ -1026,6 +1790,16 @@
               </td>
               <td class="text-right">
                 <span class="uptime-ticker" data-boot="${a.boot_time}">${escapeHtml(a.uptime_str)}</span>
+              </td>
+              <td class="text-center action-cell">
+                <button type="button" class="btn-action" data-host="${escapeHtml(a.name)}" data-platform="${escapeHtml(a.platform)}"
+                  title="Actions for ${escapeHtml(a.name)}" aria-label="Actions for ${escapeHtml(a.name)}">
+                  <svg class="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="4 17 10 11 4 5"></polyline>
+                    <line x1="12" y1="19" x2="20" y2="19"></line>
+                  </svg>
+                </button>
               </td>
             </tr>`;
         });
@@ -1172,6 +1946,689 @@
       connectSSE();
       updateUptimes();
       scrollToActivePosition();
+
+      // 4. Host Action Menu & Terminal Modal Controller
+      const COMMAND_CATEGORIES = [
+        {
+          id: 'health',
+          label: 'System Health',
+          icon: '📊',
+          items: [
+            { cmd: 'uptime', label: 'Uptime', desc: 'System uptime & load average' },
+            { cmd: 'memory', label: 'Memory', desc: 'Free & used RAM memory' },
+            { cmd: 'disk', label: 'Disk Space', desc: 'Partition & disk usage' },
+            { cmd: 'top', label: 'Top Processes', desc: 'Top CPU-consuming processes' },
+            { cmd: 'events', label: 'System Events', desc: 'Recent system errors & warnings' }
+          ]
+        },
+        {
+          id: 'power',
+          label: 'Power & Session',
+          icon: '⚡',
+          items: [
+            { cmd: 'lock', label: 'Lock Session', desc: 'Lock active graphical desktop' },
+            { cmd: 'screentime', label: 'Screen Time', desc: 'Active logged-in sessions & idle time' },
+            {
+              cmd: 'msg',
+              label: 'Send Message',
+              desc: 'Desktop popup notification',
+              hasInput: true,
+              inputPlaceholder: 'Enter message...',
+              inputPrefix: 'msg',
+              submitLabel: 'Send'
+            },
+            { cmd: 'reboot', label: 'Reboot Host', desc: 'Reboot remote host after warning', danger: true },
+            { cmd: 'shutdown', label: 'Shutdown Host', desc: 'Shutdown remote host after warning', danger: true }
+          ]
+        },
+        {
+          id: 'network',
+          label: 'Network & Diagnostics',
+          icon: '🌐',
+          items: [
+            { cmd: 'ports', label: 'Listening Ports', desc: 'Open listening ports & owning processes' },
+            { cmd: 'speedtest', label: 'Speedtest', desc: 'Download speed & latency test (Cloudflare)' },
+            {
+              cmd: 'ping',
+              label: 'Ping Target',
+              desc: 'Ping IP or domain from host',
+              hasInput: true,
+              inputPlaceholder: '1.1.1.1 or google.com',
+              inputPrefix: 'ping',
+              submitLabel: 'Ping'
+            }
+          ]
+        },
+        {
+          id: 'services',
+          label: 'Services',
+          icon: '⚙️',
+          items: [
+            { cmd: 'services', label: 'List Services', desc: 'List active system services' },
+            {
+              cmd: 'service status',
+              label: 'Service Status',
+              desc: 'Check status of a system service',
+              hasInput: true,
+              inputPlaceholder: 'e.g. nginx, smbd, Spooler',
+              inputPrefix: 'service status',
+              submitLabel: 'Check'
+            },
+            {
+              cmd: 'service restart',
+              label: 'Service Restart',
+              desc: 'Restart a system service',
+              hasInput: true,
+              inputPlaceholder: 'e.g. nginx, smbd, Spooler',
+              inputPrefix: 'service restart',
+              submitLabel: 'Restart'
+            }
+          ]
+        },
+        {
+          id: 'docker',
+          label: 'Docker Containers',
+          icon: '🐳',
+          platforms: ['linux', 'linux64', 'arm64', 'armv6'],
+          items: [
+            { cmd: 'docker ps', label: 'Docker PS', desc: 'List running containers' },
+            { cmd: 'docker stats', label: 'Docker Stats', desc: 'CPU, RAM & network usage snapshot' },
+            {
+              cmd: 'docker logs',
+              label: 'Docker Logs',
+              desc: 'Tail last 50 log lines of container',
+              hasInput: true,
+              inputPlaceholder: 'Container name',
+              inputPrefix: 'docker logs',
+              submitLabel: 'Logs'
+            },
+            {
+              cmd: 'docker restart',
+              label: 'Docker Restart',
+              desc: 'Restart docker compose container',
+              hasInput: true,
+              inputPlaceholder: 'Container name',
+              inputPrefix: 'docker restart',
+              submitLabel: 'Restart'
+            }
+          ]
+        },
+        {
+          id: 'windows',
+          label: 'Windows Maintenance',
+          icon: '🪟',
+          platforms: ['win64', 'windows'],
+          items: [
+            { cmd: 'win updates', label: 'Windows Updates', desc: 'Installed hotfixes & KB numbers' }
+          ]
+        },
+        {
+          id: 'parental',
+          label: 'Parental Controls',
+          icon: '🛡️',
+          items: [
+            {
+              label: 'Domain Blocking',
+              desc: 'Block domains via local hosts file',
+              subActions: [
+                { cmd: 'parental status', label: 'Status', desc: 'Check active domain blocking' },
+                { cmd: 'parental on', label: 'Enable', desc: 'Enable blocking (redirect to 0.0.0.0)' },
+                { cmd: 'parental off', label: 'Disable', desc: 'Disable blocking & restore access' }
+              ]
+            },
+            {
+              label: 'App Blocking',
+              desc: 'Block games & apps (e.g. roblox, steam, all)',
+              hasInput: true,
+              inputPlaceholder: 'all, roblox, steam...',
+              inputPrefix: 'blockapp',
+              submitLabel: 'Check',
+              subActions: [
+                { cmd: 'blockapp status', label: 'Status', desc: 'Check app blocking status across all apps' },
+                { cmd: 'blockapp on', label: 'Enable All', desc: 'Block all configured games and apps' },
+                { cmd: 'blockapp off', label: 'Disable All', desc: 'Unblock all games and apps' }
+              ]
+            },
+            {
+              label: 'Logon Hours',
+              desc: 'Allowed schedule (e.g. M-F,08:00-20:00)',
+              hasInput: true,
+              inputPlaceholder: 'M-F,08:00-20:00',
+              inputPrefix: 'restrict set',
+              submitLabel: 'Set',
+              subActions: [
+                { cmd: 'restrict status', label: 'Status', desc: 'Check active allowed logon hours' },
+                { cmd: 'restrict off', label: 'Disable', desc: 'Remove logon hours restrictions (24/7 unlimited)' }
+              ]
+            }
+          ]
+        },
+        {
+          id: 'users',
+          label: 'User Management',
+          icon: '👤',
+          items: [
+            { cmd: 'users', label: 'List Users', desc: 'List OS user accounts & status' },
+            { cmd: 'screentime', label: 'Screentime & Sessions', desc: 'Active logged-in sessions & idle time' }
+          ]
+        }
+      ];
+
+      const contextMenu = document.getElementById('action-context-menu');
+      const terminalModal = document.getElementById('terminal-modal');
+      const terminalModalTitle = document.getElementById('terminal-modal-title');
+      const terminalActiveCmd = document.getElementById('terminal-active-cmd');
+      const terminalOutput = document.getElementById('terminal-output');
+      const terminalSpinnerLine = document.getElementById('terminal-spinner-line');
+      const terminalStatusBadge = document.getElementById('terminal-status-badge');
+      const terminalStatusText = document.getElementById('terminal-status-text');
+      const terminalTargetHost = document.getElementById('terminal-target-host');
+      const terminalFooterStatus = document.getElementById('terminal-footer-status');
+      const terminalCopyBtn = document.getElementById('terminal-copy-btn');
+      const terminalCloseBtn = document.getElementById('terminal-close-btn');
+
+      let activeMenuButton = null;
+
+      function closeActionMenu() {
+        if (contextMenu) {
+          contextMenu.classList.remove('active');
+          contextMenu.setAttribute('aria-hidden', 'true');
+          contextMenu.innerHTML = '';
+        }
+        if (activeMenuButton) {
+          activeMenuButton.classList.remove('active');
+          activeMenuButton = null;
+        }
+      }
+
+      function closeTerminalModal() {
+        if (terminalModal) {
+          terminalModal.classList.remove('active');
+          terminalModal.setAttribute('aria-hidden', 'true');
+        }
+      }
+
+      // 5. Slack mrkdwn to Rich Terminal HTML Formatter
+      const SLACK_EMOJI_MAP = {
+        ':information_source:': 'ℹ️',
+        ':info:': 'ℹ️',
+        ':white_check_mark:': '✅',
+        ':heavy_check_mark:': '✔',
+        ':check:': '✅',
+        ':ballot_box_with_check:': '☑️',
+        ':warning:': '⚠️',
+        ':no_entry_sign:': '🚫',
+        ':no_entry:': '⛔',
+        ':stop_sign:': '🛑',
+        ':x:': '❌',
+        ':cross_mark:': '❌',
+        ':question:': '❓',
+        ':grey_question:': '❔',
+        ':exclamation:': '❗',
+        ':grey_exclamation:': '❕',
+        ':shield:': '🛡️',
+        ':lock:': '🔒',
+        ':unlock:': '🔓',
+        ':key:': '🔑',
+        ':gear:': '⚙️',
+        ':gears:': '⚙️',
+        ':wrench:': '🔧',
+        ':tools:': '🛠️',
+        ':hammer_and_wrench:': '🛠️',
+        ':hammer:': '🔨',
+        ':package:': '📦',
+        ':whale:': '🐳',
+        ':robot_face:': '🤖',
+        ':robot:': '🤖',
+        ':zap:': '⚡',
+        ':lightning:': '⚡',
+        ':fire:': '🔥',
+        ':rocket:': '🚀',
+        ':sparkles:': '✨',
+        ':star:': '⭐',
+        ':tada:': '🎉',
+        ':computer:': '💻',
+        ':desktop_computer:': '🖥️',
+        ':laptop:': '💻',
+        ':server:': '🖥️',
+        ':satellite_antenna:': '📡',
+        ':satellite:': '🛰️',
+        ':antenna:': '📡',
+        ':link:': '🔗',
+        ':signal_strength:': '📶',
+        ':plug:': '🔌',
+        ':battery:': '🔋',
+        ':electric_plug:': '🔌',
+        ':globe_with_meridians:': '🌐',
+        ':ping_pong:': '🏓',
+        ':floppy_disk:': '💾',
+        ':disk:': '💾',
+        ':stopwatch:': '⏱️',
+        ':timer_clock:': '⏲️',
+        ':hourglass:': '⌛',
+        ':hourglass_flowing_sand:': '⏳',
+        ':clock:': '🕒',
+        ':clock3:': '🕒',
+        ':clock12:': '🕛',
+        ':bar_chart:': '📊',
+        ':chart_with_upwards_trend:': '📈',
+        ':chart_with_downwards_trend:': '📉',
+        ':bell:': '🔔',
+        ':bulb:': '💡',
+        ':eyes:': '👀',
+        ':mag:': '🔍',
+        ':mag_right:': '🔎',
+        ':book:': '📖',
+        ':memo:': '📝',
+        ':white_circle:': '⚪',
+        ':black_circle:': '⚫',
+        ':red_circle:': '🔴',
+        ':large_green_circle:': '🟢',
+        ':large_blue_circle:': '🔵',
+        ':radio_button:': '🔘',
+        ':heart:': '❤️',
+        ':skull:': '💀',
+        ':recycle:': '♻️',
+        ':arrow_right:': '➡️',
+        ':arrow_left:': '⬅️',
+        ':arrow_up:': '⬆️',
+        ':arrow_down:': '⬇️'
+      };
+
+      function formatSlackToHtml(rawText) {
+        if (!rawText || typeof rawText !== 'string') return '';
+
+        // Clean zero-width space escape used in Slack reply code blocks
+        let text = rawText.replace(/\u200b```/g, '```');
+
+        // Step 1: Escape HTML characters to strictly prevent XSS
+        text = text
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+
+        // Step 2: Extract and preserve fenced multiline code blocks (```...```)
+        const codeBlocks = [];
+        text = text.replace(/```(?:[a-zA-Z0-9_-]+)?\n?([\s\S]*?)```/g, function (match, code) {
+          const idx = codeBlocks.length;
+          const formatted = `<div class="term-code-block"><pre class="term-code-pre"><code>${code.trimEnd()}</code></pre></div>`;
+          codeBlocks.push(formatted);
+          return `\uE000SLACK_CODE_BLOCK_${idx}\uE000`;
+        });
+
+        // Step 3: Extract and preserve inline code (`...`)
+        const inlineCodes = [];
+        text = text.replace(/`([^`\n]+)`/g, function (match, code) {
+          const idx = inlineCodes.length;
+          const formatted = `<code class="term-inline-code">${code}</code>`;
+          inlineCodes.push(formatted);
+          return `\uE000SLACK_INLINE_CODE_${idx}\uE000`;
+        });
+
+        // Step 4: Replace Slack emoji shortcodes
+        for (const [code, glyph] of Object.entries(SLACK_EMOJI_MAP)) {
+          if (text.includes(code)) {
+            text = text.split(code).join(`<span class="term-emoji">${glyph}</span>`);
+          }
+        }
+
+        // Step 5: Convert Slack links <url|label> and <url>
+        text = text.replace(/&lt;(https?:\/\/[^\s|&]+)\|([^&]+)&gt;/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="term-link">$2</a>');
+        text = text.replace(/&lt;(https?:\/\/[^\s>&]+)&gt;/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="term-link">$1</a>');
+        text = text.replace(/&lt;(mailto:[^\s|&]+)\|([^&]+)&gt;/g, '<a href="$1" class="term-link">$2</a>');
+
+        // Step 6: Convert bold (**text** or __text__)
+        text = text.replace(/(\*\*|__)([^\n]+?)\1/g, '<strong class="term-bold">$2</strong>');
+
+        // Step 7: Convert single-asterisk bold (*text*)
+        text = text.replace(/(?<![a-zA-Z0-9*])\*([^*\n]+?)\*(?![a-zA-Z0-9*])/g, '<strong class="term-bold">$1</strong>');
+
+        // Step 8: Convert italics (_text_)
+        text = text.replace(/(?<![a-zA-Z0-9])_(?!\s)([^\n]+?)(?<!\s)_(?![a-zA-Z0-9])/g, '<i class="term-italic">$1</i>');
+
+        // Step 9: Convert strikethrough (~text~)
+        text = text.replace(/(?<![a-zA-Z0-9~])~([^~\n]+)~(?![a-zA-Z0-9~])/g, '<del class="term-strike">$1</del>');
+
+        // Step 10: Convert bullet points
+        text = text.replace(/^[ \t]*•[ \t]*/gm, '<span class="term-bullet">•</span> ');
+        text = text.replace(/^[ \t]*-[ \t]+(?=[a-zA-Z0-9<])/gm, '<span class="term-bullet">•</span> ');
+
+        // Step 11: Convert blockquotes (> quote)
+        text = text.replace(/^[ \t]*&gt;[ \t]*(.*)$/gm, '<div class="term-quote">$1</div>');
+
+        // Step 12: Restore inline codes
+        text = text.replace(/\uE000SLACK_INLINE_CODE_(\d+)\uE000/g, function (match, idx) {
+          return inlineCodes[Number.parseInt(idx, 10)] || '';
+        });
+
+        // Step 13: Restore code blocks
+        text = text.replace(/\uE000SLACK_CODE_BLOCK_(\d+)\uE000/g, function (match, idx) {
+          return codeBlocks[Number.parseInt(idx, 10)] || '';
+        });
+
+        return text;
+      }
+
+      function openTerminalAndExecute(host, fullCmd) {
+        closeActionMenu();
+        if (!terminalModal) return;
+
+        const startTime = Date.now();
+        terminalModalTitle.textContent = `$ ${fullCmd}`;
+        terminalActiveCmd.textContent = fullCmd;
+        terminalTargetHost.textContent = host;
+        terminalFooterStatus.textContent = 'Executing...';
+        terminalOutput.textContent = '';
+        terminalOutput.innerHTML = '';
+        terminalOutput.dataset.raw = '';
+        terminalSpinnerLine.style.display = 'inline-flex';
+
+        terminalStatusBadge.className = 'terminal-badge running';
+        terminalStatusText.textContent = 'RUNNING';
+
+        terminalModal.classList.add('active');
+        terminalModal.setAttribute('aria-hidden', 'false');
+
+        fetch('/api/exec', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: fullCmd })
+        })
+          .then(res => res.json())
+          .then(data => {
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+            terminalSpinnerLine.style.display = 'none';
+            if (data && data.success) {
+              terminalStatusBadge.className = 'terminal-badge success';
+              terminalStatusText.textContent = 'COMPLETED';
+              terminalFooterStatus.textContent = `Completed in ${elapsed}s (exit 0)`;
+              const raw = data.output || '[Command executed successfully with no output]';
+              terminalOutput.dataset.raw = raw;
+              terminalOutput.innerHTML = formatSlackToHtml(raw);
+            } else {
+              terminalStatusBadge.className = 'terminal-badge error';
+              terminalStatusText.textContent = 'FAILED';
+              terminalFooterStatus.textContent = `Failed in ${elapsed}s`;
+              const raw = (data && data.output) ? data.output : ((data && data.error) ? data.error : 'Execution failed');
+              terminalOutput.dataset.raw = raw;
+              terminalOutput.innerHTML = formatSlackToHtml(raw);
+            }
+          })
+          .catch(err => {
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+            terminalSpinnerLine.style.display = 'none';
+            terminalStatusBadge.className = 'terminal-badge error';
+            terminalStatusText.textContent = 'ERROR';
+            terminalFooterStatus.textContent = `Error in ${elapsed}s`;
+            const raw = `Network or HTTP Error: ${err.message || err}`;
+            terminalOutput.dataset.raw = raw;
+            terminalOutput.innerHTML = formatSlackToHtml(raw);
+          });
+      }
+
+      function openActionMenu(button, host, platform) {
+        if (activeMenuButton === button && contextMenu.classList.contains('active')) {
+          closeActionMenu();
+          return;
+        }
+
+        closeActionMenu();
+        activeMenuButton = button;
+        button.classList.add('active');
+
+        const pLower = (platform || '').toLowerCase();
+        const isWindows = pLower.includes('win');
+
+        // Filter categories according to the host platform
+        const visibleCategories = COMMAND_CATEGORIES.filter(cat => {
+          if (!cat.platforms) return true;
+          if (isWindows) return cat.platforms.includes('win64') || cat.platforms.includes('windows');
+          return cat.platforms.some(p => p.includes('linux') || p.includes('arm'));
+        });
+
+        let menuHtml = `
+          <div class="menu-header">
+            <div class="menu-host-badge"><span class="pulse-dot"></span> HOST: <strong>${escapeHtml(host)}</strong></div>
+            <span class="menu-platform-badge">${escapeHtml(platform || 'LAN')}</span>
+          </div>
+          <div class="menu-categories-list">
+        `;
+
+        visibleCategories.forEach(cat => {
+          menuHtml += `
+            <div class="menu-category" data-cat-id="${cat.id}">
+              <button type="button" class="menu-category-btn" data-cat-trigger="${cat.id}">
+                <span class="menu-category-label">
+                  <span>${cat.icon}</span>
+                  <span>${escapeHtml(cat.label)}</span>
+                </span>
+                <span class="category-chevron">›</span>
+              </button>
+              <div class="menu-submenu" id="submenu-${cat.id}">
+          `;
+
+          cat.items.forEach(item => {
+            if (item.hasInput || item.subActions) {
+              menuHtml += `
+                <div class="menu-item has-interactive">
+                  <div class="item-cmd-line">
+                    <span class="item-cmd">${escapeHtml(item.label)}</span>
+                  </div>
+                  <div class="item-desc">${escapeHtml(item.desc)}</div>
+              `;
+              if (item.hasInput) {
+                menuHtml += `
+                  <div class="menu-input-row" onclick="event.stopPropagation();">
+                    <input type="text" class="menu-text-input" placeholder="${escapeHtml(item.inputPlaceholder)}" data-prefix="${escapeHtml(item.inputPrefix)}" />
+                    <button type="button" class="menu-input-btn" data-action-input="${escapeHtml(item.inputPrefix)}" disabled>${escapeHtml(item.submitLabel || 'Run')} ↵</button>
+                  </div>
+                `;
+              }
+              if (item.subActions) {
+                menuHtml += `
+                  <div class="menu-sub-pills" onclick="event.stopPropagation();">
+                `;
+                item.subActions.forEach(sub => {
+                  const labelLower = (sub.label || '').toLowerCase();
+                  const isEnable = labelLower === 'enable' || labelLower === 'on';
+                  const isDisable = labelLower.includes('disable') || labelLower === 'off';
+                  const pillClass = isEnable ? ' pill-enable' : (isDisable ? ' pill-disable' : '');
+                  menuHtml += `
+                    <button type="button" class="sub-pill-btn${pillClass}" data-action-cmd="/host ${escapeHtml(host)} ${escapeHtml(sub.cmd)}" title="${escapeHtml(sub.desc || sub.label)}">
+                      ${escapeHtml(sub.label)}
+                    </button>
+                  `;
+                });
+                menuHtml += `</div>`;
+              }
+              menuHtml += `</div>`;
+            } else {
+              const dangerClass = item.danger ? ' danger' : '';
+              menuHtml += `
+                <button type="button" class="menu-item${dangerClass}" data-action-cmd="/host ${escapeHtml(host)} ${escapeHtml(item.cmd)}">
+                  <div class="item-cmd-line">
+                    <span class="item-cmd">${escapeHtml(item.label)}</span>
+                  </div>
+                  <div class="item-desc">${escapeHtml(item.desc)}</div>
+                </button>
+              `;
+            }
+          });
+
+          menuHtml += `
+              </div>
+            </div>
+          `;
+        });
+
+        menuHtml += `</div>`;
+        contextMenu.innerHTML = menuHtml;
+
+        // Position menu next to clicked button
+        const rect = button.getBoundingClientRect();
+        const menuWidth = 250;
+        let top = rect.bottom + window.scrollY + 4;
+        let left = rect.right - menuWidth + window.scrollX;
+
+        // If button is near bottom of viewport, flip upwards
+        const estimatedHeight = 320;
+        if (rect.bottom + estimatedHeight > window.innerHeight && rect.top > estimatedHeight) {
+          top = rect.top + window.scrollY - estimatedHeight - 4;
+        }
+
+        if (left < 10) left = 10;
+        if (left + menuWidth > window.innerWidth - 10) {
+          left = window.innerWidth - menuWidth - 10;
+        }
+
+        contextMenu.style.top = `${top}px`;
+        contextMenu.style.left = `${left}px`;
+        contextMenu.classList.add('active');
+        contextMenu.setAttribute('aria-hidden', 'false');
+
+        // Collision detection for cascading submenus
+        contextMenu.querySelectorAll('.menu-category').forEach(catEl => {
+          const checkSubmenuBounds = () => {
+            const sub = catEl.querySelector('.menu-submenu');
+            if (!sub) return;
+            const subRect = sub.getBoundingClientRect();
+            if (subRect.right > window.innerWidth - 10) {
+              sub.classList.add('flip-left');
+            } else {
+              sub.classList.remove('flip-left');
+            }
+            const overflowBottom = subRect.bottom - (window.innerHeight - 10);
+            if (overflowBottom > 0) {
+              sub.style.top = `${Math.min(-4, -overflowBottom - 4)}px`;
+            } else {
+              sub.style.top = '-4px';
+            }
+          };
+          catEl.addEventListener('mouseenter', checkSubmenuBounds);
+        });
+
+        // Command click dispatch
+        contextMenu.querySelectorAll('[data-action-cmd]').forEach(itemBtn => {
+          itemBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const cmd = itemBtn.getAttribute('data-action-cmd');
+            if (cmd) {
+              openTerminalAndExecute(host, cmd);
+            }
+          });
+        });
+
+        // Inline input handlers
+        contextMenu.querySelectorAll('.menu-input-row').forEach(row => {
+          const input = row.querySelector('.menu-text-input');
+          const submitBtn = row.querySelector('.menu-input-btn');
+          if (!input || !submitBtn) return;
+
+          // Keep submit button disabled until real non-empty input is typed
+          const updateBtnState = () => {
+            const hasRealInput = input.value.trim().length > 0;
+            submitBtn.disabled = !hasRealInput;
+          };
+
+          input.addEventListener('input', updateBtnState);
+          updateBtnState();
+
+          const doSubmit = () => {
+            const val = input.value.trim();
+            if (!val) {
+              input.focus();
+              return;
+            }
+            const prefix = input.getAttribute('data-prefix');
+            const full = `/host ${host} ${prefix} ${val}`;
+            openTerminalAndExecute(host, full);
+          };
+
+          submitBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (submitBtn.disabled) return;
+            doSubmit();
+          });
+
+          input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              e.stopPropagation();
+              if (!input.value.trim()) return;
+              doSubmit();
+            }
+          });
+        });
+      }
+
+      // Close menu when clicking outside
+      document.addEventListener('click', function(e) {
+        if (contextMenu && contextMenu.classList.contains('active')) {
+          if (!contextMenu.contains(e.target) && !e.target.closest('.btn-action')) {
+            closeActionMenu();
+          }
+        }
+      });
+
+      // Esc key listener (closes menu or modal)
+      window.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          if (contextMenu && contextMenu.classList.contains('active')) {
+            closeActionMenu();
+            return;
+          }
+          if (terminalModal && terminalModal.classList.contains('active')) {
+            closeTerminalModal();
+          }
+        }
+      });
+
+      // Close terminal modal button & backdrop
+      if (terminalCloseBtn) {
+        terminalCloseBtn.addEventListener('click', closeTerminalModal);
+      }
+      if (terminalModal) {
+        terminalModal.addEventListener('click', function(e) {
+          if (e.target === terminalModal) {
+            closeTerminalModal();
+          }
+        });
+      }
+
+      // Terminal copy button
+      if (terminalCopyBtn) {
+        terminalCopyBtn.addEventListener('click', function() {
+          if (!terminalOutput) return;
+          const textToCopy = terminalOutput.dataset.raw || terminalOutput.innerText || terminalOutput.textContent || '';
+          if (!textToCopy) return;
+
+          navigator.clipboard.writeText(textToCopy).then(() => {
+            const copySpan = terminalCopyBtn.querySelector('.copy-text');
+            if (copySpan) {
+              const orig = copySpan.textContent;
+              copySpan.textContent = 'Copied ✓';
+              setTimeout(() => { copySpan.textContent = orig; }, 2000);
+            }
+          }).catch(err => {
+            console.warn('Copy to clipboard failed', err);
+          });
+        });
+      }
+
+      // Action button click handler
+      document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.btn-action');
+        if (btn) {
+          e.stopPropagation();
+          const host = btn.getAttribute('data-host');
+          const platform = btn.getAttribute('data-platform');
+          if (host) {
+            openActionMenu(btn, host, platform);
+          }
+        }
+      });
     })();
   </script>
 </body>

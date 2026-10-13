@@ -5,7 +5,10 @@ import pytest
 from bot.commands.restrict import (
     build_restrict_script_linux,
     build_restrict_script_windows,
+    format_condensed_logon_hours,
     manage_restrict,
+    normalize_schedule,
+    normalize_windows_schedule,
     validate_schedule_syntax,
 )
 
@@ -15,6 +18,18 @@ def test_validate_schedule_syntax():
     assert validate_schedule_syntax("M-F,16:00-20:00")
     assert validate_schedule_syntax("Sa-Su,09:00-18:00")
     assert validate_schedule_syntax("all")
+    assert validate_schedule_syntax("M-F,08:00-10:00;M-F,11:00-20:00")
+    assert validate_schedule_syntax(" M-F,08:00-10:00, M-F,11:00-20:00 ")
+    assert validate_schedule_syntax("M-F,08:00-10:00,11:00-20:00")
+    assert normalize_schedule(" M-F,08:00-10:00, M-F,11:00-20:00 ") == "M-F,08:00-10:00;M-F,11:00-20:00"
+    assert normalize_schedule("M-F,08:00-20:00; Sa-Su,09:00-21:00") == "M-F,08:00-20:00;Sa-Su,09:00-21:00"
+
+    # Windows 1-hour resolution normalization
+    win_sched, notes = normalize_windows_schedule("Sa-Su,08:00-20:00;M-F,06:45-19:00")
+    assert win_sched == "Sa-Su,08:00-20:00;M-F,06:00-19:00"
+    assert len(notes) == 1
+    assert "06:45" in notes[0] and "06:00" in notes[0]
+
     assert not validate_schedule_syntax("")
     assert not validate_schedule_syntax("M-F;calc.exe")
     assert not validate_schedule_syntax("M-F && rm -rf /")
@@ -30,12 +45,12 @@ def test_build_restrict_script_windows():
     win_script_set = build_restrict_script_windows("set", "jonas", "M-F,08:00-20:00")
     assert "$action = 'set'.ToLower()" in win_script_set
     assert "$scheduleStr = 'M-F,08:00-20:00'" in win_script_set
-    assert "'net user ' + $u + ' /time:' + $scheduleStr" in win_script_set
+    assert "('/time:' + $scheduleStr)" in win_script_set
     assert '"' not in win_script_set
 
     win_script_off = build_restrict_script_windows("off", "jonas")
     assert "$action = 'off'.ToLower()" in win_script_off
-    assert "'net user ' + $u + ' /time:all'" in win_script_off
+    assert "'/time:all'" in win_script_off
     assert '"' not in win_script_off
 
 
@@ -134,3 +149,219 @@ async def test_manage_restrict_mock_hub():
         {"host": "PC-LIN", "action": "status", "user": "jonas"}, hub=mock_hub
     )
     assert "Unrestricted" in res_lin_status
+
+    # Auto-deduce action from _spec_name when executed via command registry
+    res_deduced_status = await manage_restrict(
+        {"host": "PC-WIN", "_spec_name": "host-restrict-status"}, hub=mock_hub
+    )
+    assert "Logon Hours Status on `PC-WIN`" in res_deduced_status
+
+    res_deduced_off = await manage_restrict(
+        {"host": "PC-WIN", "_spec_name": "host-restrict-off"}, hub=mock_hub
+    )
+    assert "Logon hours restriction removed" in res_deduced_off
+
+    res_deduced_set = await manage_restrict(
+        {"host": "PC-WIN", "schedule": "M-F,08:00-20:00", "_spec_name": "host-restrict-set"},
+        hub=mock_hub,
+    )
+    assert "Logon hours restriction successfully applied" in res_deduced_set
+
+    # Auto-deduce action from config
+    res_cfg_status = await manage_restrict(
+        {"host": "PC-WIN"}, hub=mock_hub, config={"action": "status"}
+    )
+    assert "Logon Hours Status on `PC-WIN`" in res_cfg_status
+
+    # Normalize user keyword when user="off" or user="status"
+    res_norm_user = await manage_restrict(
+        {"host": "PC-WIN", "user": "off"}, hub=mock_hub
+    )
+    assert "Logon hours restriction removed" in res_norm_user
+
+
+@pytest.mark.asyncio
+async def test_handle_command_restrict_slack_integration():
+    from unittest.mock import AsyncMock
+
+    from bot.app import handle_command, load_commands
+
+    class HubFake:
+        def __init__(self):
+            self.agents = {
+                "PC-WIN": {"platform": "Windows 11"},
+            }
+
+        async def exec(self, host, kind, cmd, timeout=30):
+            if "$action = 'status'" in cmd:
+                return "STATUS:jonas:Monday 08:00 - 20:00, Tuesday 08:00 - 20:00"
+            if "$action = 'set'" in cmd:
+                return "SUCCESS:set:jonas:M-F,08:00-20:00"
+            if "$action = 'off'" in cmd:
+                return "SUCCESS:off:jonas"
+            return ""
+
+    fake_hub = HubFake()
+    commands = load_commands("config/commands.yaml")
+    post_mock = AsyncMock()
+
+    # 1. Test /host PC-WIN restrict status
+    await handle_command(
+        text="/host PC-WIN restrict status",
+        user_id="U1",
+        channel_id="C1",
+        post=post_mock,
+        commands=commands,
+        hub=fake_hub,
+    )
+    assert post_mock.await_count >= 2
+    reply_status = post_mock.await_args_list[-1][0][0]
+    assert "Logon Hours Status on `PC-WIN`" in reply_status
+
+    # 2. Test /host PC-WIN restrict off
+    post_mock.reset_mock()
+    await handle_command(
+        text="/host PC-WIN restrict off",
+        user_id="U1",
+        channel_id="C1",
+        post=post_mock,
+        commands=commands,
+        hub=fake_hub,
+    )
+    reply_off = post_mock.await_args_list[-1][0][0]
+    assert "Logon hours restriction removed" in reply_off
+
+    # 3. Test /host PC-WIN restrict set M-F,08:00-20:00
+    post_mock.reset_mock()
+    await handle_command(
+        text="/host PC-WIN restrict set M-F,08:00-20:00",
+        user_id="U1",
+        channel_id="C1",
+        post=post_mock,
+        commands=commands,
+        hub=fake_hub,
+    )
+    reply_set = post_mock.await_args_list[-1][0][0]
+    assert "Logon hours restriction successfully applied" in reply_set
+
+    # 4. Test shorthand /host PC-WIN restrict
+    post_mock.reset_mock()
+    await handle_command(
+        text="/host PC-WIN restrict",
+        user_id="U1",
+        channel_id="C1",
+        post=post_mock,
+        commands=commands,
+        hub=fake_hub,
+    )
+    reply_shorthand = post_mock.await_args_list[-1][0][0]
+    assert "Logon Hours Status on `PC-WIN`" in reply_shorthand
+
+    # 5. Test direct shortcut /restrict PC-WIN set M-F,08:00-20:00
+    post_mock.reset_mock()
+    await handle_command(
+        text="/restrict PC-WIN set M-F,08:00-20:00",
+        user_id="U1",
+        channel_id="C1",
+        post=post_mock,
+        commands=commands,
+        hub=fake_hub,
+    )
+    reply_direct_set = post_mock.await_args_list[-1][0][0]
+    assert "Logon hours restriction successfully applied" in reply_direct_set
+
+    # 6. Test direct shortcut /restrict PC-WIN off
+    post_mock.reset_mock()
+    await handle_command(
+        text="/restrict PC-WIN off",
+        user_id="U1",
+        channel_id="C1",
+        post=post_mock,
+        commands=commands,
+        hub=fake_hub,
+    )
+    reply_direct_off = post_mock.await_args_list[-1][0][0]
+    assert "Logon hours restriction removed" in reply_direct_off
+
+    # 7. Test direct shorthand /restrict PC-WIN
+    post_mock.reset_mock()
+    await handle_command(
+        text="/restrict PC-WIN",
+        user_id="U1",
+        channel_id="C1",
+        post=post_mock,
+        commands=commands,
+        hub=fake_hub,
+    )
+    reply_direct_status = post_mock.await_args_list[-1][0][0]
+    assert "Logon Hours Status on `PC-WIN`" in reply_direct_status
+
+    # 8. Test split schedule with comma and spaces
+    post_mock.reset_mock()
+    await handle_command(
+        text="/host PC-WIN restrict set  M-F,08:00-10:00, M-F,11:00-20:00 ",
+        user_id="U1",
+        channel_id="C1",
+        post=post_mock,
+        commands=commands,
+        hub=fake_hub,
+    )
+    reply_split = post_mock.await_args_list[-1][0][0]
+    assert "Logon hours restriction successfully applied" in reply_split
+    assert "M-F,08:00-10:00;M-F,11:00-20:00" in reply_split
+
+
+def test_format_condensed_logon_hours():
+    # 1. Compound schedule (M-F + Sa-Su)
+    compound = (
+        "Sunday 08:00:00 - 18:00:00; Monday 07:00:00 - 18:00:00; Tuesday 07:00:00 - 18:00:00; "
+        "Wednesday 07:00:00 - 18:00:00; Thursday 07:00:00 - 18:00:00; Friday 07:00:00 - 18:00:00; "
+        "Saturday 08:00:00 - 18:00:00"
+    )
+    assert format_condensed_logon_hours(compound) == "M-F: 07:00-18:00; Sa-Su: 08:00-18:00"
+
+    # 2. Single day
+    single = "Sunday 08:00:00 - 18:00:00"
+    assert format_condensed_logon_hours(single) == "Su: 08:00-18:00"
+
+    # 3. Weekend only
+    weekend = "Saturday 08:00:00 - 18:00:00; Sunday 08:00:00 - 18:00:00"
+    assert format_condensed_logon_hours(weekend) == "Sa-Su: 08:00-18:00"
+
+    # 4. Weekdays only
+    weekdays = (
+        "Monday 07:00:00 - 18:00:00; Tuesday 07:00:00 - 18:00:00; Wednesday 07:00:00 - 18:00:00; "
+        "Thursday 07:00:00 - 18:00:00; Friday 07:00:00 - 18:00:00"
+    )
+    assert format_condensed_logon_hours(weekdays) == "M-F: 07:00-18:00"
+
+    # 5. All / Unrestricted
+    assert format_condensed_logon_hours("All") == "All"
+    assert format_condensed_logon_hours("all") == "All"
+    assert format_condensed_logon_hours("") == ""
+
+    # 6. Fallback for unparseable or custom string
+    fallback = "Custom PAM Rule"
+    assert format_condensed_logon_hours(fallback) == "Custom PAM Rule"
+
+
+@pytest.mark.asyncio
+async def test_manage_restrict_multiline_windows_status():
+    class MockWinHub:
+        def __init__(self):
+            self.agents = {"JONAS-PC": {"platform": "Windows 11"}}
+
+        async def exec(self, host, kind, cmd, timeout=30):
+            # Simulates multi-line joined hours from PowerShell
+            raw_hours = (
+                "Sunday 08:00:00 - 18:00:00; Monday 07:00:00 - 18:00:00; Tuesday 07:00:00 - 18:00:00; "
+                "Wednesday 07:00:00 - 18:00:00; Thursday 07:00:00 - 18:00:00; Friday 07:00:00 - 18:00:00; "
+                "Saturday 08:00:00 - 18:00:00"
+            )
+            return f"STATUS:jonas:{raw_hours}"
+
+    hub = MockWinHub()
+    res = await manage_restrict({"host": "JONAS-PC", "action": "status"}, hub=hub)
+    assert "Logon Hours Status on `JONAS-PC`" in res
+    assert "• User *jonas*: 🔒 *Restricted* → `M-F: 07:00-18:00; Sa-Su: 08:00-18:00`" in res
+

@@ -293,6 +293,14 @@ async def manage_parental(
     if not host:
         return ":no_entry_sign: Target host is required."
 
+    if not action:
+        action = "status"
+
+    if action in ("enable", "block"):
+        action = "on"
+    elif action in ("disable", "unblock"):
+        action = "off"
+
     if action not in ("on", "off", "status"):
         return (
             f":warning: Invalid action `{action}`.\n"

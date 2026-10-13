@@ -462,11 +462,18 @@ async def manage_appblock(
     if not host:
         return ":no_entry_sign: Target host is required."
 
-    # When action is omitted (e.g. /host {host} blockapp all or /host {host} blockapp), default to status
+    # When action is omitted or an action keyword was passed as app (e.g. /host {host} blockapp status, on, off)
     if not action:
-        action = "status"
-        if not app_query:
+        if app_query in ("on", "off", "status", "enable", "disable", "block", "unblock"):
+            action = app_query
             app_query = "all"
+        else:
+            action = "status"
+            if not app_query:
+                app_query = "all"
+    elif app_query in ("on", "off", "status", "enable", "disable", "block", "unblock") and action not in ("on", "off", "status", "enable", "disable", "block", "unblock"):
+        # Handle swapped order e.g. /host {host} blockapp on roblox
+        app_query, action = action, app_query
 
     if not app_query:
         return (

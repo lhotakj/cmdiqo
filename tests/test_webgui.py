@@ -357,7 +357,354 @@ class TestWebGui(unittest.TestCase):
         self.assertIn("level-debug", html)
         self.assertIn("var(--text-muted)", html)
 
+    def test_action_column_and_menu_modal_markup(self) -> None:
+        state = WebGuiState()
+        state.register_agent(
+            name="host-alpha",
+            hello={"platform": "Windows/11.0", "arch": "AMD64", "version": "1.0.0"},
+            addr="192.168.1.11:8765",
+            boot_time=1000.0,
+            uptime_str="01d 00h 00m 00s",
+        )
+
+        app = create_webgui_app(state, bot_version="2.0.0")
+        client = app.test_client()
+        resp = client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        html = resp.data.decode("utf-8")
+
+        # 1. Verify Action column header in table
+        self.assertIn('style="width: 80px;"', html)
+        self.assertIn("<span>Action</span>", html)
+
+        # 2. Verify Action button in table row
+        self.assertIn('class="btn-action"', html)
+        self.assertIn('data-host="host-alpha"', html)
+        self.assertIn('data-platform="Windows/11.0"', html)
+        self.assertIn('title="Actions for host-alpha"', html)
+
+        # 3. Verify Action Context Menu and Terminal Modal containers
+        self.assertIn('id="action-context-menu"', html)
+        self.assertIn('class="action-menu"', html)
+        self.assertIn('id="terminal-modal"', html)
+        self.assertIn('class="terminal-modal-overlay"', html)
+        self.assertIn('class="terminal-modal-window"', html)
+        self.assertIn('id="terminal-output"', html)
+        self.assertIn('id="terminal-copy-btn"', html)
+        self.assertIn('id="terminal-close-btn"', html)
+        self.assertIn('id="terminal-status-badge"', html)
+
+        # 4. Verify JavaScript command categories tree
+        self.assertIn("COMMAND_CATEGORIES", html)
+        self.assertIn("System Health", html)
+        self.assertIn("Power & Session", html)
+        self.assertIn("Network & Diagnostics", html)
+        self.assertIn("openTerminalAndExecute", html)
+        self.assertIn("openActionMenu", html)
+        self.assertIn("menu-sub-pills", html)
+        self.assertIn("sub-pill-btn", html)
+        self.assertIn("has-interactive", html)
+        self.assertIn("Logon Hours", html)
+        self.assertIn("restrict set", html)
+
+        # 5. Verify Terminal rich formatting & emoji styling
+        self.assertIn("formatSlackToHtml", html)
+        self.assertIn("SLACK_EMOJI_MAP", html)
+        self.assertIn(":information_source:", html)
+        self.assertIn(".term-bold", html)
+        self.assertIn(".term-inline-code", html)
+        self.assertIn("color: #e2e8f0;", html)
+        self.assertIn(".term-code-block", html)
+        self.assertIn(".term-bullet", html)
+        self.assertIn(".term-emoji", html)
+        self.assertIn(".term-italic", html)
+        self.assertIn(".term-quote", html)
+        self.assertIn(".term-link", html)
+        self.assertIn(".menu-input-btn:disabled", html)
+
+    def test_terminal_slack_formatting_and_emojis(self) -> None:
+        """Verify formatSlackToHtml correctly converts emojis, bold, inline code, italics, and bullets."""
+        import json
+        import shutil
+        import subprocess
+
+        state = WebGuiState()
+        app = create_webgui_app(state, bot_version="2.0.0")
+        client = app.test_client()
+        resp = client.get("/")
+        html = resp.get_data(as_text=True)
+
+        self.assertIn("function formatSlackToHtml(rawText)", html)
+        self.assertIn("SLACK_EMOJI_MAP", html)
+
+        if shutil.which("node"):
+            js_script = f"""
+            {html[html.find('const SLACK_EMOJI_MAP ='):html.find('function openTerminalAndExecute')]}
+            const sample = ":information_source: *Parental Controls on `pi`: NOT CONFIGURED*\\n• **Target:** Linux (`pi` /etc/hosts)\\n• Note: _this is in italics_\\n• No parental block found in hosts. Run `/host pi parental on` to enable.";
+            const res = formatSlackToHtml(sample);
+            console.log(JSON.stringify(res));
+            """
+            proc = subprocess.run(
+                ["node", "-e", js_script],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, f"Node script error: {proc.stderr}")
+            formatted = json.loads(proc.stdout.strip())
+
+            # Verify emoji converted to Unicode
+            self.assertIn("ℹ️", formatted)
+            self.assertIn('class="term-emoji"', formatted)
+            self.assertNotIn(":information_source:", formatted)
+
+            # Verify bold formatting
+            self.assertIn('class="term-bold"', formatted)
+            self.assertIn('<strong class="term-bold">Target:</strong>', formatted)
+
+            # Verify italics formatting
+            self.assertIn('class="term-italic"', formatted)
+            self.assertIn('<i class="term-italic">this is in italics</i>', formatted)
+
+            # Verify inline code
+            self.assertIn('<code class="term-inline-code">pi</code>', formatted)
+            self.assertIn('<code class="term-inline-code">/host pi parental on</code>', formatted)
+
+            # Verify bullets
+            self.assertIn('<span class="term-bullet">•</span>', formatted)
+
+            # Verify explicit _something_ and _foo_bar_ formatting
+            js_something = f"""
+            {html[html.find('const SLACK_EMOJI_MAP ='):html.find('function openTerminalAndExecute')]}
+            console.log(JSON.stringify(formatSlackToHtml("Notice: _something_ on `pi` with _foo_bar_")));
+            """
+            proc2 = subprocess.run(
+                ["node", "-e", js_something],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc2.returncode, 0, f"Node script error: {proc2.stderr}")
+            res2 = json.loads(proc2.stdout.strip())
+            self.assertIn('<i class="term-italic">something</i>', res2)
+            self.assertIn('<i class="term-italic">foo_bar</i>', res2)
+
+    def test_api_exec_validation_and_custom_executor(self) -> None:
+        state = WebGuiState()
+        app = create_webgui_app(state, bot_version="2.0.0")
+        client = app.test_client()
+
+        # 1. Missing command parameter yields 400
+        bad_resp = client.post("/api/exec", json={})
+        self.assertEqual(bad_resp.status_code, 400)
+        data = bad_resp.get_json()
+        self.assertFalse(data["success"])
+        self.assertIn("Missing", data["error"])
+
+        # 2. Custom executor hook execution
+        def mock_executor(cmd: str) -> dict:
+            return {
+                "success": True,
+                "command": cmd,
+                "output": f"Mock output for {cmd}",
+                "target": "alpha",
+            }
+
+        state.custom_executor = mock_executor
+        ok_resp = client.post("/api/exec", json={"command": "/host alpha uptime"})
+        self.assertEqual(ok_resp.status_code, 200)
+        ok_data = ok_resp.get_json()
+        self.assertTrue(ok_data["success"])
+        self.assertEqual(ok_data["output"], "Mock output for /host alpha uptime")
+
+        # 3. Shorthand host + cmd payload
+        short_resp = client.post("/api/exec", json={"host": "alpha", "cmd": "memory"})
+        self.assertEqual(short_resp.status_code, 200)
+        short_data = short_resp.get_json()
+        self.assertTrue(short_data["success"])
+        self.assertIn("memory", short_data["output"])
+
+    def test_api_exec_full_execution_flow(self) -> None:
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        from bot.app import trigger_to_regex
+
+        async def _run_test() -> None:
+            state = WebGuiState()
+            state.loop = asyncio.get_running_loop()
+            state.register_agent("node1", {"platform": "Linux/6.6", "arch": "x86_64"})
+
+            mock_hub = AsyncMock()
+            mock_hub.agents = {"node1": {"platform": "Linux/6.6"}}
+            mock_hub.exec.return_value = " 12:00:00 up 2 days,  1:00,  1 user,  load average: 0.10, 0.05, 0.01"
+
+            spec = {
+                "name": "host-uptime",
+                "trigger": "/host {host} uptime",
+                "command": {"shell": "uptime"},
+            }
+            state.hub = mock_hub
+            state.commands = [{"spec": spec, "regex": trigger_to_regex(spec["trigger"])}]
+
+            # Execute command synchronously via WebGUI state
+            res = await asyncio.to_thread(state.execute_command_sync, "/host node1 uptime")
+            self.assertTrue(res["success"])
+            self.assertIn("02d 01h 00m 00s", res["output"])
+
+            # Verify uptime cache updated in state
+            agents = state.get_agents()
+            self.assertEqual(len(agents), 1)
+            self.assertEqual(agents[0]["uptime_str"], "02d 01h 00m 00s")
+
+            # Verify log entry was registered
+            logs = state.get_logs()
+            self.assertTrue(any("Executed: /host node1 uptime" in l["message"] for l in logs))
+
+        asyncio.run(_run_test())
+
+    def test_api_exec_restrict_set_and_status(self) -> None:
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        from bot.app import load_commands
+
+        async def _run_test() -> None:
+            state = WebGuiState()
+            state.loop = asyncio.get_running_loop()
+            state.register_agent("node1", {"platform": "Windows 11", "arch": "AMD64"})
+
+            mock_hub = AsyncMock()
+            mock_hub.agents = {"node1": {"platform": "Windows 11"}}
+
+            async def mock_exec(host, kind, cmd, timeout=30):
+                if "$action = 'status'" in cmd:
+                    return "STATUS:jonas:Monday 08:00 - 20:00"
+                if "$action = 'set'" in cmd:
+                    return "SUCCESS:set:jonas:M-F,08:00-20:00"
+                if "$action = 'off'" in cmd:
+                    return "SUCCESS:off:jonas"
+                return ""
+
+            mock_hub.exec = mock_exec
+            state.hub = mock_hub
+            state.commands = load_commands("config/commands.yaml")
+
+            # 1. Test restrict set via WebGUI state
+            res_set = await asyncio.to_thread(
+                state.execute_command_sync, "/host node1 restrict set M-F,08:00-20:00"
+            )
+            self.assertTrue(res_set["success"])
+            self.assertIn("Logon hours restriction successfully applied", res_set["output"])
+
+            # 2. Test restrict status via WebGUI state
+            res_status = await asyncio.to_thread(
+                state.execute_command_sync, "/host node1 restrict status"
+            )
+            self.assertTrue(res_status["success"])
+            self.assertIn("Logon Hours Status on `node1`", res_status["output"])
+
+            # 3. Test restrict off via WebGUI state
+            res_off = await asyncio.to_thread(
+                state.execute_command_sync, "/host node1 restrict off"
+            )
+            self.assertTrue(res_off["success"])
+            self.assertIn("Logon hours restriction removed", res_off["output"])
+
+        asyncio.run(_run_test())
+
+    def test_api_exec_blockapp_status_and_actions(self) -> None:
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        from bot.app import load_commands
+
+        async def _run_test() -> None:
+            state = WebGuiState()
+            state.loop = asyncio.get_running_loop()
+            state.register_agent("AMD", {"platform": "Windows 11", "arch": "AMD64"})
+
+            mock_hub = AsyncMock()
+            mock_hub.agents = {"AMD": {"platform": "Windows 11"}}
+
+            async def mock_exec(host, kind, cmd, timeout=60):
+                if "$action = 'status'" in cmd or "$Action = 'status'" in cmd or "$ACTION = 'status'" in cmd:
+                    return "STATUS:roblox:BLOCKED\nSTATUS:steam:ALLOWED"
+                if "$action = 'on'" in cmd or "$Action = 'on'" in cmd or "$ACTION = 'on'" in cmd:
+                    return "SUCCESS:on:roblox\nSUCCESS:on:steam"
+                if "$action = 'off'" in cmd or "$Action = 'off'" in cmd or "$ACTION = 'off'" in cmd:
+                    return "SUCCESS:off:roblox\nSUCCESS:off:steam"
+                return "STATUS:roblox:ALLOWED"
+
+            mock_hub.exec = mock_exec
+            state.hub = mock_hub
+            state.commands = load_commands("config/commands.yaml")
+
+            # 1. Test /host AMD blockapp status
+            res_status = await asyncio.to_thread(
+                state.execute_command_sync, "/host AMD blockapp status"
+            )
+            self.assertTrue(res_status["success"])
+            self.assertIn("Application Execution Status on `AMD`", res_status["output"])
+            self.assertIn("Roblox", res_status["output"])
+
+            # 2. Test /host AMD blockapp on
+            res_on = await asyncio.to_thread(
+                state.execute_command_sync, "/host AMD blockapp on"
+            )
+            self.assertTrue(res_on["success"])
+            self.assertIn("Application execution BLOCKED on `AMD`", res_on["output"])
+
+            # 3. Test /host AMD blockapp off
+            res_off = await asyncio.to_thread(
+                state.execute_command_sync, "/host AMD blockapp off"
+            )
+            self.assertTrue(res_off["success"])
+            self.assertIn("Application execution UNBLOCKED on `AMD`", res_off["output"])
+
+        asyncio.run(_run_test())
+
+    def test_api_exec_failure_logging_and_status(self) -> None:
+        """Verify that when command execution reports a failure, it returns success: False and logs as ERROR."""
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        from bot.app import load_commands
+
+        async def _run_test() -> None:
+            state = WebGuiState()
+            state.loop = asyncio.get_running_loop()
+            state.register_agent("JONAS-PC", {"platform": "Windows 11", "arch": "AMD64"})
+
+            mock_hub = AsyncMock()
+            mock_hub.agents = {"JONAS-PC": {"platform": "Windows 11"}}
+
+            async def mock_exec(host, kind, cmd, timeout=30):
+                # Simulate remote failure output
+                return "ERROR:Failed setting logon hours for user Jonas: Time supplied is not exactly on the hour."
+
+            mock_hub.exec = mock_exec
+            state.hub = mock_hub
+            state.commands = load_commands("config/commands.yaml")
+
+            res = await asyncio.to_thread(
+                state.execute_command_sync, "/host JONAS-PC restrict set M-F,08:00-20:00"
+            )
+            # Must return success False on failure
+            self.assertFalse(res["success"])
+            self.assertIn("Failed on `JONAS-PC`", res["output"])
+
+            # Must log as ERROR in WebGUI logs buffer
+            logs = state.get_logs()
+            error_logs = [l for l in logs if l["level"] == "ERROR"]
+            self.assertTrue(len(error_logs) > 0)
+            self.assertTrue(any("Command failed" in l["message"] for l in error_logs))
+
+        asyncio.run(_run_test())
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
 

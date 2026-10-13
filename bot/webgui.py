@@ -7,6 +7,7 @@ from cmdiqo-web and updated in real-time via Server-Sent Events (SSE).
 
 from __future__ import annotations
 
+import asyncio
 import collections
 import json
 import logging
@@ -18,7 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, Response, jsonify, render_template, send_from_directory
+from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
 log = logging.getLogger("cmdiqo-bot.webgui")
 
@@ -160,6 +161,22 @@ def parse_and_standardize_uptime(
     return boot_epoch, formatted
 
 
+def is_command_output_failure(output: str) -> bool:
+    """Check whether a command execution response indicates a failure or error."""
+    if not output or not isinstance(output, str):
+        return False
+    stripped = output.strip()
+    # Explicit emoji/prefix failure indicators
+    if stripped.startswith((":x:", "❌", ":no_entry_sign:", "🚫", ":stopwatch:", "Error:", "ERROR:")):
+        return True
+    # Warning failure indicators
+    if stripped.startswith((":warning:", "⚠️")):
+        lower = stripped.lower()
+        if any(term in lower for term in ("failed", "error", "not connected", "unknown", "invalid", "cannot")):
+            return True
+    return bool(stripped.lower().startswith("error:"))
+
+
 class WebGuiState:
     """Thread-safe state manager for WebGUI connected agents and event logs."""
 
@@ -168,6 +185,12 @@ class WebGuiState:
         self._agents: dict[str, dict[str, Any]] = {}
         self._logs: collections.deque[dict[str, Any]] = collections.deque(maxlen=50)
         self._subscribers: set[queue.Queue[dict[str, Any]]] = set()
+        self.loop: asyncio.AbstractEventLoop | None = None
+        self.hub: Any = None
+        self.commands: list[dict[str, Any]] = []
+        self.aliases: list[dict[str, Any]] = []
+        self.default_timeout: int = 120
+        self.custom_executor: Any = None
 
     def get_agents(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -267,6 +290,153 @@ class WebGuiState:
                     # Drop stale events for slow clients
                     pass
 
+    def execute_command_sync(
+        self, command_text: str, timeout: int | None = None
+    ) -> dict[str, Any]:
+        """Execute a bot command synchronously from the WebGUI HTTP worker thread."""
+        cleaned = command_text.strip()
+        if not cleaned:
+            return {
+                "success": False,
+                "error": "Empty command",
+                "output": "Error: Empty command",
+                "command": "",
+            }
+
+        if self.custom_executor is not None:
+            return self.custom_executor(cleaned)
+
+        if not cleaned.startswith("/"):
+            cleaned = f"/{cleaned}"
+
+        eff_timeout = timeout or self.default_timeout
+
+        if self.loop is None or not self.loop.is_running():
+            return {
+                "success": False,
+                "error": "Hub event loop is not active",
+                "output": "Error: Hub event loop is not active or agent is disconnected",
+                "command": cleaned,
+            }
+
+        async def _exec() -> dict[str, Any]:
+            from bot.app import (
+                apply_aliases,
+                execute_command,
+                format_params,
+                get_version,
+            )
+
+            txt = cleaned
+            if self.aliases:
+                txt = apply_aliases(txt, self.aliases)
+
+            # Built-in version check
+            if txt.lower() in ("/lan version", "/host version"):
+                return {
+                    "success": True,
+                    "output": f"cmdiqo-bot v{get_version()}",
+                    "command": txt,
+                }
+
+            # Built-in agents check
+            if self.hub is not None and txt.lower() in (
+                "/lan agents list",
+                "/lan agents",
+                "/host agents list",
+                "/host agents",
+            ):
+                agents_tbl = (
+                    self.hub.agents_table()
+                    if hasattr(self.hub, "agents_table")
+                    else "No agents connected"
+                )
+                return {
+                    "success": True,
+                    "output": agents_tbl,
+                    "command": txt,
+                }
+
+            target_name = ""
+            for c in self.commands:
+                m = c["regex"].match(txt)
+                if m:
+                    spec = c["spec"]
+                    params = m.groupdict()
+                    target_name = (
+                        params.get("host")
+                        or (format_params(spec["target"], params) if spec.get("target") else "")
+                    )
+                    try:
+                        output = await execute_command(
+                            spec,
+                            params,
+                            hub=self.hub,
+                            default_timeout=eff_timeout,
+                        )
+                        if spec.get("name") == "host-uptime" or str(spec.get("trigger", "")).lower().endswith(" uptime"):
+                            try:
+                                boot_epoch, formatted, ok = parse_and_standardize_uptime_checked(output)
+                                if ok and target_name:
+                                    self.update_agent_uptime(target_name, boot_epoch, formatted)
+                            except Exception as exc:  # noqa: BLE001
+                                log.debug("Failed updating webgui agent uptime: %s", exc)
+
+                        is_failed = is_command_output_failure(output)
+                        if is_failed:
+                            self.add_log("ERROR", "webgui", f"Command failed: {txt}")
+                            return {
+                                "success": False,
+                                "output": output,
+                                "command": txt,
+                                "target": target_name,
+                            }
+
+                        self.add_log("INFO", "webgui", f"Executed: {txt}")
+                        return {
+                            "success": True,
+                            "output": output,
+                            "command": txt,
+                            "target": target_name,
+                        }
+                    except Exception as exc:
+                        log.exception("Command execution failed for %s", spec.get("name"))
+                        self.add_log("ERROR", "webgui", f"Command failed: {txt} ({exc})")
+                        return {
+                            "success": False,
+                            "output": f"Error: {exc}",
+                            "command": txt,
+                            "target": target_name,
+                        }
+
+            self.add_log("ERROR", "webgui", f"Unknown command: {txt}")
+            return {
+                "success": False,
+                "output": f"Unknown or unrecognized command: {txt}",
+                "command": txt,
+            }
+
+        fut = asyncio.run_coroutine_threadsafe(_exec(), self.loop)
+        try:
+            return fut.result(timeout=eff_timeout + 5)
+        except TimeoutError:
+            fut.cancel()
+            self.add_log("ERROR", "webgui", f"Command timed out: {cleaned}")
+            return {
+                "success": False,
+                "error": f"Command timed out after {eff_timeout} seconds",
+                "output": f"Error: Command timed out after {eff_timeout} seconds",
+                "command": cleaned,
+            }
+        except Exception as exc:  # noqa: BLE001
+            self.add_log("ERROR", "webgui", f"Command error: {cleaned} ({exc})")
+            return {
+                "success": False,
+                "error": str(exc),
+                "output": f"Error: {exc}",
+                "command": cleaned,
+            }
+
 
 class HubWebLogHandler(logging.Handler):
     """Logging handler that routes bot log records into the WebGUI 50-entry ring buffer."""
@@ -304,12 +474,14 @@ def create_webgui_app(state: WebGuiState, bot_version: str | None = None) -> Fla
         template_folder=str(TEMPLATES_DIR),
         static_folder=str(STATIC_DIR),
     )
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
 
     @app.after_request
     def set_security_headers(resp: Response) -> Response:
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
         resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
         resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        resp.headers.setdefault("Cache-Control", "no-cache, must-revalidate")
         return resp
 
     @app.route("/favicon.ico")
@@ -341,6 +513,26 @@ def create_webgui_app(state: WebGuiState, bot_version: str | None = None) -> Fla
     @app.route("/api/logs")
     def api_logs() -> Any:
         return jsonify({"logs": state.get_logs()})
+
+    @app.route("/api/exec", methods=["POST"])
+    def api_exec() -> Any:
+        data = request.get_json(silent=True) or {}
+        cmd = str(data.get("command", "")).strip()
+        host = str(data.get("host", "")).strip()
+        subcmd = str(data.get("cmd", "")).strip()
+
+        if not cmd and host and subcmd:
+            cmd = f"/host {host} {subcmd}"
+
+        if not cmd:
+            return jsonify({
+                "success": False,
+                "error": "Missing 'command' parameter",
+                "output": "Error: Missing command parameter",
+            }), 400
+
+        result = state.execute_command_sync(cmd)
+        return jsonify(result), 200
 
     @app.route("/api/events")
     def api_events() -> Response:

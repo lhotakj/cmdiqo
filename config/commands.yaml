@@ -121,33 +121,6 @@ commands:
       shell: "w -h 2>/dev/null || who -u"
       ps1: "if (Get-Command quser.exe -ErrorAction SilentlyContinue) { quser.exe } else { Get-CimInstance Win32_LoggedOnUser | Select-Object -ExpandProperty Antecedent | Where-Object { $_ -like '*Name=*' } | Select-Object -Unique }"
 
-  - name: host-restrict-user-set
-    trigger: "/host {host} restrict {user} set {schedule}"
-    description: "Enforce allowed logon hours for {user} on {host}"
-    details: "Restricts allowed login hours for a specific user on Windows (net user /time) or Linux (/etc/security/time.conf). Days: M, T, W, Th, F, Sa, Su. Range: M-F, Sa-Su. Hours: 24h format (e.g. 08:00-20:00). Separate multiple rules with semicolon."
-    examples:
-      - "/host PC-KIDS restrict jonas set M-F,08:00-20:00;Sa-Su,09:00-21:00"
-      - "/host PC-KIDS restrict jonas set M-F,16:00-20:00"
-    command:
-      python: "commands.restrict:manage_restrict"
-
-  - name: host-restrict-user-status
-    trigger: "/host {host} restrict {user} status"
-    description: "Check allowed logon hours status for {user} on {host}"
-    details: "Displays the active logon hours restrictions for a specific user on the target host."
-    examples:
-      - "/host PC-KIDS restrict jonas status"
-    command:
-      python: "commands.restrict:manage_restrict"
-
-  - name: host-restrict-user-off
-    trigger: "/host {host} restrict {user} off"
-    description: "Remove logon hours restriction for {user} on {host} (restore 24/7)"
-    details: "Clears logon time limits for a specific user, restoring unlimited 24/7 access (/time:all)."
-    examples:
-      - "/host PC-KIDS restrict jonas off"
-    command:
-      python: "commands.restrict:manage_restrict"
 
   - name: host-restrict-set
     trigger: "/host {host} restrict set {schedule}"
@@ -158,6 +131,8 @@ commands:
       - "/host PC-KIDS restrict set M-F,16:00-20:00"
     command:
       python: "commands.restrict:manage_restrict"
+    config:
+      action: "set"
 
   - name: host-restrict-status
     trigger: "/host {host} restrict status"
@@ -167,6 +142,8 @@ commands:
       - "/host PC-KIDS restrict status"
     command:
       python: "commands.restrict:manage_restrict"
+    config:
+      action: "status"
 
   - name: host-restrict-off
     trigger: "/host {host} restrict off"
@@ -176,6 +153,19 @@ commands:
       - "/host PC-KIDS restrict off"
     command:
       python: "commands.restrict:manage_restrict"
+    config:
+      action: "off"
+
+  - name: host-restrict-default
+    trigger: "/host {host} restrict"
+    description: "Check allowed logon hours status for accounts on {host} (shorthand)"
+    details: "Displays the active logon hours restrictions for user accounts on the target host."
+    examples:
+      - "/host PC-KIDS restrict"
+    command:
+      python: "commands.restrict:manage_restrict"
+    config:
+      action: "status"
 
   - name: direct-restrict-set
     trigger: "/restrict {host} set {schedule}"
@@ -185,6 +175,8 @@ commands:
       - "/restrict PC-KIDS set M-F,08:00-20:00;Sa-Su,09:00-21:00"
     command:
       python: "commands.restrict:manage_restrict"
+    config:
+      action: "set"
 
   - name: direct-restrict-status
     trigger: "/restrict {host} status"
@@ -194,6 +186,8 @@ commands:
       - "/restrict PC-KIDS status"
     command:
       python: "commands.restrict:manage_restrict"
+    config:
+      action: "status"
 
   - name: direct-restrict-off
     trigger: "/restrict {host} off"
@@ -203,6 +197,19 @@ commands:
       - "/restrict PC-KIDS off"
     command:
       python: "commands.restrict:manage_restrict"
+    config:
+      action: "off"
+
+  - name: direct-restrict-default
+    trigger: "/restrict {host}"
+    description: "Check allowed logon hours status on {host} (shortcut)"
+    details: "Shortcut for /host {host} restrict status."
+    examples:
+      - "/restrict PC-KIDS"
+    command:
+      python: "commands.restrict:manage_restrict"
+    config:
+      action: "status"
 
   # ---- System Health & Performance (OS Agnostic) ---------------------------
   - name: host-uptime

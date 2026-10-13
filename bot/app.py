@@ -41,7 +41,7 @@ log = logging.getLogger("cmdiqo-bot")
 MAX_BLOCK = 3500  # Slack message limit is ~4000 chars
 SAFE_PARAM_RE = re.compile(r"^[a-zA-Z0-9_\-\.:]+$")
 SAFE_SCHEDULE_RE = re.compile(
-    r"^(?:all|(?:(?:(?:[A-Za-z]{1,2}(?:-[A-Za-z]{1,2})?|\*),\d{1,2}(?::\d{2})?(?:am|pm)?-\d{1,2}(?::\d{2})?(?:am|pm)?)(?:;\s*)?)+)$",
+    r"^(?:all|(?:(?:(?:[A-Za-z]{1,2}(?:-[A-Za-z]{1,2})?|\*),\s*\d{1,2}(?::\d{2})?(?:am|pm)?-\d{1,2}(?::\d{2})?(?:am|pm)?(?:,\s*\d{1,2}(?::\d{2})?(?:am|pm)?-\d{1,2}(?::\d{2})?(?:am|pm)?)*)(?:[;,]\s*)?)+)$",
     re.IGNORECASE,
 )
 SAFE_MESSAGE_RE = re.compile(r"^[\w\s\.\,\!\?\-\:\;\(\)\'\"\/@#%+=]+$")
@@ -247,7 +247,7 @@ def trigger_to_regex(trigger: str) -> re.Pattern[str]:
         if m:
             name = m.group(1)
             if name in ("schedule", "time", "times"):
-                out += rf"(?P<{name}>[a-zA-Z0-9_\-\.:,;]+)"
+                out += rf"(?P<{name}>[a-zA-Z0-9_\-\.:,; ]+)"
             elif name in ("message", "msg", "text"):
                 out += rf"(?P<{name}>.+)"
             else:
@@ -261,7 +261,7 @@ def validate_params(params: dict[str, str]) -> None:
     """Validate that parameters do not contain shell injection characters."""
     for key, val in params.items():
         if key in ("schedule", "time", "times"):
-            if not SAFE_SCHEDULE_RE.match(val):
+            if not SAFE_SCHEDULE_RE.match(val.strip()):
                 raise ValueError(
                     f"Invalid parameter value for '{key}': '{val}' contains unsafe schedule characters."
                 )
@@ -1115,6 +1115,12 @@ def create_bot_app(
     commands = load_commands(config.commands_config_path)
     aliases = load_aliases(config.commands_config_path)
 
+    if webgui_state is not None:
+        webgui_state.hub = hub
+        webgui_state.commands = commands
+        webgui_state.aliases = aliases
+        webgui_state.default_timeout = config.shell_timeout
+
     # Allow instantiation without token for testing
     token = config.slack_bot_token or "mock-test-bot-token"
     app = AsyncApp(token=token)
@@ -1402,6 +1408,8 @@ async def main() -> None:
         log.info("Cmdiqo Hub v%s WebGUI active on http://0.0.0.0:%d", __version__, config.web_port)
 
     app, hub, _ = create_bot_app(config, webgui_state=webgui_state)
+    if webgui_state is not None:
+        webgui_state.loop = asyncio.get_running_loop()
     tasks: list[asyncio.Task] = []
     if hub is not None:
         tasks.append(asyncio.create_task(hub.run()))

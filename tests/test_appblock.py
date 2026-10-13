@@ -429,6 +429,20 @@ async def test_manage_appblock_default_action():
     res = await manage_appblock({"host": "PC-KIDS"}, hub=mock_hub)
     assert "Application Execution Status on `PC-KIDS`" in res
 
+    # action keyword passed as app: app="status", action="" -> all status
+    res_status = await manage_appblock({"host": "PC-KIDS", "app": "status"}, hub=mock_hub)
+    assert "Application Execution Status on `PC-KIDS`" in res_status
+
+    # action keyword passed as app: app="on", action="" -> all on
+    mock_hub.exec = AsyncMock(return_value="SUCCESS:on:roblox\nSUCCESS:on:steam")
+    res_on = await manage_appblock({"host": "PC-KIDS", "app": "on"}, hub=mock_hub)
+    assert "Application execution BLOCKED on `PC-KIDS`" in res_on
+
+    # action keyword passed as app: app="off", action="" -> all off
+    mock_hub.exec = AsyncMock(return_value="SUCCESS:off:roblox\nSUCCESS:off:steam")
+    res_off = await manage_appblock({"host": "PC-KIDS", "app": "off"}, hub=mock_hub)
+    assert "Application execution UNBLOCKED on `PC-KIDS`" in res_off
+
 
 
 @pytest.mark.asyncio

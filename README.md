@@ -49,7 +49,15 @@ nothing to expose, TLS handled for you. Ideal for a home server.
   - **Windows Agent (x86_64)**: only **~3.3 MB RAM** working set
   - **Windows Installer GUI**: only **~5.2 MB RAM**
   - Instant cold boot (<10 ms), zero Python runtime dependency on target nodes
-- 🌐 **Integrated Real-time WebGUI** — optional single-page dashboard (`WEB_PORT=8080`) styled with Obsidian Cyberpunk design, displaying connected agents with sortable columns (`Host Name`, `Arch`, `OS`, `Uptime`), `localStorage` sort preference persistence, 32x32 WebP architecture badges (`WIN64`, `Linux64`, `ARM64`, `ARMv6`), standardized zero-padded uptime with client-side 1Hz local refresh, and last 50 events live-streamed via Server-Sent Events (SSE).
+- 🌐 **Integrated Real-time WebGUI & Remote Control Console** — optional single-page dashboard (`WEB_PORT=8080`) styled with Obsidian Cyberpunk design:
+  - **Live Connected Agents Table**: Sortable columns (`Host Name`, `Arch`, `OS`, `Uptime`), `localStorage` sort preference persistence, 32x32 WebP architecture badges (`WIN64`, `Linux64`, `ARM64`, `ARMv6`), and standardized zero-padded uptime with client-side 1Hz local refresh.
+  - **Interactive Host Actions Menu**: One-click execution for System Metrics (Uptime, Memory, Disk, Top), Docker (Containers, Stats, Logs, Restart), Power (Reboot, Shutdown), Services (Status, Restart), and Parental / Access Guards.
+  - **Live Terminal Modal**: In-browser command output with full Slack formatting, emoji rendering, italics/code styles, and automated failure detection with red `FAILED` badges.
+  - **Server-Sent Events (SSE)**: Last 50 events live-streamed with reverse-order toggle and zero polling overhead.
+- 🛡️ **Parental Controls & Access Guards**:
+  - **Logon Hours Restriction (`/host <host> restrict`)**: Enforce Windows SAM allowed login hours and Linux PAM `time.conf` rules. Supports compound schedules (`M-F,07:00-18:00;Sa-Su,08:00-18:00`) with automated multi-line daily parsing and condensed status display.
+  - **Parental Domain Shield (`/host <host> parental`)**: Instant DNS/hosts-file blocking for entertainment and gaming domains (`on`, `off`, `status`).
+  - **Application Execution Blocking (`/host <host> blockapp`)**: Block or restore games and apps (Roblox, Minecraft, Steam, Epic, Discord, Battle.net, etc.) via Windows IFEO / AppX and Linux execution overrides.
 
 ## Repository layout
 
@@ -655,7 +663,72 @@ Typing `/home docker ps` translates via alias to `/host home docker ps` and quer
 - `/lan agents list` (or `/host agents list`) in Slack at any time to see every connected agent, its operating system, version, connection uptime, and LAN IP address.
 - `/lan version` (or `/host version`) to display the running version of `cmdiqo-bot`.
 
-## 5. Publishing to Docker Hub with GitHub Actions
+### Parental Controls & Access Guards
+
+Cmdiqo includes native access management and parental guard commands operable directly from Slack or the WebGUI:
+
+1. **Logon Hours Restriction (`/host <host> restrict`)**:
+   Enforce allowed login times for users on Windows (via SAM `net user /time:...` with automated 1-hour normalization) and Linux (via PAM `/etc/security/time.conf`).
+   ```bash
+   # Set weekly schedule (M-F 07:00-18:00 and Sa-Su 08:00-18:00)
+   /host JONAS-PC restrict set Sa-Su,08:00-18:00;M-F,07:00-18:00
+
+   # Inspect current restriction status across all users
+   /host JONAS-PC restrict status
+   # Output: • User jonas: 🔒 Restricted → M-F: 07:00-18:00; Sa-Su: 08:00-18:00
+
+   # Remove restriction and restore 24/7 unlimited access
+   /host JONAS-PC restrict off
+   ```
+
+2. **Parental Domain Shield (`/host <host> parental`)**:
+   Instantly block or unblock gaming, streaming, and social video platforms via local `/etc/hosts` / `C:\Windows\System32\drivers\etc\hosts` DNS sinkholing:
+   ```bash
+   /host PC-KIDS parental on       # Enable domain blocking
+   /host PC-KIDS parental off      # Disable domain blocking
+   /host PC-KIDS parental status   # Check current shield state
+   ```
+
+3. **Application Execution Blocking (`/host <host> blockapp`)**:
+   Prevent execution of games and communication apps (Roblox, Minecraft, Steam, Epic Games, Discord, Battle.net, GeForce NOW, Riot, TikTok, TLauncher, or `all`) using Windows Image File Execution Options (IFEO) / AppX blocks and Linux execution overrides:
+   ```bash
+   /host PC-KIDS blockapp roblox on      # Block Roblox execution
+   /host PC-KIDS blockapp roblox off     # Restore Roblox access
+   /host PC-KIDS blockapp all on         # Block all tracked gaming/social apps
+   /host PC-KIDS blockapp all status     # Query block state of all apps
+   ```
+
+---
+
+## 5. WebGUI Dashboard & Remote Actions
+
+Cmdiqo includes an optional, zero-install, real-time web interface built into the bot container.
+
+### Enabling the WebGUI
+Set `WEB_PORT` in your `.env` or container environment (e.g. `WEB_PORT=8080`). The dashboard becomes available immediately at `http://<bot-ip>:8080`.
+
+### Key Features
+- **Live Agent Fleet Table**:
+  - Displays all connected agents with 32×32 WebP architecture badges (`WIN64`, `Linux64`, `ARM64`, `ARMv6`), host name, version, IP address, operating system, and synchronized live 1Hz uptimes.
+  - Interactive multi-column sorting (`Arch`, `Host Name`, `Operating System`, `Uptime`) with automatic `localStorage` persistence across page reloads.
+- **Interactive Host Actions Menu**:
+  - Click the terminal action icon (`>_`) in any host row to open a categorized context menu:
+    - **System Metrics**: Uptime, Memory (`free -m`), Storage (`disk`), Top CPU (`top`).
+    - **Docker Control**: Containers (`docker ps`), Resource Stats (`docker stats`), Tail Logs, Restart Service.
+    - **Services & Windows**: System Services list, Query Service Status, Restart Service, Windows Hotfix Updates.
+    - **Parental Controls**: Domain Blocking (Status, Enable, Disable), Logon Hours Restriction (Status, Set Schedule, Disable), Application Blocking (Status, Block, Unblock).
+    - **Power**: Remote Reboot, Remote Shutdown.
+- **In-Browser Terminal Modal**:
+  - Dispatches commands directly to the target agent through the WebSocket Hub.
+  - Converts Slack-formatted responses (emojis, `*bold*`, `_italics_`, `` `code` `` blocks, and bullet points) into clean HTML in real time.
+  - Automatically detects execution errors, highlighting failures with a red `FAILED` status badge and logging them at `ERROR` level in the event stream.
+- **Server-Sent Events (SSE) Live Event Stream**:
+  - Streams host connections, disconnections, command executions, and hub alerts in real time with zero polling overhead.
+  - 50-event ring buffer with a reverse-order toggle (newest first / oldest first).
+
+---
+
+## 6. Publishing to Docker Hub with GitHub Actions
 
 The unified workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) utilizes `build.sh` to build
 multi-arch images (`linux/amd64` + `linux/arm64`) and pushes to Docker Hub whenever a commit on
