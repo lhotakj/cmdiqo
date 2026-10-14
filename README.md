@@ -569,20 +569,47 @@ Commit `/release` (or `/release-agent`, `/release-bot`, with optional version li
 
 ### Deploying the Agent as a Service
 
+#### ⚡ Quick One-Liner Installation (Piped)
+
+Install and register the background service on any machine with a single terminal command:
+
+- **Linux (Ubuntu / Debian / Fedora / RHEL / OCI / AWS / Raspberry Pi)**:
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/lhotakj/cmdiqo/main/install.sh | sudo bash -s -- --hub-url "ws://192.168.1.10:8765" --token "SECRET_TOKEN" --name "MY-HOST"
+  ```
+  *(Auto-detects x86_64, aarch64, and armv6l, downloads the pure headless CLI installer, and starts systemd service)*
+
+- **Windows 10 / 11 / Server (PowerShell as Administrator)**:
+  ```powershell
+  & ([scriptblock]::Create((irm https://raw.githubusercontent.com/lhotakj/cmdiqo/main/install.ps1))) -HubUrl "ws://192.168.1.10:8765" -Token "SECRET_TOKEN" -Name "MY-PC"
+  ```
+  *(Or run `irm https://raw.githubusercontent.com/lhotakj/cmdiqo/main/install.ps1 | iex` to launch the interactive GUI setup wizard)*
+
 #### Linux: Deploy as a Systemd Service
 
-1. **Automated Installation Script:**
+1. **Option A: Native Self-Contained CLI Setup (Headless Cloud & Server - Zero GUI Dependencies):**
+   ```bash
+   chmod +x cmdiqo-agent-linux-x64-setup-cli
+   sudo ./cmdiqo-agent-linux-x64-setup-cli --install --hub-url ws://<HUB_IP>:8765 --token <AGENT_TOKEN> --name <HOST_NAME>
+   ```
+   > [!TIP]
+   > For cloud servers (Oracle Cloud OCI, AWS EC2, GCP, Hetzner, Ubuntu Server) with no X11/GTK desktop environment, always use `cmdiqo-agent-linux-x64-setup-cli`. It contains no X11/GTK runtime shared library dependencies and will never fail with `libXrandr.so.2` errors.
+
+2. **Option B: Standalone Package Installer Script (Shell):**
    ```bash
    chmod +x agent/install-service.sh
-   sudo ./agent/install-service.sh
+   sudo ./agent/install-service.sh --hub-url ws://<HUB_IP>:8765 --token <AGENT_TOKEN> --name <HOST_NAME>
    ```
    The installer automatically:
-   - Installs the binary to `/usr/local/bin/cmdiqo-agent` (or prepares an isolated venv if no binary is present)
+   - Installs the binary to `/usr/local/bin/cmdiqo-agent`
    - Creates configuration at `/etc/cmdiqo-agent/agent.env`
    - Installs and enables [`agent/cmdiqo-agent.service`](agent/cmdiqo-agent.service)
    - Starts the service immediately
 
-2. **Managing the Linux Service:**
+3. **Option C: Native Desktop GUI Wizard:**
+   On desktop workstations with a graphical session (X11 / Wayland), launch `cmdiqo-agent-linux-x64-setup` for the interactive GTK3 setup wizard.
+
+4. **Managing the Linux Service:**
    ```bash
    # Check service status
    sudo systemctl status cmdiqo-agent

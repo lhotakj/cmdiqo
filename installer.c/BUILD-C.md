@@ -244,7 +244,7 @@ ctest --preset test-windows-x64-mingw
 
 ```
 
-### Linux (Native):
+### Linux (Native Desktop with GTK3 GUI):
 ```bash
 cd installer.c
 export VCPKG_ROOT="$PWD/.vcpkg"
@@ -252,7 +252,16 @@ export VCPKG_ROOT="$PWD/.vcpkg"
 cmake --preset linux-x64
 cmake --build --preset build-linux-x64
 ctest --preset test-linux-x64
+```
 
+### Linux (Headless Cloud / Server CLI setup - zero GTK/X11 dependencies):
+```bash
+cd installer.c
+export VCPKG_ROOT="$PWD/.vcpkg"
+# Headless CLI Release:
+cmake --preset linux-x64-cli
+cmake --build --preset build-linux-x64-cli
+ctest --preset test-linux-x64-cli
 ```
 
 ## Application behavior

@@ -407,7 +407,7 @@ def test_combined_installer_reuses_one_image_and_preserves_zips(
         "--installer", "--skip-agent-build", "--platform", "all", "--clean"
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert len([call for call in build.calls("docker") if call[1] == "run"]) == 4
+    assert len([call for call in build.calls("docker") if call[1] == "run"]) == 5
     assert (
         len(
             [
@@ -420,6 +420,7 @@ def test_combined_installer_reuses_one_image_and_preserves_zips(
     )
     assert all(path.read_bytes() == content for path, content in payloads.items())
     assert (build.root / "dist" / "cmdiqo-agent-linux-x64-setup").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-x64-setup-cli").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-linux-arm64-setup").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-linux-armv6-setup").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-windows-x64-setup.exe").is_file()
@@ -576,6 +577,7 @@ def test_build_all_target_and_platform(
     assert (build.root / "dist" / "cmdiqo-agent").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-linux-x64.zip").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-linux-x64-setup").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-x64-setup-cli").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-linux-arm64").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-linux-arm64.zip").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-linux-arm64-setup").is_file()
@@ -585,7 +587,7 @@ def test_build_all_target_and_platform(
     assert (build.root / "dist" / "cmdiqo-agent.exe").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-windows-x64.zip").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-windows-x64-setup.exe").is_file()
-    assert len([call for call in build.calls("docker") if call[1] == "run"]) == 8
+    assert len([call for call in build.calls("docker") if call[1] == "run"]) == 9
     docker_build = next(
         call for call in build.calls("docker") if call[1:3] == ["buildx", "build"]
     )
@@ -616,6 +618,7 @@ def test_push_all_rebuilds_and_pushes(
     assert "--push" in bot_build
     assert bot_build[bot_build.index("--platform") + 1] == "linux/amd64,linux/arm64"
     assert (build.root / "dist" / "cmdiqo-agent-linux-x64-setup").is_file()
+    assert (build.root / "dist" / "cmdiqo-agent-linux-x64-setup-cli").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-linux-arm64-setup").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-linux-armv6-setup").is_file()
     assert (build.root / "dist" / "cmdiqo-agent-windows-x64-setup.exe").is_file()
@@ -915,10 +918,10 @@ function global:docker {
                 Copy-Item -LiteralPath (Join-Path $env:MOCK_WORKSPACE "seed-linux.zip") -Destination (Join-Path $env:MOCK_WORKSPACE "dist\cmdiqo-agent-linux-x64.zip") -Force
                 return
             }
-            foreach ($preset in @("linux-x64", "windows-x64-mingw")) {
+            foreach ($preset in @("linux-x64", "linux-x64-cli", "windows-x64-mingw")) {
                 $directory = Join-Path $env:MOCK_WORKSPACE "installer.c\out\build\$preset"
                 [void](New-Item -ItemType Directory -Force -Path $directory)
-                $artifact = if ($preset -eq "linux-x64") { "cmdiqo-agent-setup" } else { "cmdiqo-agent-setup.exe" }
+                $artifact = if ($preset -eq "linux-x64" -or $preset -eq "linux-x64-cli") { "cmdiqo-agent-setup" } else { "cmdiqo-agent-setup.exe" }
                 [IO.File]::WriteAllText((Join-Path $directory $artifact), "setup")
             }
         }

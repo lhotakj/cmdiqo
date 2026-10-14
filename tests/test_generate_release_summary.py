@@ -56,6 +56,9 @@ def test_generate_summary_with_artifacts(tmp_path: Path):
     armv6_setup = dist_dir / "cmdiqo-agent-linux-armv6-setup"
     armv6_setup.write_bytes(b"linux armv6 cli setup binary")
 
+    x64_cli_setup = dist_dir / "cmdiqo-agent-linux-x64-setup-cli"
+    x64_cli_setup.write_bytes(b"linux x64 cli setup binary")
+
     summary = generate_summary(
         version="0.10.0",
         dist_dir=dist_dir,
@@ -68,6 +71,7 @@ def test_generate_summary_with_artifacts(tmp_path: Path):
     assert "Cmdiqo v0.10.0" in summary
     assert "feat: awesome new features" in summary
     assert "cmdiqo-agent" in summary
+    assert "cmdiqo-agent-linux-x64-setup-cli" in summary
     assert "cmdiqo-agent-linux-arm64" in summary
     assert "cmdiqo-agent-linux-armv6" in summary
     assert "cmdiqo-agent.exe" in summary
@@ -78,6 +82,7 @@ def test_generate_summary_with_artifacts(tmp_path: Path):
     assert "ARM64" in summary
     assert "ARMv6" in summary
     assert "https://github.com/lhotakj/cmdiqo/releases/download/v0.10.0/cmdiqo-agent" in summary
+    assert "https://github.com/lhotakj/cmdiqo/releases/download/v0.10.0/cmdiqo-agent-linux-x64-setup-cli" in summary
     assert "https://github.com/lhotakj/cmdiqo/releases/download/v0.10.0/cmdiqo-agent-linux-arm64" in summary
     assert "https://github.com/lhotakj/cmdiqo/releases/download/v0.10.0/cmdiqo-agent-linux-armv6" in summary
     assert "https://github.com/lhotakj/cmdiqo/releases/download/v0.10.0/cmdiqo-agent.exe" in summary
@@ -95,6 +100,11 @@ def test_generate_summary_with_artifacts(tmp_path: Path):
     assert '<img src="https://raw.githubusercontent.com/lhotakj/cmdiqo/main/img/arm-bw.png" width="20" height="20" alt="Linux ARM64 (Daemon)" align="middle">' in summary
     assert '<img src="https://raw.githubusercontent.com/lhotakj/cmdiqo/main/img/arm-bw.png" width="20" height="20" alt="Linux ARMv6 (Daemon)" align="middle">' in summary
     assert '<img src="https://raw.githubusercontent.com/lhotakj/cmdiqo/main/img/win-bw.png" width="20" height="20" alt="Windows (Service)" align="middle">' in summary
+
+    # Verify one-liner commands
+    assert "Quick One-Liner Installation (Piped)" in summary
+    assert "curl -fsSL https://raw.githubusercontent.com/lhotakj/cmdiqo/main/install.sh | sudo bash" in summary
+    assert "irm https://raw.githubusercontent.com/lhotakj/cmdiqo/main/install.ps1 | iex" in summary
 
 
 def test_generate_summary_custom_repo(tmp_path: Path):

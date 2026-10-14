@@ -57,6 +57,20 @@
       }
     },
     {
+      "name": "linux-x64-cli",
+      "inherits": "base",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_TARGET_TRIPLET": "x64-linux-release",
+        "CMDIQO_ENABLE_GUI": "OFF"
+      }
+    },
+    {
       "name": "linux-arm64",
       "inherits": "base",
       "cacheVariables": {
@@ -105,6 +119,11 @@
       "configuration": "Release"
     },
     {
+      "name": "build-linux-x64-cli",
+      "configurePreset": "linux-x64-cli",
+      "configuration": "Release"
+    },
+    {
       "name": "build-linux-arm64",
       "configurePreset": "linux-arm64",
       "configuration": "Release"
@@ -135,6 +154,14 @@
     {
       "name": "test-linux-x64",
       "configurePreset": "linux-x64",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "test-linux-x64-cli",
+      "configurePreset": "linux-x64-cli",
       "configuration": "Release",
       "output": {
         "outputOnFailure": true

@@ -436,8 +436,10 @@ function Invoke-NativeLinuxInstaller {
 
     $payloadVersion = Get-PayloadVersion $PayloadArchive
     $buildDirectory = Join-Path $installerRoot "out\build\linux-x64"
-    if ($Clean -and (Test-Path $buildDirectory)) {
-        Remove-Item -Recurse -Force $buildDirectory
+    $buildDirectoryCli = Join-Path $installerRoot "out\build\linux-x64-cli"
+    if ($Clean) {
+        if (Test-Path $buildDirectory) { Remove-Item -Recurse -Force $buildDirectory }
+        if (Test-Path $buildDirectoryCli) { Remove-Item -Recurse -Force $buildDirectoryCli }
     }
 
     Ensure-InstallerBuilderImage -TargetStage "all" -LocalImage $localImage -RemoteImage $remoteImage -InstallerRoot $installerRoot
@@ -451,6 +453,9 @@ install --directory --mode=700 "$TMPDIR" "$WINEPREFIX"
 cmake --fresh --preset linux-x64 -DVCPKG_MANIFEST_INSTALL=OFF "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR_LINUX}" "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}"
 cmake --build --preset build-linux-x64 --config Release
 ctest --preset test-linux-x64 -C Release --output-on-failure
+cmake --fresh --preset linux-x64-cli -DVCPKG_MANIFEST_INSTALL=OFF "-DVCPKG_INSTALLED_DIR=${VCPKG_INSTALLED_DIR_LINUX}" "-DCMDIQO_BUILD_VERSION=${CMDIQO_BUILD_VERSION}"
+cmake --build --preset build-linux-x64-cli --config Release
+ctest --preset test-linux-x64-cli -C Release --output-on-failure
 '@
     & docker run --rm `
         --platform linux/amd64 `
@@ -463,7 +468,9 @@ ctest --preset test-linux-x64 -C Release --output-on-failure
         throw "Native Linux installer build failed."
     }
     Copy-Item -LiteralPath (Join-Path $buildDirectory "cmdiqo-agent-setup") -Destination (Join-Path $rootDir "dist\cmdiqo-agent-linux-x64-setup") -Force
+    Copy-Item -LiteralPath (Join-Path $buildDirectoryCli "cmdiqo-agent-setup") -Destination (Join-Path $rootDir "dist\cmdiqo-agent-linux-x64-setup-cli") -Force
     Write-Info "Native installer: $(Join-Path $rootDir 'dist\cmdiqo-agent-linux-x64-setup')"
+    Write-Info "Native installer (CLI): $(Join-Path $rootDir 'dist\cmdiqo-agent-linux-x64-setup-cli')"
 }
 
 $buildWin = ($Platform -eq "win64" -or $Platform -eq "all")

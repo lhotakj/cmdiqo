@@ -295,8 +295,8 @@ if [[ "$CLEAN" = true ]]; then
             rm -rf "$ROOT_DIR/agent.c/out/build/linux-x64"
         fi
         if [[ "$BUILD_INSTALLER" = true ]]; then
-            rm -f "$DIST_DIR/cmdiqo-agent-linux-x64-setup"
-            rm -rf "$ROOT_DIR/installer.c/out/build/linux-x64"
+            rm -f "$DIST_DIR/cmdiqo-agent-linux-x64-setup" "$DIST_DIR/cmdiqo-agent-linux-x64-setup-cli"
+            rm -rf "$ROOT_DIR/installer.c/out/build/linux-x64" "$ROOT_DIR/installer.c/out/build/linux-x64-cli"
         fi
     fi
     if [[ "$BUILD_LINUX_ARM64" = true && ( "$BUILD_AGENT" = true || "$BUILD_INSTALLER" = true ) ]]; then
@@ -657,6 +657,12 @@ build_native_installer() {
         destination="cmdiqo-agent-windows-x64-setup.exe"
         installed_dir_var="VCPKG_INSTALLED_DIR_WINDOWS"
         agent_binary="cmdiqo-agent.exe"
+    elif [[ "$platform" == linux-x64-cli ]]; then
+        preset="linux-x64-cli"
+        artifact="cmdiqo-agent-setup"
+        destination="cmdiqo-agent-linux-x64-setup-cli"
+        installed_dir_var="VCPKG_INSTALLED_DIR_LINUX"
+        agent_binary="cmdiqo-agent"
     elif [[ "$platform" == linux-arm64 ]]; then
         preset="linux-arm64"
         artifact="cmdiqo-agent-setup"
@@ -719,7 +725,7 @@ build_native_installer() {
         exit 1
     fi
     cp -f "$ROOT_DIR/installer.c/out/build/$preset/$artifact" "$DIST_DIR/$destination"
-    if [[ "$platform" == linux64 || "$platform" == linux-arm64 || "$platform" == linux-armv6 ]]; then
+    if [[ "$platform" == linux64 || "$platform" == linux-x64-cli || "$platform" == linux-arm64 || "$platform" == linux-armv6 ]]; then
         chmod +x "$DIST_DIR/$destination"
     fi
     info "Native installer: $DIST_DIR/$destination"
@@ -793,6 +799,7 @@ if [[ "$BUILD_INSTALLER" = true ]]; then
     if [[ "$BUILD_LINUX" = true ]]; then
         linux_payload_version="$(get_payload_version "$DIST_DIR/cmdiqo-agent-linux-x64.zip")"
         build_native_installer linux64 "$linux_payload_version"
+        build_native_installer linux-x64-cli "$linux_payload_version"
     fi
     if [[ "$BUILD_LINUX_ARM64" = true ]]; then
         linux_arm64_payload_version="$(get_payload_version "$DIST_DIR/cmdiqo-agent-linux-arm64.zip")"
@@ -859,6 +866,7 @@ if [[ "$BUILD_AGENT" = true || "$BUILD_INSTALLER" = true ]]; then
         artifacts+=("$DIST_DIR/cmdiqo-agent-linux-x64.zip")
         if [[ "$BUILD_INSTALLER" = true ]]; then
             artifacts+=("$DIST_DIR/cmdiqo-agent-linux-x64-setup")
+            artifacts+=("$DIST_DIR/cmdiqo-agent-linux-x64-setup-cli")
         fi
     fi
     if [[ "$BUILD_LINUX_ARM64" = true ]]; then

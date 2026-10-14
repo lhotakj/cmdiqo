@@ -88,6 +88,7 @@ def generate_summary(
         ("cmdiqo-agent-linux-armv6.zip", "arm-bw.png", "Linux ARMv6 (Package)", "ARMv6", "Full daemon package + systemd installer (armv6l / RPi Zero W / Pi 1)"),
         ("cmdiqo-agent-windows-x64.zip", "win-bw.png", "Windows (Package)", "x86_64", "Full service package + PowerShell installer"),
         ("cmdiqo-agent-linux-x64-setup", "linux-bw.png", "Linux (GUI Setup)", "x86_64", "Native C++ GTK3 interactive installer wizard"),
+        ("cmdiqo-agent-linux-x64-setup-cli", "linux-bw.png", "Linux (CLI Setup)", "x86_64", "Native C++ headless CLI installer wizard (x86_64)"),
         ("cmdiqo-agent-linux-arm64-setup", "arm-bw.png", "Linux ARM64 (CLI Setup)", "ARM64", "Native C++ headless CLI installer wizard (aarch64)"),
         ("cmdiqo-agent-linux-armv6-setup", "arm-bw.png", "Linux ARMv6 (CLI Setup)", "ARMv6", "Native C++ headless CLI installer wizard (armv6l / RPi Zero W / Pi 1)"),
         ("cmdiqo-agent-windows-x64-setup.exe", "win-bw.png", "Windows (GUI Setup)", "x86_64", "Native C++ Win32 interactive installer wizard"),
@@ -131,6 +132,28 @@ def generate_summary(
 
     if not found_any:
         lines.append("| *(No artifacts found in dist/)* | - | - | - | - | - |")
+
+    lines.extend([
+        "",
+        "### ⚡ Quick One-Liner Installation (Piped)",
+        "",
+        "Deploy and register Cmdiqo Agent directly from your terminal using a single piped command:",
+        "",
+        "#### Linux (Ubuntu / Debian / Fedora / RHEL / OCI / AWS / Raspberry Pi):",
+        "```bash",
+        "# Auto-detects architecture (x86_64, aarch64, armv6l) and installs systemd service:",
+        f"curl -fsSL https://raw.githubusercontent.com/{repo}/main/install.sh | sudo bash -s -- --hub-url \"ws://<HUB_IP>:8765\" --token \"<AGENT_TOKEN>\" --name \"<HOST_NAME>\"",
+        "```",
+        "",
+        "#### Windows 10 / 11 / Server (PowerShell as Administrator):",
+        "```powershell",
+        "# Headless service installation:",
+        f'& ([scriptblock]::Create((irm https://raw.githubusercontent.com/{repo}/main/install.ps1))) -HubUrl "ws://<HUB_IP>:8765" -Token "<AGENT_TOKEN>" -Name "<HOST_NAME>"',
+        "",
+        "# Or run interactively to launch the GUI setup wizard:",
+        f"irm https://raw.githubusercontent.com/{repo}/main/install.ps1 | iex",
+        "```",
+    ])
 
     lines.extend([
         "",
