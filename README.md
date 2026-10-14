@@ -177,9 +177,13 @@ Edit `config/commands.yaml` to define your commands and aliases (see **Adding yo
 | `/host <host> parental off`        | Remote host (Linux/Win) | Unblocks configured domains in hosts file & flushes DNS  |
 | `/host <host> parental status`     | Remote host (Linux/Win) | Displays active parental blocking status & domain count  |
 | `/host <host> blockapp [app|all] [on|off|status]` | Remote host (Linux/Win) | Blocks/unblocks apps (Roblox, Minecraft, TLauncher...) via IFEO & Flatpak (`appblock` alias; defaults to status) |
+| `/host <host> restrict <user> status` | Remote host (Linux/Win) | Displays active logon hours and scheduled tasks for user |
+| `/host <host> restrict <user> set <schedule>` | Remote host (Linux/Win) | Enforces logon hours with 5m toast, 1m alert dialog & forced logoff (`/restrict` shortcut) |
+| `/host <host> restrict <user> off` | Remote host (Linux/Win) | Clears logon restrictions, purges enforcement tasks, and restores 24/7 unlimited access |
+| `/restrict <host> <user> [status|set|off]` | *(alias)* | Convenience shortcut for `/host <host> restrict <user> ...` |
 | `/wol <target>`                    | *(alias)*               | Auto-translates to `/lan wake <target>`                  |
 | `/home <command>`                  | *(alias)*               | Auto-translates to `/host home <command>`                |
-| `/help [topic]`                    | Bot App                 | Interactive manual with nested topics (`lan`, `docker`...)|
+| `/help [topic]`                    | Bot App                 | Interactive manual with nested topics (`lan`, `docker`, `parental`, `host restriction`...)|
 
 > The bot also understands the same commands typed **without** the leading
 > slash as plain channel messages (e.g. `lan devices list` or `home docker ps`),
@@ -667,18 +671,18 @@ Typing `/home docker ps` translates via alias to `/host home docker ps` and quer
 
 Cmdiqo includes native access management and parental guard commands operable directly from Slack or the WebGUI:
 
-1. **Logon Hours Restriction (`/host <host> restrict`)**:
-   Enforce allowed login times for users on Windows (via SAM `net user /time:...` with automated 1-hour normalization) and Linux (via PAM `/etc/security/time.conf`).
+1. **Logon Hours Restriction (`/host <host> restrict <user>`)**:
+   Enforce allowed login times for users on Windows (via SAM `net user <user> /time:...` with automated 1-hour normalization and Task Scheduler toast/alert/logoff enforcement) and Linux (via PAM `/etc/security/time.conf`).
    ```bash
-   # Set weekly schedule (M-F 07:00-18:00 and Sa-Su 08:00-18:00)
-   /host JONAS-PC restrict set Sa-Su,08:00-18:00;M-F,07:00-18:00
+   # Set weekly schedule for user (M-F 07:00-18:00 and Sa-Su 08:00-18:00)
+   /host PC-KIDS restrict alex set Sa-Su,08:00-18:00;M-F,07:00-18:00
 
-   # Inspect current restriction status across all users
-   /host JONAS-PC restrict status
-   # Output: • User jonas: 🔒 Restricted → M-F: 07:00-18:00; Sa-Su: 08:00-18:00
+   # Inspect current restriction status and active enforcement tasks
+   /host PC-KIDS restrict alex status
+   # Output: • User alex: 🔒 Restricted → M-F: 07:00-18:00; Sa-Su: 08:00-18:00
 
-   # Remove restriction and restore 24/7 unlimited access
-   /host JONAS-PC restrict off
+   # Remove restriction, purge scheduled enforcement tasks, and restore 24/7 access
+   /host PC-KIDS restrict alex off
    ```
 
 2. **Parental Domain Shield (`/host <host> parental`)**:

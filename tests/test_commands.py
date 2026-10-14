@@ -91,6 +91,9 @@ def test_load_commands_valid_file():
     assert "/host {host} restrict set {schedule}" in triggers
     assert "/host {host} restrict status" in triggers
     assert "/host {host} restrict off" in triggers
+    assert "/host {host} restrict {user} set {schedule}" in triggers
+    assert "/host {host} restrict {user} status" in triggers
+    assert "/host {host} restrict {user} off" in triggers
     # Verify no legacy /home commands remain in commands:
     assert not any(t.startswith("/home") for t in triggers)
 

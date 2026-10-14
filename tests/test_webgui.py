@@ -403,9 +403,11 @@ class TestWebGui(unittest.TestCase):
         self.assertIn("openActionMenu", html)
         self.assertIn("menu-sub-pills", html)
         self.assertIn("sub-pill-btn", html)
-        self.assertIn("has-interactive", html)
         self.assertIn("Logon Hours", html)
-        self.assertIn("restrict set", html)
+        self.assertIn("restrict-user-input", html)
+        self.assertIn("restrict-set-btn", html)
+        self.assertIn("restrict-status-btn", html)
+        self.assertIn("restrict-reset-btn", html)
 
         # 5. Verify Terminal rich formatting & emoji styling
         self.assertIn("formatSlackToHtml", html)
@@ -592,24 +594,31 @@ class TestWebGui(unittest.TestCase):
 
             # 1. Test restrict set via WebGUI state
             res_set = await asyncio.to_thread(
-                state.execute_command_sync, "/host node1 restrict set M-F,08:00-20:00"
+                state.execute_command_sync, "/host node1 restrict jonas set M-F,08:00-20:00"
             )
             self.assertTrue(res_set["success"])
             self.assertIn("Logon hours restriction successfully applied", res_set["output"])
 
             # 2. Test restrict status via WebGUI state
             res_status = await asyncio.to_thread(
-                state.execute_command_sync, "/host node1 restrict status"
+                state.execute_command_sync, "/host node1 restrict jonas status"
             )
             self.assertTrue(res_status["success"])
             self.assertIn("Logon Hours Status on `node1`", res_status["output"])
 
             # 3. Test restrict off via WebGUI state
             res_off = await asyncio.to_thread(
-                state.execute_command_sync, "/host node1 restrict off"
+                state.execute_command_sync, "/host node1 restrict jonas off"
             )
             self.assertTrue(res_off["success"])
             self.assertIn("Logon hours restriction removed", res_off["output"])
+
+            # 4. Test legacy restrict set prompts for username
+            res_legacy = await asyncio.to_thread(
+                state.execute_command_sync, "/host node1 restrict set M-F,08:00-20:00"
+            )
+            self.assertTrue(res_legacy["success"])
+            self.assertIn("Username is required", res_legacy["output"])
 
         asyncio.run(_run_test())
 
@@ -688,7 +697,7 @@ class TestWebGui(unittest.TestCase):
             state.commands = load_commands("config/commands.yaml")
 
             res = await asyncio.to_thread(
-                state.execute_command_sync, "/host JONAS-PC restrict set M-F,08:00-20:00"
+                state.execute_command_sync, "/host JONAS-PC restrict jonas set M-F,08:00-20:00"
             )
             # Must return success False on failure
             self.assertFalse(res["success"])

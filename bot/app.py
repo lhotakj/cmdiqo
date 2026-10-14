@@ -684,6 +684,7 @@ CATEGORY_LABELS: dict[str, str] = {
     "docker": ":whale: *Docker Containers & Compose*",
     "services": ":gear: *Systemd Service Management*",
     "windows": ":desktop_computer: *Windows Agent & PowerShell*",
+    "parental": ":shield: *Parental Controls & Logon Restrictions*",
 }
 
 BUILTIN_COMMANDS: list[dict[str, Any]] = [
@@ -705,10 +706,60 @@ BUILTIN_COMMANDS: list[dict[str, Any]] = [
         "trigger": "/help [category_or_command]",
         "category": "system",
         "description": "Show interactive help manual and dynamic recap of commands",
-        "details": "Displays structured guidance, command syntax, parameters, and examples. Supports nested filtering by category (e.g. /help lan, /help docker) or keyword (e.g. /help wake).",
-        "examples": ["/help", "/help lan", "/help host", "/help docker", "/help home"],
+        "details": "Displays structured guidance, command syntax, parameters, and examples. Supports nested filtering by category (e.g. /help lan, /help docker, /help parental) or keyword / multi-word sub-command (e.g. /help host restriction, /help wake, /help docker ps).",
+        "examples": [
+            "/help",
+            "/help lan",
+            "/help host",
+            "/help parental",
+            "/help docker",
+            "/help host restriction",
+            "/help home",
+        ],
     },
 ]
+
+# Canonical dictionary of synonyms and inflection stems for second-level help queries
+HELP_SYNONYMS: dict[str, str] = {
+    "restriction": "restrict",
+    "restrictions": "restrict",
+    "limiting": "restrict",
+    "limits": "restrict",
+    "limit": "restrict",
+    "schedule": "restrict",
+    "services": "service",
+    "users": "user",
+    "accounts": "user",
+    "account": "user",
+    "containers": "docker",
+    "container": "docker",
+    "apps": "blockapp",
+    "app": "blockapp",
+    "applications": "blockapp",
+    "application": "blockapp",
+    "wol": "wake",
+    "waking": "wake",
+    "sleeping": "sleep",
+    "hibernating": "hibernate",
+    "mem": "memory",
+    "ram": "memory",
+    "rebooting": "reboot",
+}
+
+HELP_STOPWORDS: set[str] = {"help", "cmd", "command", "the", "a", "an", "on", "for", "in"}
+
+
+def _normalize_help_token(tok: str) -> str:
+    """Normalize query word to lowercase canonical lemma/synonym stem."""
+    t = tok.strip().lower().strip("/?.,:;!")
+    if t in HELP_SYNONYMS:
+        return HELP_SYNONYMS[t]
+    if len(t) > 4 and t.endswith("s") and not t.endswith("ss"):
+        singular = t[:-1]
+        if singular in HELP_SYNONYMS:
+            return HELP_SYNONYMS[singular]
+        return singular
+    return t
 
 
 def get_spec_category(spec: dict[str, Any]) -> str:
@@ -716,6 +767,16 @@ def get_spec_category(spec: dict[str, Any]) -> str:
     if spec.get("category"):
         return str(spec["category"]).lower()
     trig = spec.get("trigger", "").lower()
+    name = spec.get("name", "").lower()
+    if (
+        "restrict" in trig
+        or "restrict" in name
+        or "parental" in trig
+        or "parental" in name
+        or "blockapp" in trig
+        or "appblock" in trig
+    ):
+        return "parental"
     if trig.startswith("/lan"):
         return "lan"
     if "docker" in trig:
@@ -736,7 +797,7 @@ def help_text(
     aliases: list[dict[str, Any]] | None = None,
     topic: str | None = None,
 ) -> str:
-    """Generate dynamic, structured help recap for Slack with nested topic filtering."""
+    """Generate dynamic, structured help recap for Slack with nested topic filtering and multi-word second-level matching."""
     req_topic = (topic or prefix or "").strip().lower()
     if req_topic.startswith("/"):
         req_topic = req_topic[1:].strip()
@@ -745,7 +806,10 @@ def help_text(
     elif req_topic.endswith(" ?"):
         req_topic = req_topic[:-2].strip()
 
-    all_specs: list[dict[str, Any]] = [c["spec"] for c in commands] + BUILTIN_COMMANDS
+    # Filter out internal legacy fallback specs from help display
+    all_specs: list[dict[str, Any]] = [
+        c["spec"] for c in commands if "-legacy-" not in c.get("spec", {}).get("name", "")
+    ] + BUILTIN_COMMANDS
 
     # 1. General Overview (no topic requested)
     if not req_topic:
@@ -759,13 +823,16 @@ def help_text(
             "• *`docker`* — Container inspection, restart, logs, and stats (`/help docker`)",
             "• *`services`* — Systemd service management (`/help services`)",
             "• *`windows`* — Windows updates, services, memory, reboot, and shutdown (`/help windows`)",
+            "• *`parental`* — User logon hours, schedule limits, and parental controls (`/help parental`)",
         ]
 
         if aliases:
-            lines.append("\n*Configured Shortcuts & Aliases:*")
-            for a in aliases:
-                desc = f" — {a['description']}" if a.get("description") else ""
-                lines.append(f"• `{a['input']}` \u2192 `{a['output']}`{desc}")
+            clean_aliases = [a for a in aliases if "-legacy-" not in a.get("name", "")]
+            if clean_aliases:
+                lines.append("\n*Configured Shortcuts & Aliases:*")
+                for a in clean_aliases:
+                    desc = f" — {a['description']}" if a.get("description") else ""
+                    lines.append(f"• `{a['input']}` \u2192 `{a['output']}`{desc}")
 
         lines.append("\n*Quick Command Reference:*")
         categories: dict[str, list[dict[str, Any]]] = {}
@@ -785,48 +852,78 @@ def help_text(
                 lines.append(f"• `{s['trigger']}`{tgt} — {s['description']}")
 
         lines.append(
-            "\n:information_source: *Tip:* Type `/help <category>` (e.g. `/help lan`, `/help host`, `/help docker`) "
-            "for detailed parameters, usage instructions, and copy-pasteable examples."
+            "\n:information_source: *Tip:* Type `/help <category>` (e.g. `/help lan`, `/help host`, `/help parental`, `/help docker`) "
+            "or specific sub-commands like `/help host restriction` for detailed parameters, usage instructions, and examples."
         )
         return "\n".join(lines)
 
-    # 2. Filtered Topic / Category
-    matching_specs: list[dict[str, Any]] = []
-    for s in all_specs:
-        cat = get_spec_category(s)
-        trig = s["trigger"].lower()
-        name = s.get("name", "").lower()
-        desc = s.get("description", "").lower()
+    # 2. Filtered Topic / Category / Multi-Word Second-Level Sub-command
+    raw_tokens = [t for t in re.split(r"[\s\-_/]+", req_topic) if t]
+    normalized_tokens = [
+        _normalize_help_token(t)
+        for t in raw_tokens
+        if _normalize_help_token(t) not in HELP_STOPWORDS
+    ]
+    if not normalized_tokens and raw_tokens:
+        normalized_tokens = [_normalize_help_token(t) for t in raw_tokens]
 
-        # Match category, command prefix (e.g. /lan, /host), or keyword
-        if (
-            req_topic == cat
-            or (req_topic == "host" and (s.get("target") or "{host}" in trig))
-            or trig.startswith(f"/{req_topic} ")
-            or trig == f"/{req_topic}"
-            or req_topic in trig
-            or req_topic in name
-            or req_topic in desc
-        ):
-            matching_specs.append(s)
+    matching_specs: list[dict[str, Any]] = []
+
+    # Special topic "host" or "home": matches all remote host commands
+    if req_topic in ("host", "home"):
+        for s in all_specs:
+            trig = s.get("trigger", "").lower()
+            if (s.get("target") or "{host}" in trig or trig.startswith("/host ") or trig == "/host") and s not in matching_specs:
+                matching_specs.append(s)
+    # Category direct match
+    elif req_topic in CATEGORY_LABELS:
+        for s in all_specs:
+            if get_spec_category(s) == req_topic and s not in matching_specs:
+                matching_specs.append(s)
+    else:
+        for s in all_specs:
+            cat = get_spec_category(s)
+            trig = s.get("trigger", "").lower()
+            name = s.get("name", "").lower()
+            desc = s.get("description", "").lower()
+            details = s.get("details", "").lower()
+            examples = " ".join(s.get("examples", [])).lower()
+            searchable = f"{cat} {trig} {name} {desc} {details} {examples}"
+
+            # Direct match or second-level multi-token match: all normalized tokens must appear in spec
+            is_match = (
+                req_topic == cat
+                or trig.startswith(f"/{req_topic} ")
+                or trig == f"/{req_topic}"
+                or req_topic in trig
+                or req_topic in name
+                or req_topic in desc
+                or (normalized_tokens and all(tok in searchable for tok in normalized_tokens))
+            )
+            if is_match and s not in matching_specs:
+                matching_specs.append(s)
 
     matching_aliases: list[dict[str, Any]] = []
     if aliases:
         for a in aliases:
+            if "-legacy-" in a.get("name", ""):
+                continue
             inp = a["input"].lower().lstrip("/")
             out = a["output"].lower()
             name = a.get("name", "").lower()
-            if (
+            desc = a.get("description", "").lower()
+            details = a.get("details", "").lower()
+            examples = " ".join(a.get("examples", [])).lower()
+            alias_searchable = f"{inp} {out} {name} {desc} {details} {examples}"
+
+            is_alias_match = (
                 req_topic in (inp, name)
                 or req_topic in out
-                or req_topic in a.get("description", "").lower()
-            ):
+                or req_topic in desc
+                or (normalized_tokens and all(tok in alias_searchable for tok in normalized_tokens))
+            )
+            if is_alias_match and a not in matching_aliases:
                 matching_aliases.append(a)
-
-    if req_topic == "home":
-        for s in all_specs:
-            if (s.get("target") or "{host}" in s.get("trigger", "")) and s not in matching_specs:
-                matching_specs.append(s)
 
     if not matching_specs and not matching_aliases:
         return (

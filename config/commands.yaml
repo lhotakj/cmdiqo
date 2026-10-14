@@ -123,89 +123,157 @@ commands:
 
 
   - name: host-restrict-set
-    trigger: "/host {host} restrict set {schedule}"
-    description: "Enforce allowed logon hours on {host}"
-    details: "Restricts allowed login hours for non-admin accounts on Windows (net user /time) or Linux (/etc/security/time.conf). Days: M, T, W, Th, F, Sa, Su. Range: M-F, Sa-Su. Hours: 24h format (e.g. 08:00-20:00). Separate multiple rules with semicolon."
+    trigger: "/host {host} restrict {user} set {schedule}"
+    description: "Enforce allowed logon hours for {user} on {host}"
+    details: "Restricts allowed login hours for a specific user on Windows (net user /time + 5m toast reminder + 1m alert + forced logoff) or Linux (/etc/security/time.conf). Days: M, T, W, Th, F, Sa, Su. Range: M-F, Sa-Su. Hours: 24h format (e.g. 07:00-18:00). Multiple rules separated by semicolon."
     examples:
-      - "/host PC-KIDS restrict set M-F,08:00-20:00;Sa-Su,09:00-21:00"
-      - "/host PC-KIDS restrict set M-F,16:00-20:00"
+      - "/host PC-KIDS restrict jonas set M-F,07:00-18:00;Sa-Su,08:00-18:00"
+      - "/host PC-KIDS restrict jonas set M-F,16:00-20:00"
     command:
       python: "commands.restrict:manage_restrict"
     config:
       action: "set"
 
   - name: host-restrict-status
-    trigger: "/host {host} restrict status"
-    description: "Check allowed logon hours status for accounts on {host}"
-    details: "Displays the active logon hours restrictions for user accounts on the target host."
+    trigger: "/host {host} restrict {user} status"
+    description: "Check allowed logon hours status for {user} on {host}"
+    details: "Displays the active logon hours restrictions and scheduled enforcement tasks for a specific user on the target host."
     examples:
-      - "/host PC-KIDS restrict status"
+      - "/host PC-KIDS restrict jonas status"
     command:
       python: "commands.restrict:manage_restrict"
     config:
       action: "status"
 
   - name: host-restrict-off
-    trigger: "/host {host} restrict off"
-    description: "Remove logon hours restrictions on {host} (restore 24/7)"
-    details: "Clears all logon time limits on user accounts, restoring unlimited 24/7 access (/time:all)."
+    trigger: "/host {host} restrict {user} off"
+    description: "Remove logon hours restrictions for {user} on {host} (restore 24/7)"
+    details: "Clears all logon time limits for the user, removes all warning/logoff scheduled tasks, and restores unlimited 24/7 access (/time:all)."
     examples:
-      - "/host PC-KIDS restrict off"
+      - "/host PC-KIDS restrict jonas off"
     command:
       python: "commands.restrict:manage_restrict"
     config:
       action: "off"
 
   - name: host-restrict-default
-    trigger: "/host {host} restrict"
-    description: "Check allowed logon hours status for accounts on {host} (shorthand)"
-    details: "Displays the active logon hours restrictions for user accounts on the target host."
+    trigger: "/host {host} restrict {user}"
+    description: "Check allowed logon hours status for {user} on {host} (shorthand)"
+    details: "Displays the active logon hours restrictions and enforcement tasks for a specific user on the target host."
     examples:
-      - "/host PC-KIDS restrict"
+      - "/host PC-KIDS restrict jonas"
+    command:
+      python: "commands.restrict:manage_restrict"
+    config:
+      action: "status"
+
+  - name: host-restrict-legacy-set
+    trigger: "/host {host} restrict set {schedule}"
+    description: "Enforce allowed logon hours on {host} (prompts for mandatory user)"
+    details: "Prompts for mandatory username."
+    command:
+      python: "commands.restrict:manage_restrict"
+    config:
+      action: "set"
+
+  - name: host-restrict-legacy-status
+    trigger: "/host {host} restrict status"
+    description: "Check allowed logon hours on {host} (prompts for mandatory user)"
+    details: "Prompts for mandatory username."
+    command:
+      python: "commands.restrict:manage_restrict"
+    config:
+      action: "status"
+
+  - name: host-restrict-legacy-off
+    trigger: "/host {host} restrict off"
+    description: "Remove logon hours restrictions on {host} (prompts for mandatory user)"
+    details: "Prompts for mandatory username."
+    command:
+      python: "commands.restrict:manage_restrict"
+    config:
+      action: "off"
+
+  - name: host-restrict-legacy-default
+    trigger: "/host {host} restrict"
+    description: "Check allowed logon hours status on {host} (prompts for mandatory user)"
+    details: "Prompts for mandatory username."
     command:
       python: "commands.restrict:manage_restrict"
     config:
       action: "status"
 
   - name: direct-restrict-set
-    trigger: "/restrict {host} set {schedule}"
-    description: "Enforce allowed logon hours on {host} (shortcut)"
-    details: "Shortcut for /host {host} restrict set {schedule}."
+    trigger: "/restrict {host} {user} set {schedule}"
+    description: "Enforce allowed logon hours for {user} on {host} (shortcut)"
+    details: "Shortcut for /host {host} restrict {user} set {schedule}."
     examples:
-      - "/restrict PC-KIDS set M-F,08:00-20:00;Sa-Su,09:00-21:00"
+      - "/restrict PC-KIDS jonas set M-F,07:00-18:00;Sa-Su,08:00-18:00"
     command:
       python: "commands.restrict:manage_restrict"
     config:
       action: "set"
 
   - name: direct-restrict-status
-    trigger: "/restrict {host} status"
-    description: "Check allowed logon hours status on {host} (shortcut)"
-    details: "Shortcut for /host {host} restrict status."
+    trigger: "/restrict {host} {user} status"
+    description: "Check allowed logon hours status for {user} on {host}"
+    details: "Shortcut for /host {host} restrict {user} status."
     examples:
-      - "/restrict PC-KIDS status"
+      - "/restrict PC-KIDS jonas status"
     command:
       python: "commands.restrict:manage_restrict"
     config:
       action: "status"
 
   - name: direct-restrict-off
-    trigger: "/restrict {host} off"
-    description: "Remove logon hours restrictions on {host} (shortcut)"
-    details: "Shortcut for /host {host} restrict off."
+    trigger: "/restrict {host} {user} off"
+    description: "Remove logon hours restrictions for {user} on {host} (shortcut)"
+    details: "Shortcut for /host {host} restrict {user} off."
     examples:
-      - "/restrict PC-KIDS off"
+      - "/restrict PC-KIDS jonas off"
     command:
       python: "commands.restrict:manage_restrict"
     config:
       action: "off"
 
   - name: direct-restrict-default
-    trigger: "/restrict {host}"
-    description: "Check allowed logon hours status on {host} (shortcut)"
-    details: "Shortcut for /host {host} restrict status."
+    trigger: "/restrict {host} {user}"
+    description: "Check allowed logon hours status for {user} on {host} (shortcut)"
+    details: "Shortcut for /host {host} restrict {user} status."
     examples:
-      - "/restrict PC-KIDS"
+      - "/restrict PC-KIDS jonas"
+    command:
+      python: "commands.restrict:manage_restrict"
+    config:
+      action: "status"
+
+  - name: direct-restrict-legacy-set
+    trigger: "/restrict {host} set {schedule}"
+    description: "Enforce allowed logon hours on {host} (prompts for mandatory user)"
+    command:
+      python: "commands.restrict:manage_restrict"
+    config:
+      action: "set"
+
+  - name: direct-restrict-legacy-status
+    trigger: "/restrict {host} status"
+    description: "Check allowed logon hours status on {host} (prompts for mandatory user)"
+    command:
+      python: "commands.restrict:manage_restrict"
+    config:
+      action: "status"
+
+  - name: direct-restrict-legacy-off
+    trigger: "/restrict {host} off"
+    description: "Remove logon hours restrictions on {host} (prompts for mandatory user)"
+    command:
+      python: "commands.restrict:manage_restrict"
+    config:
+      action: "off"
+
+  - name: direct-restrict-legacy-default
+    trigger: "/restrict {host}"
+    description: "Check allowed logon hours status on {host} (prompts for mandatory user)"
     command:
       python: "commands.restrict:manage_restrict"
     config:

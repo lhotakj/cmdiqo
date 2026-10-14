@@ -2090,16 +2090,10 @@
               ]
             },
             {
+              id: 'restrict',
               label: 'Logon Hours',
-              desc: 'Allowed schedule (e.g. M-F,08:00-20:00)',
-              hasInput: true,
-              inputPlaceholder: 'M-F,08:00-20:00',
-              inputPrefix: 'restrict set',
-              submitLabel: 'Set',
-              subActions: [
-                { cmd: 'restrict status', label: 'Status', desc: 'Check active allowed logon hours' },
-                { cmd: 'restrict off', label: 'Disable', desc: 'Remove logon hours restrictions (24/7 unlimited)' }
-              ]
+              desc: 'Enforce allowed login hours & auto-logoff',
+              isRestrict: true
             }
           ]
         },
@@ -2410,7 +2404,27 @@
           `;
 
           cat.items.forEach(item => {
-            if (item.hasInput || item.subActions) {
+            if (item.isRestrict) {
+              menuHtml += `
+                <div class="menu-item has-interactive menu-restrict-block">
+                  <div class="item-cmd-line">
+                    <span class="item-cmd">${escapeHtml(item.label)}</span>
+                  </div>
+                  <div class="item-desc">${escapeHtml(item.desc)}</div>
+                  <div class="menu-restrict-container" onclick="event.stopPropagation();" style="margin-top:6px; padding-top:4px; border-top:1px solid rgba(255, 255, 255, 0.06); display:flex; flex-direction:column; gap:5px;">
+                    <input type="text" class="menu-text-input restrict-user-input" placeholder="Username" style="width:100%;" />
+                    <div style="display:flex; gap:6px; align-items:center;">
+                      <input type="text" class="menu-text-input restrict-time-input" placeholder="Time (e.g. M-F,07:00-18:00)" style="flex:1; min-width:0;" />
+                      <button type="button" class="menu-input-btn restrict-set-btn" style="white-space:nowrap;">Set ↵</button>
+                    </div>
+                    <div class="menu-sub-pills" style="margin-top:2px; padding-top:4px; display:flex; gap:6px;">
+                      <button type="button" class="sub-pill-btn restrict-status-btn" title="Check logon hours & enforcement status for user">Status</button>
+                      <button type="button" class="sub-pill-btn pill-disable restrict-reset-btn" title="Remove all logon hours limits and tasks for user (restore 24/7)">Reset</button>
+                    </div>
+                  </div>
+                </div>
+              `;
+            } else if (item.hasInput || item.subActions) {
               menuHtml += `
                 <div class="menu-item has-interactive">
                   <div class="item-cmd-line">
@@ -2560,6 +2574,83 @@
               doSubmit();
             }
           });
+        });
+
+        // Restrict block event handlers (Username, Time, Set, Status, Reset)
+        contextMenu.querySelectorAll('.menu-restrict-block').forEach(block => {
+          const userInput = block.querySelector('.restrict-user-input');
+          const timeInput = block.querySelector('.restrict-time-input');
+          const setBtn = block.querySelector('.restrict-set-btn');
+          const statusBtn = block.querySelector('.restrict-status-btn');
+          const resetBtn = block.querySelector('.restrict-reset-btn');
+
+          const getValidUser = () => {
+            const u = (userInput ? userInput.value : '').trim();
+            if (!u) {
+              if (userInput) {
+                userInput.focus();
+                userInput.style.borderColor = '#ef4444';
+                setTimeout(() => { userInput.style.borderColor = ''; }, 1800);
+              }
+              return null;
+            }
+            return u;
+          };
+
+          if (setBtn) {
+            setBtn.addEventListener('click', function(e) {
+              e.stopPropagation();
+              const u = getValidUser();
+              if (!u) return;
+              const t = (timeInput ? timeInput.value : '').trim();
+              if (!t) {
+                if (timeInput) {
+                  timeInput.focus();
+                  timeInput.style.borderColor = '#ef4444';
+                  setTimeout(() => { timeInput.style.borderColor = ''; }, 1800);
+                }
+                return;
+              }
+              openTerminalAndExecute(host, `/host ${host} restrict ${u} set ${t}`);
+            });
+          }
+
+          if (statusBtn) {
+            statusBtn.addEventListener('click', function(e) {
+              e.stopPropagation();
+              const u = getValidUser();
+              if (!u) return;
+              openTerminalAndExecute(host, `/host ${host} restrict ${u} status`);
+            });
+          }
+
+          if (resetBtn) {
+            resetBtn.addEventListener('click', function(e) {
+              e.stopPropagation();
+              const u = getValidUser();
+              if (!u) return;
+              openTerminalAndExecute(host, `/host ${host} restrict ${u} off`);
+            });
+          }
+
+          const onEnter = (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              e.stopPropagation();
+              const u = (userInput ? userInput.value : '').trim();
+              const t = (timeInput ? timeInput.value : '').trim();
+              if (!u) {
+                if (userInput) userInput.focus();
+              } else if (!t) {
+                if (timeInput) timeInput.focus();
+              } else {
+                openTerminalAndExecute(host, `/host ${host} restrict ${u} set ${t}`);
+              }
+            }
+          };
+
+          if (userInput) userInput.addEventListener('keydown', onEnter);
+          if (timeInput) timeInput.addEventListener('keydown', onEnter);
         });
       }
 

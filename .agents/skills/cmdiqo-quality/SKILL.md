@@ -23,6 +23,9 @@ All contributions to Cmdiqo must satisfy SonarQube Quality Gates (Zero Vulnerabi
 - **Safe Parameter Substitution (`format_params`):**
   - Never use raw Python string `.format(**params)` on command lines that may contain PowerShell string format braces (`{0}`, `{1}`, `{4:yyyy-MM-dd HH:mm:ss}`) or script blocks (`{$_.Status -eq 'Running'}`).
   - Always use `format_params(template, params)` which substitutes only validated parameter keys (`[a-zA-Z_][a-zA-Z0-9_]*`), preserving PowerShell syntax intact.
+- **PowerShell Quote Safety Constraint (SonarQube S2076 / CWE-78):**
+  - Windows PowerShell scripts executed via `ps1` or generated dynamically on the agent must use strictly single-quoted strings (`'`).
+  - Never include unescaped double quotes (`"`) inside generated scripts to prevent token stripping or escaping breakage across nested process calls (`powershell.exe -Command ...`). Use `[char]34` or single-quoted string concatenation when double quote characters are needed.
 - **Docker Container Non-Root Security (SonarQube S6437):**
   - Production containers must run as a non-root user when possible.
   - When raw network capabilities are required for ARP scanning (`arp-scan`), assign targeted Linux capabilities (`CAP_NET_RAW`, `CAP_NET_ADMIN`) rather than full container root privileges.
@@ -34,6 +37,10 @@ All contributions to Cmdiqo must satisfy SonarQube Quality Gates (Zero Vulnerabi
   Because the bot and agents operate behind NAT and stateful firewalls, every WebSocket server and client connection **must** configure `ping_interval=20` and `ping_timeout=20` to prevent silent TCP connection drops.
 - **Disconnect Cleanup:**
   If an agent drops connection while executing a command, the hub must immediately cancel and fail any pending `asyncio.Future` waiting on that agent, rather than letting the caller hang until timeout.
+- **Logon Hours Enforcement & Task Scheduler Principal:**
+  - Tasks displaying interactive WinRT toast notifications or Windows Forms alerts must register under the target user's interactive session principal (`New-ScheduledTaskPrincipal -UserId $targetUser -LogonType Interactive`), while forced logoff commands register under `SYSTEM` (`-LogonType ServiceAccount -RunLevel Highest`).
+  - All scheduled enforcement tasks must specify `-StartWhenAvailable` (via `New-ScheduledTaskSettingsSet`) to guarantee execution after waking from sleep or hibernation.
+  - Reset operations (`off`) must cleanly unregister all scheduled tasks (`Cmdiqo-Restrict-<user>-*`) and purge associated helper scripts from `C:\ProgramData\Cmdiqo\Agent\scripts\`.
 
 ### Maintainability Standards
 - **No Import-Time Side Effects:**
@@ -106,6 +113,10 @@ When adding a new command in `config/commands.yaml`:
    - Always define an explicit `timeout` in seconds (e.g., `timeout: 180`).
 5. **Validation:**
    - Write a corresponding unit test in `tests/test_commands.py` verifying that the trigger regex matches valid inputs, validates the `command` mapping, and rejects malicious characters.
+6. **Second-Level Multi-Word Help Topics:**
+   - Multi-word and lemma/synonym help queries (e.g. `/help host restriction`, `/help host restrict`, `/help restrict`) are resolved via `HELP_SYNONYMS` and multi-token matching across searchable spec text (`name`, `description`, `trigger`, `details`, `category`, `examples`).
+   - Host-targeted commands take precedence under `/help host`, while specific sub-topics provide granular usage guides.
+   - Internal/legacy fallback specs (e.g. `-legacy-`) are excluded from help listings to keep manuals clean.
 
 ---
 

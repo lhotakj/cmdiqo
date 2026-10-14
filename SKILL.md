@@ -7,7 +7,12 @@
 - **Constant-Time Comparison:** Use `hmac.compare_digest` for secret/token verification.
 - **Sanitized Execution:** Command parameter placeholders use strict regex validation `(?P<name>[a-zA-Z0-9_\-\.]+)` to prevent command injection.
 - **Safe Parameter Substitution:** Use `format_params(template, params)` to substitute validated parameter keys (`{host}`, `{service}`) without breaking PowerShell format braces (`{0}`, `{1}`) or script blocks (`{$_.Status ...}`).
+- **PowerShell Quote Safety Constraint:** Windows PowerShell scripts executed via `ps1` or generated dynamically on the agent must use strictly single-quoted strings (`'`). Never include unescaped double quotes (`"`) inside generated scripts to prevent token stripping or escaping breakage across nested process calls (`powershell.exe -Command ...`). Use `[char]34` or single-quoted string concatenation when double quote characters are needed.
 - **Cross-Platform Routing:** The bot automatically detects the target agent's OS (`Windows` vs `Linux`), switching from `run` / `shell` to `windows_run` / `ps1` on Windows agents.
+- **Logon Hours Enforcement & Task Scheduler Principal:**
+  - Tasks displaying interactive WinRT toast notifications or Windows Forms alerts must register under the target user's interactive session principal (`New-ScheduledTaskPrincipal -UserId $targetUser -LogonType Interactive`), while forced logoff commands register under `SYSTEM` (`-LogonType ServiceAccount -RunLevel Highest`).
+  - All scheduled enforcement tasks must specify `-StartWhenAvailable` (via `New-ScheduledTaskSettingsSet`) to guarantee execution after waking from sleep or hibernation.
+  - Reset operations (`off`) must cleanly unregister all scheduled tasks (`Cmdiqo-Restrict-<user>-*`) and purge associated helper scripts from `C:\ProgramData\Cmdiqo\Agent\scripts\`.
 - **Explicit Exceptions:** Avoid bare `except Exception:`. Log all caught unexpected exceptions.
 - **No Import-Time Side Effects:** Use configuration dataclasses and factories (`create_bot_app()`, `run_agent()`).
 - **Standardized Logging:** Use `logging.getLogger(...)`, never `print()`.
@@ -102,6 +107,6 @@ commands:
       ps1: "Restart-Service -Name '{service}' -Force; Get-Service -Name '{service}' | Select-Object Name, DisplayName, Status"
     timeout: 60
 ```
-> **Command Resolution & Help Discovery**: Triggers containing `{host}` automatically target that host agent (no redundant `target: "{host}"`). The `command` mapping dynamically selects `shell` on Linux agents and `ps1` on Windows agents. Category is automatically inferred (or can be explicitly set), feeding into Slack `/help` and `/help <category>`. Arbitrary command configuration is supported under `config:`.
+> **Command Resolution & Help Discovery**: Triggers containing `{host}` automatically target that host agent (no redundant `target: "{host}"`). The `command` mapping dynamically selects `shell` on Linux agents and `ps1` on Windows agents. Category is automatically inferred (or can be explicitly set), feeding into Slack `/help` and `/help <category>`. Arbitrary command configuration is supported under `config:`. Second-level multi-word and lemma/synonym help queries (e.g. `/help host restriction`, `/help host restrict`, `/help restrict`) are dynamically matched against spec triggers, descriptions, and details.
 
 Always add corresponding unit tests in `tests/`.

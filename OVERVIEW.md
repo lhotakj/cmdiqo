@@ -172,6 +172,7 @@ Commands defined in `config/commands.yaml` (under `aliases:` and `commands:`) ar
 | `/host {host} service status {service}` | `shell` + `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl status` / Windows `Get-Service` |
 | `/host {host} service restart {service}` | `shell` + `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `systemctl restart` / Windows `Restart-Service` |
 | `/host {host} parental {action}` | `python` (with `config.domains`) | `{host}` | Host / Agent | Configurable parental domain blocker with DNS flush (Win & Linux) |
+| `/host {host} restrict {user} [status|set|off]` | `python` | `{host}` | Host / Agent | Logon hours enforcement with T-5 toast, T-1 toast & alert, and cutoff forced logoff via Task Scheduler (`commands.restrict:manage_restrict`) |
 | `/host {host} blockapp [app|all] [action]` | `python` (with `config.apps`) | `{host}` | Host / Agent | Multi-process execution blocker via IFEO/AppX on Windows and Flatpak overrides on Linux (`commands.appblock:manage_appblock`, alias: `appblock`; defaults to status) |
 | `/host {host} docker ps` | `shell` | `{host}` | Host / Agent | Linux `docker ps --format ...` |
 | `/host {host} docker stats` | `shell` | `{host}` | Host / Agent | Linux `docker stats --no-stream ...` |
@@ -179,7 +180,7 @@ Commands defined in `config/commands.yaml` (under `aliases:` and `commands:`) ar
 | `/home <action>` *(alias)* | *n/a* | Host `home` | Alias Resolution | Auto-translates to `/host home <action>` |
 | `/wol <target>` *(alias)* | *n/a* | Local | Alias Resolution | Auto-translates to `/lan wake <target>` |
 
-> **Dynamic Help & Discovery Engine**: Typing `/help` generates an organized category manual directly from the `description`, `details`, and `examples` fields defined in `commands.yaml`. Specifying a topic (e.g. `/help lan`, `/help host`, `/help docker`, `/help home`, `/help blockapp`) renders focused command breakdowns with copy-pasteable examples. Submitting bare prefixes (e.g. `/lan`, `/host`, `/home`, `/wol`, `/blockapp`, `/appblock`) or appending a trailing `help` (e.g. `/lan help`, `/host help`, `/docker help`, `/parental help`, `/blockapp help`) automatically routes into the corresponding nested help topic.
+> **Dynamic Help & Discovery Engine**: Typing `/help` generates an organized category manual directly from the `description`, `details`, and `examples` fields defined in `commands.yaml`. Specifying a topic (e.g. `/help lan`, `/help host`, `/help docker`, `/help home`, `/help parental`, `/help restrict`, `/help host restriction`, `/help blockapp`) renders focused command breakdowns with copy-pasteable examples. Submitting bare prefixes (e.g. `/lan`, `/host`, `/home`, `/wol`, `/blockapp`, `/appblock`) or appending a trailing `help` (e.g. `/lan help`, `/host help`, `/docker help`, `/parental help`, `/restrict help`, `/blockapp help`) automatically routes into the corresponding nested help topic.
 
 ---
 

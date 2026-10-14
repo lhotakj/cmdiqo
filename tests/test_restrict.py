@@ -66,7 +66,7 @@ def test_build_restrict_script_linux():
 
     lin_script_off = build_restrict_script_linux("off", "jonas")
     assert 'ACTION="off"' in lin_script_off
-    assert "sed -i '/# cmdiqo-restrict:start/,/# cmdiqo-restrict:end/d'" in lin_script_off
+    assert "sed -i '/# cmdiqo-restrict:'$TARGET_USER':start/,/# cmdiqo-restrict:'$TARGET_USER':end/d'" in lin_script_off
 
 
 @pytest.mark.asyncio
@@ -75,17 +75,27 @@ async def test_manage_restrict_validation():
     res_no_host = await manage_restrict({})
     assert "Target host is required" in res_no_host
 
+    # Missing user
+    res_no_user = await manage_restrict(
+        {"host": "PC-KIDS", "action": "set", "schedule": "M-F,07:00-18:00"}
+    )
+    assert "Username is required" in res_no_user
+
     # Invalid action
-    res_inv_act = await manage_restrict({"host": "PC-KIDS", "action": "invalid"})
+    res_inv_act = await manage_restrict(
+        {"host": "PC-KIDS", "user": "jonas", "action": "invalid"}
+    )
     assert "Invalid action" in res_inv_act
 
     # Set without schedule
-    res_no_sched = await manage_restrict({"host": "PC-KIDS", "action": "set"})
+    res_no_sched = await manage_restrict(
+        {"host": "PC-KIDS", "user": "jonas", "action": "set"}
+    )
     assert "Schedule string is required" in res_no_sched
 
     # Set with malicious schedule
     res_bad_sched = await manage_restrict(
-        {"host": "PC-KIDS", "action": "set", "schedule": "M-F;calc.exe"}
+        {"host": "PC-KIDS", "user": "jonas", "action": "set", "schedule": "M-F;calc.exe"}
     )
     assert "Invalid schedule format" in res_bad_sched
 
@@ -152,32 +162,38 @@ async def test_manage_restrict_mock_hub():
 
     # Auto-deduce action from _spec_name when executed via command registry
     res_deduced_status = await manage_restrict(
-        {"host": "PC-WIN", "_spec_name": "host-restrict-status"}, hub=mock_hub
+        {"host": "PC-WIN", "user": "jonas", "_spec_name": "host-restrict-status"}, hub=mock_hub
     )
     assert "Logon Hours Status on `PC-WIN`" in res_deduced_status
 
     res_deduced_off = await manage_restrict(
-        {"host": "PC-WIN", "_spec_name": "host-restrict-off"}, hub=mock_hub
+        {"host": "PC-WIN", "user": "jonas", "_spec_name": "host-restrict-off"}, hub=mock_hub
     )
     assert "Logon hours restriction removed" in res_deduced_off
 
     res_deduced_set = await manage_restrict(
-        {"host": "PC-WIN", "schedule": "M-F,08:00-20:00", "_spec_name": "host-restrict-set"},
+        {"host": "PC-WIN", "user": "jonas", "schedule": "M-F,08:00-20:00", "_spec_name": "host-restrict-set"},
         hub=mock_hub,
     )
     assert "Logon hours restriction successfully applied" in res_deduced_set
 
     # Auto-deduce action from config
     res_cfg_status = await manage_restrict(
-        {"host": "PC-WIN"}, hub=mock_hub, config={"action": "status"}
+        {"host": "PC-WIN", "user": "jonas"}, hub=mock_hub, config={"action": "status"}
     )
     assert "Logon Hours Status on `PC-WIN`" in res_cfg_status
+
+    # Missing user prompts for username
+    res_no_user = await manage_restrict(
+        {"host": "PC-WIN", "_spec_name": "host-restrict-status"}, hub=mock_hub
+    )
+    assert "Username is required" in res_no_user
 
     # Normalize user keyword when user="off" or user="status"
     res_norm_user = await manage_restrict(
         {"host": "PC-WIN", "user": "off"}, hub=mock_hub
     )
-    assert "Logon hours restriction removed" in res_norm_user
+    assert "Username is required" in res_norm_user
 
 
 @pytest.mark.asyncio
@@ -205,9 +221,9 @@ async def test_handle_command_restrict_slack_integration():
     commands = load_commands("config/commands.yaml")
     post_mock = AsyncMock()
 
-    # 1. Test /host PC-WIN restrict status
+    # 1. Test /host PC-WIN restrict jonas status
     await handle_command(
-        text="/host PC-WIN restrict status",
+        text="/host PC-WIN restrict jonas status",
         user_id="U1",
         channel_id="C1",
         post=post_mock,
@@ -218,10 +234,10 @@ async def test_handle_command_restrict_slack_integration():
     reply_status = post_mock.await_args_list[-1][0][0]
     assert "Logon Hours Status on `PC-WIN`" in reply_status
 
-    # 2. Test /host PC-WIN restrict off
+    # 2. Test /host PC-WIN restrict jonas off
     post_mock.reset_mock()
     await handle_command(
-        text="/host PC-WIN restrict off",
+        text="/host PC-WIN restrict jonas off",
         user_id="U1",
         channel_id="C1",
         post=post_mock,
@@ -231,10 +247,10 @@ async def test_handle_command_restrict_slack_integration():
     reply_off = post_mock.await_args_list[-1][0][0]
     assert "Logon hours restriction removed" in reply_off
 
-    # 3. Test /host PC-WIN restrict set M-F,08:00-20:00
+    # 3. Test /host PC-WIN restrict jonas set M-F,08:00-20:00
     post_mock.reset_mock()
     await handle_command(
-        text="/host PC-WIN restrict set M-F,08:00-20:00",
+        text="/host PC-WIN restrict jonas set M-F,08:00-20:00",
         user_id="U1",
         channel_id="C1",
         post=post_mock,
@@ -244,10 +260,10 @@ async def test_handle_command_restrict_slack_integration():
     reply_set = post_mock.await_args_list[-1][0][0]
     assert "Logon hours restriction successfully applied" in reply_set
 
-    # 4. Test shorthand /host PC-WIN restrict
+    # 4. Test shorthand /host PC-WIN restrict jonas
     post_mock.reset_mock()
     await handle_command(
-        text="/host PC-WIN restrict",
+        text="/host PC-WIN restrict jonas",
         user_id="U1",
         channel_id="C1",
         post=post_mock,
@@ -257,10 +273,10 @@ async def test_handle_command_restrict_slack_integration():
     reply_shorthand = post_mock.await_args_list[-1][0][0]
     assert "Logon Hours Status on `PC-WIN`" in reply_shorthand
 
-    # 5. Test direct shortcut /restrict PC-WIN set M-F,08:00-20:00
+    # 5. Test direct shortcut /restrict PC-WIN jonas set M-F,08:00-20:00
     post_mock.reset_mock()
     await handle_command(
-        text="/restrict PC-WIN set M-F,08:00-20:00",
+        text="/restrict PC-WIN jonas set M-F,08:00-20:00",
         user_id="U1",
         channel_id="C1",
         post=post_mock,
@@ -270,10 +286,10 @@ async def test_handle_command_restrict_slack_integration():
     reply_direct_set = post_mock.await_args_list[-1][0][0]
     assert "Logon hours restriction successfully applied" in reply_direct_set
 
-    # 6. Test direct shortcut /restrict PC-WIN off
+    # 6. Test direct shortcut /restrict PC-WIN jonas off
     post_mock.reset_mock()
     await handle_command(
-        text="/restrict PC-WIN off",
+        text="/restrict PC-WIN jonas off",
         user_id="U1",
         channel_id="C1",
         post=post_mock,
@@ -283,10 +299,10 @@ async def test_handle_command_restrict_slack_integration():
     reply_direct_off = post_mock.await_args_list[-1][0][0]
     assert "Logon hours restriction removed" in reply_direct_off
 
-    # 7. Test direct shorthand /restrict PC-WIN
+    # 7. Test direct shorthand /restrict PC-WIN jonas
     post_mock.reset_mock()
     await handle_command(
-        text="/restrict PC-WIN",
+        text="/restrict PC-WIN jonas",
         user_id="U1",
         channel_id="C1",
         post=post_mock,
@@ -299,7 +315,7 @@ async def test_handle_command_restrict_slack_integration():
     # 8. Test split schedule with comma and spaces
     post_mock.reset_mock()
     await handle_command(
-        text="/host PC-WIN restrict set  M-F,08:00-10:00, M-F,11:00-20:00 ",
+        text="/host PC-WIN restrict jonas set  M-F,08:00-10:00, M-F,11:00-20:00 ",
         user_id="U1",
         channel_id="C1",
         post=post_mock,
@@ -309,6 +325,19 @@ async def test_handle_command_restrict_slack_integration():
     reply_split = post_mock.await_args_list[-1][0][0]
     assert "Logon hours restriction successfully applied" in reply_split
     assert "M-F,08:00-10:00;M-F,11:00-20:00" in reply_split
+
+    # 9. Test legacy invocation without username prompts with usage guide
+    post_mock.reset_mock()
+    await handle_command(
+        text="/host PC-WIN restrict set M-F,08:00-20:00",
+        user_id="U1",
+        channel_id="C1",
+        post=post_mock,
+        commands=commands,
+        hub=fake_hub,
+    )
+    reply_legacy = post_mock.await_args_list[-1][0][0]
+    assert "Username is required for logon hours restrictions" in reply_legacy
 
 
 def test_format_condensed_logon_hours():
@@ -361,7 +390,45 @@ async def test_manage_restrict_multiline_windows_status():
             return f"STATUS:jonas:{raw_hours}"
 
     hub = MockWinHub()
-    res = await manage_restrict({"host": "JONAS-PC", "action": "status"}, hub=hub)
+    res = await manage_restrict({"host": "JONAS-PC", "user": "jonas", "action": "status"}, hub=hub)
     assert "Logon Hours Status on `JONAS-PC`" in res
     assert "• User *jonas*: 🔒 *Restricted* → `M-F: 07:00-18:00; Sa-Su: 08:00-18:00`" in res
+
+
+def test_parse_schedule_boundaries():
+    from bot.commands.restrict import parse_schedule_boundaries
+
+    boundaries = parse_schedule_boundaries("M-F,07:00-18:00;Sa-Su,08:00-18:00")
+    assert len(boundaries) == 2
+    assert boundaries[0]["days"] == ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    assert boundaries[0]["end_time"] == "18:00"
+    assert boundaries[0]["warn5_time"] == "17:55"
+    assert boundaries[0]["warn1_time"] == "17:59"
+
+    assert boundaries[1]["days"] == ["Saturday", "Sunday"]
+    assert boundaries[1]["end_time"] == "18:00"
+    assert boundaries[1]["warn5_time"] == "17:55"
+    assert boundaries[1]["warn1_time"] == "17:59"
+
+
+def test_second_level_help_matching():
+    from bot.app import help_text, load_commands
+
+    commands = load_commands("config/commands.yaml")
+
+    # 1. /help host restriction
+    h_restrict = help_text(commands, topic="host restriction")
+    assert "Cmdiqo Help: `host restriction`" in h_restrict
+    assert "/host {host} restrict {user} set {schedule}" in h_restrict
+    assert "/host {host} restrict {user} status" in h_restrict
+    assert "-legacy-" not in h_restrict
+
+    # 2. /help host restrict
+    h_host_restrict = help_text(commands, topic="host restrict")
+    assert "/host {host} restrict {user} set {schedule}" in h_host_restrict
+
+    # 3. /help parental
+    h_parental = help_text(commands, topic="parental")
+    assert "/host {host} restrict {user}" in h_parental
+    assert "/host {host} parental" in h_parental
 
