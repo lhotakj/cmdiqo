@@ -75,13 +75,13 @@ try {
 
     $exeArgs = @()
     if ($UnInstall) {
-        $exeArgs += "--uninstall"
+        $exeArgs += @("--cli", "--uninstall")
         if ($Purge) { $exeArgs += "--purge" }
     } elseif ($Upgrade) {
-        $exeArgs += "--upgrade"
+        $exeArgs += @("--cli", "--upgrade")
     } elseif ($HubUrl -or $Token -or $Name) {
-        $exeArgs += "--install"
-        if ($HubUrl) { $exeArgs += @("--hub-url", $HubUrl) }
+        $exeArgs += @("--cli", "--install")
+        if ($HubUrl) { $exeArgs += @("--hub", $HubUrl) }
         if ($Token) { $exeArgs += @("--token", $Token) }
         if ($Name) { $exeArgs += @("--name", $Name) }
     }

@@ -61,35 +61,81 @@ echo "[+] Detected architecture: ${ARCH} (${BINARY_NAME})"
 echo "[+] Fetching native installer from ${DOWNLOAD_URL}..."
 
 if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "${DOWNLOAD_URL}" -o "${TMP_EXE}"
+    curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused "${DOWNLOAD_URL}" -o "${TMP_EXE}" || {
+        echo "[ERROR] Failed to download ${BINARY_NAME} from ${DOWNLOAD_URL}" >&2
+        echo "[INFO] If a new release was just published, GitHub CDN may take 1-2 minutes to replicate assets globally. Please retry shortly." >&2
+        exit 1
+    }
 elif command -v wget >/dev/null 2>&1; then
-    wget -qO "${TMP_EXE}" "${DOWNLOAD_URL}"
+    wget --tries=3 --waitretry=2 -qO "${TMP_EXE}" "${DOWNLOAD_URL}" || {
+        echo "[ERROR] Failed to download ${BINARY_NAME} from ${DOWNLOAD_URL}" >&2
+        echo "[INFO] If a new release was just published, GitHub CDN may take 1-2 minutes to replicate assets globally. Please retry shortly." >&2
+        exit 1
+    }
 else
     echo "[ERROR] Neither curl nor wget is installed. Please install curl or wget." >&2
+    exit 1
+fi
+
+if [[ ! -s "${TMP_EXE}" ]]; then
+    echo "[ERROR] Downloaded installer binary is empty: ${TMP_EXE}" >&2
     exit 1
 fi
 
 chmod +x "${TMP_EXE}"
 
 # 3. Assemble installer arguments
-ARGS=("$@")
+RAW_ARGS=("$@")
+ARGS=()
 HAS_ACTION=false
-for arg in "${ARGS[@]}"; do
+HAS_CLI=false
+
+i=0
+while [[ $i -lt ${#RAW_ARGS[@]} ]]; do
+    arg="${RAW_ARGS[$i]}"
     case "${arg}" in
+        --hub-url)
+            ((i++))
+            ARGS+=("--hub" "${RAW_ARGS[$i]}")
+            ;;
+        --hub-url=*)
+            ARGS+=("--hub" "${arg#*=}")
+            ;;
+        --agent-token)
+            ((i++))
+            ARGS+=("--token" "${RAW_ARGS[$i]}")
+            ;;
+        --agent-name)
+            ((i++))
+            ARGS+=("--name" "${RAW_ARGS[$i]}")
+            ;;
+        --cli)
+            HAS_CLI=true
+            ARGS+=("--cli")
+            ;;
         --install|--upgrade|--fresh|--configure|--uninstall|--purge|--status|--test-hub|--start|--restart|--stop|--help|-h)
             HAS_ACTION=true
-            break
+            ARGS+=("${arg}")
+            ;;
+        *)
+            ARGS+=("${arg}")
             ;;
     esac
+    ((i++))
 done
 
+# Ensure --cli mode is explicitly active
+if [[ "${HAS_CLI}" = false ]]; then
+    ARGS=("--cli" "${ARGS[@]}")
+fi
+
 if [[ "${HAS_ACTION}" = false ]]; then
-    ARGS=("--install" "${ARGS[@]}")
+    ARGS+=("--install")
 fi
 
 # Apply environment variable fallbacks if corresponding flags were not provided
-if [[ -n "${HUB_URL:-}" ]] && [[ ! " ${ARGS[*]} " =~ " --hub-url " ]]; then
-    ARGS+=("--hub-url" "${HUB_URL}")
+if [[ -n "${HUB_URL:-}" ]] && [[ ! " ${ARGS[*]} " =~ " --hub " ]] && [[ ! " ${ARGS[*]} " =~ " --hub-url " ]]; then
+    ARGS+=("--hub" "${HUB_URL}")
 fi
 if [[ -n "${AGENT_TOKEN:-}" ]] && [[ ! " ${ARGS[*]} " =~ " --token " ]]; then
     ARGS+=("--token" "${AGENT_TOKEN}")
@@ -98,5 +144,6 @@ if [[ -n "${AGENT_NAME:-}" ]] && [[ ! " ${ARGS[*]} " =~ " --name " ]]; then
     ARGS+=("--name" "${AGENT_NAME}")
 fi
 
-echo "[+] Launching installer..."
+echo "[+] Launching installer: ${BINARY_NAME} ${ARGS[*]}"
 "${TMP_EXE}" "${ARGS[@]}"
+

@@ -68,7 +68,7 @@ void print_usage(std::ostream& output) {
         << "  --test-hub                Test TCP connectivity to the Hub without changing the system\n"
         << "  --start | --restart | --stop\n\n"
         << "Configuration options:\n"
-        << "  --hub URL --token TOKEN --name NAME --notify | --no-notify\n"
+        << "  --hub URL (or --hub-url) --token TOKEN --name NAME --notify | --no-notify\n"
         << "  --config PATH             Read JSON configuration instead of placing a token on the command line\n"
         << "  --payload PATH            Must be the exact platform payload filename\n\n"
         << "System-changing actions require Administrator/root privileges. The GUI requests Windows UAC\n"
@@ -130,11 +130,11 @@ std::optional<Options> parse_options(int argc, char** argv, std::string& error) 
         } else if (option == "--no-notify") {
             options.notify_specified = true;
             options.notify = false;
-        } else if (option == "--hub" && needs_value(index, argc, "--hub", error)) {
+        } else if ((option == "--hub" || option == "--hub-url") && needs_value(index, argc, option.c_str(), error)) {
             options.hub_url = argv[++index];
-        } else if (option == "--token" && needs_value(index, argc, "--token", error)) {
+        } else if ((option == "--token" || option == "--agent-token") && needs_value(index, argc, option.c_str(), error)) {
             options.token = argv[++index];
-        } else if (option == "--name" && needs_value(index, argc, "--name", error)) {
+        } else if ((option == "--name" || option == "--agent-name") && needs_value(index, argc, option.c_str(), error)) {
             options.agent_name = argv[++index];
         } else if (option == "--payload" && needs_value(index, argc, "--payload", error)) {
             options.payload = std::filesystem::path(argv[++index]);
