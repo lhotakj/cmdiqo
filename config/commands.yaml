@@ -512,15 +512,14 @@ commands:
     timeout: 180
 
   # ---- Parental Controls (OS Agnostic with Configurable Domains) -----------
-  - name: host-parental
-    trigger: "/host {host} parental {action}"
-    description: "Manage parental domain blocking on Windows or Linux (on | off | status)"
-    details: "Configures system-level hosts file blocking on target Windows or Linux agent. Redirects configured domains to 0.0.0.0 and flushes DNS cache."
+  - name: host-parental-group
+    trigger: "/host {host} parental {group} {action}"
+    description: "Manage one parental domain group (all | youtube | roblox | minecraft | discord | tiktok | twitch | instagram | reddit | ai | web-games | proxies)"
+    details: "Changes only the selected hosts-file group and preserves every other parental group. Legacy on/off/status syntax remains an alias for the all group."
     examples:
-      - "/host AMD parental on"
-      - "/host nas parental on"
-      - "/host AMD parental off"
-      - "/host nas parental status"
+      - "/host PC-KIDS parental youtube on"
+      - "/host PC-KIDS parental youtube off"
+      - "/host PC-KIDS parental all status"
     command:
       python: "commands.parental:manage_parental"
     config:
@@ -619,6 +618,32 @@ commands:
         - croxyproxy.com
         - proxysite.com
         - blockaway.net
+
+  - name: host-parental
+    trigger: "/host {host} parental {action}"
+    description: "Manage parental domain blocking on Windows or Linux (on | off | status)"
+    details: "Configures system-level hosts file blocking on target Windows or Linux agent. Redirects configured domains to 0.0.0.0 and flushes DNS cache."
+    examples:
+      - "/host AMD parental on"
+      - "/host nas parental on"
+      - "/host AMD parental off"
+      - "/host nas parental status"
+    command:
+      python: "commands.parental:manage_parental"
+    config:
+      domains: *parental_domains
+
+  - name: direct-parental-group
+    trigger: "/parental {host} {group} {action}"
+    description: "Manage one parental domain group (shortcut)"
+    details: "Shortcut for /host {host} parental {group} {action}."
+    examples:
+      - "/parental PC-KIDS youtube on"
+      - "/parental PC-KIDS all status"
+    command:
+      python: "commands.parental:manage_parental"
+    config:
+      domains: *parental_domains
 
   - name: direct-parental
     trigger: "/parental {host} {action}"
@@ -937,5 +962,4 @@ commands:
       python: "commands.appblock:manage_appblock"
     config:
       apps: *apps_config
-
 

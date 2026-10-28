@@ -173,9 +173,7 @@ Edit `config/commands.yaml` to define your commands and aliases (see **Adding yo
 | `/host <host> docker restart <svc>`| Remote host (Linux)     | Restarts docker compose project in `/docker/<svc>`       |
 | `/host <host> docker stats`        | Remote host (Linux)     | Snapshot of container CPU, RAM, and network usage        |
 | `/host <host> win updates`         | Remote host (Windows)   | Queries 10 most recent installed Windows hotfixes/updates|
-| `/host <host> parental on`         | Remote host (Linux/Win) | Blocks configured domains in hosts file & flushes DNS    |
-| `/host <host> parental off`        | Remote host (Linux/Win) | Unblocks configured domains in hosts file & flushes DNS  |
-| `/host <host> parental status`     | Remote host (Linux/Win) | Displays active parental blocking status & domain count  |
+| `/host <host> parental <group\|all> <on\|off\|status>` | Remote host (Linux/Win) | Changes or reports one named domain group without affecting others |
 | `/host <host> blockapp [app|all] [on|off|status]` | Remote host (Linux/Win) | Blocks/unblocks apps (Roblox, Minecraft, TLauncher...) via IFEO & Flatpak (`appblock` alias; defaults to status) |
 | `/host <host> restrict <user> status` | Remote host (Linux/Win) | Displays active logon hours and scheduled tasks for user |
 | `/host <host> restrict <user> set <schedule>` | Remote host (Linux/Win) | Enforces logon hours with 5m toast, 1m alert dialog & forced logoff (`/restrict` shortcut) |
@@ -715,9 +713,10 @@ Cmdiqo includes native access management and parental guard commands operable di
 2. **Parental Domain Shield (`/host <host> parental`)**:
    Instantly block or unblock gaming, streaming, and social video platforms via local `/etc/hosts` / `C:\Windows\System32\drivers\etc\hosts` DNS sinkholing:
    ```bash
-   /host PC-KIDS parental on       # Enable domain blocking
-   /host PC-KIDS parental off      # Disable domain blocking
-   /host PC-KIDS parental status   # Check current shield state
+   /host PC-KIDS parental youtube on       # Block only YouTube
+   /host PC-KIDS parental minecraft off    # Restore only Minecraft
+   /host PC-KIDS parental all status       # Check every configured group
+   /host PC-KIDS parental on               # Legacy shorthand for "all on"
    ```
 
 3. **Application Execution Blocking (`/host <host> blockapp`)**:

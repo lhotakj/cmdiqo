@@ -2069,11 +2069,12 @@
           items: [
             {
               label: 'Domain Blocking',
-              desc: 'Block domains via local hosts file',
+              desc: 'Block a selected domain group via the local hosts file',
+              parentalGroups: ['all', 'youtube', 'roblox', 'minecraft', 'discord', 'tiktok', 'twitch', 'instagram', 'reddit', 'ai', 'web-games', 'proxies'],
               subActions: [
-                { cmd: 'parental status', label: 'Status', desc: 'Check active domain blocking' },
-                { cmd: 'parental on', label: 'Enable', desc: 'Enable blocking (redirect to 0.0.0.0)' },
-                { cmd: 'parental off', label: 'Disable', desc: 'Disable blocking & restore access' }
+                { cmd: 'status', label: 'Status', desc: 'Check selected domain group blocking' },
+                { cmd: 'on', label: 'Enable', desc: 'Enable selected group blocking (redirect to 0.0.0.0)' },
+                { cmd: 'off', label: 'Disable', desc: 'Disable selected group blocking & restore access' }
               ]
             },
             {
@@ -2444,13 +2445,16 @@
                 menuHtml += `
                   <div class="menu-sub-pills" onclick="event.stopPropagation();">
                 `;
+                if (item.parentalGroups) {
+                  menuHtml += `<select class="menu-text-input parental-group-select" aria-label="Parental domain group">${item.parentalGroups.map(group => `<option value="${escapeHtml(group)}">${escapeHtml(group === 'all' ? 'All groups' : group)}</option>`).join('')}</select>`;
+                }
                 item.subActions.forEach(sub => {
                   const labelLower = (sub.label || '').toLowerCase();
                   const isEnable = labelLower === 'enable' || labelLower === 'on';
                   const isDisable = labelLower.includes('disable') || labelLower === 'off';
                   const pillClass = isEnable ? ' pill-enable' : (isDisable ? ' pill-disable' : '');
                   menuHtml += `
-                    <button type="button" class="sub-pill-btn${pillClass}" data-action-cmd="/host ${escapeHtml(host)} ${escapeHtml(sub.cmd)}" title="${escapeHtml(sub.desc || sub.label)}">
+                    <button type="button" class="sub-pill-btn${pillClass}" ${item.parentalGroups ? `data-parental-action="${escapeHtml(sub.cmd)}"` : `data-action-cmd="/host ${escapeHtml(host)} ${escapeHtml(sub.cmd)}"`} title="${escapeHtml(sub.desc || sub.label)}">
                       ${escapeHtml(sub.label)}
                     </button>
                   `;
@@ -2531,6 +2535,15 @@
             if (cmd) {
               openTerminalAndExecute(host, cmd);
             }
+          });
+          contextMenu.querySelectorAll('[data-parental-action]').forEach(itemBtn => {
+            itemBtn.addEventListener('click', function(e) {
+              e.stopPropagation();
+              const groupSelect = itemBtn.closest('.menu-item').querySelector('.parental-group-select');
+              const group = groupSelect ? groupSelect.value : 'all';
+              const action = itemBtn.getAttribute('data-parental-action');
+              openTerminalAndExecute(host, `/host ${host} parental ${group} ${action}`);
+            });
           });
         });
 
