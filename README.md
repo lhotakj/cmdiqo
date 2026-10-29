@@ -359,14 +359,14 @@ commands:
       shell: "uptime"
       ps1: "$b = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime; $u = (Get-Date) - $b; 'Uptime: {0}d {1}h {2}m {3}s (Booted: {4:yyyy-MM-dd HH:mm:ss})' -f [int]$u.TotalDays, $u.Hours, $u.Minutes, $u.Seconds, $b"
 
-  # Command with general config (e.g. custom domain list for parental control)
-  - name: host-parental
-    trigger: "/host {host} parental {action}"
-    description: "Manage parental domain blocking on Windows or Linux (on | off | status)"
-    details: "Configures system-level hosts file blocking on target Windows or Linux agent. Redirects configured domains to 0.0.0.0 and flushes DNS cache."
+  # Command with general config (e.g. grouped domain lists for parental control)
+  - name: host-parental-group
+    trigger: "/host {host} parental {group} {action}"
+    description: "Manage one parental domain group (all | youtube | roblox | minecraft | discord | tiktok | twitch | instagram | reddit | ai | web-games | proxies)"
+    details: "Changes only the selected hosts-file group and preserves every other parental group. Legacy on/off/status syntax remains an alias for the all group."
     examples:
-      - "/host AMD parental on"
-      - "/host nas parental on"
+      - "/host AMD parental youtube on"
+      - "/host nas parental all status"
     command:
       python: "commands.parental:manage_parental"
     config:
@@ -378,13 +378,13 @@ commands:
 
   # Logon hours restriction (Windows SAM net user /time and Linux PAM time.conf)
   - name: host-restrict-set
-    trigger: "/host {host} restrict set {schedule}"
-    description: "Enforce allowed logon hours on {host} (e.g. M-F,08:00-20:00;Sa-Su,09:00-21:00)"
-    details: "Restricts allowed logon hours on remote host. Use '/host {host} restrict status' to inspect, and '/host {host} restrict off' to restore 24/7 unlimited access."
+    trigger: "/host {host} restrict {user} set {schedule}"
+    description: "Enforce allowed logon hours for {user} on {host}"
+    details: "Restricts allowed logon hours for a specific user on the remote host. Use '/host {host} restrict {user} status' to inspect, and '/host {host} restrict {user} off' to restore 24/7 unlimited access."
     examples:
-      - "/host PC-KIDS restrict set M-F,08:00-20:00;Sa-Su,09:00-21:00"
-      - "/host PC-KIDS restrict status"
-      - "/host PC-KIDS restrict off"
+      - "/host PC-KIDS restrict alex set M-F,08:00-20:00;Sa-Su,09:00-21:00"
+      - "/host PC-KIDS restrict alex status"
+      - "/host PC-KIDS restrict alex off"
     command:
       python: "commands.restrict:manage_restrict"
 ```
@@ -561,7 +561,7 @@ The repository includes [`.github/workflows/release.yml`](.github/workflows/rele
 3. Download artifacts from the **Artifacts** section at the bottom of the summary page, or download directly from the tagged GitHub Release.
 4. Includes Linux (x86_64 and ARM64) and Windows native agents, service ZIP packages, and GUI/CLI installers.
 
-Commit `/release` (or `/release-agent`, `/release-bot`, with optional version like `/release 0.10.0`) on `main` to build all artifacts via `build.sh` and publish them to a GitHub Release and Docker Hub. CI verifies every ZIP and binary before upload.
+Commit `/release` (or `/release-agent`, `/release-bot`, with an optional major/minor baseline like `/release 0.10.0`) on `main` to build all artifacts via `build.sh` and publish them to a GitHub Release and Docker Hub. GitHub Actions always replaces the patch with its run number, so that request produces a unique version such as `0.10.42`. CI verifies every ZIP and binary before upload.
 
 ---
 

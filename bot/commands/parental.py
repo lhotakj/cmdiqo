@@ -85,6 +85,7 @@ try {{
     $content = if (Test-Path $hostsPath) {{ [IO.File]::ReadAllText($hostsPath) }} else {{ '' }}
     $legacy = [regex]::Match($content, '(?s)# parental:start(.*?)# parental:end\\r?\\n?')
     if ($legacy.Success) {{
+        if ('{group}' -ne 'all') {{ throw 'Legacy parental block requires an all-groups migration before selective changes.' }}
         $active = @([regex]::Matches($legacy.Groups[1].Value, '(?m)^\\s*0\\.0\\.0\\.0\\s+')).Count
         $off = @([regex]::Matches($legacy.Groups[1].Value, '(?m)^\\s*#\\s*0\\.0\\.0\\.0\\s+')).Count
         if ($active -gt 0 -and $off -gt 0) {{ throw 'Cannot migrate a partially enabled legacy parental block.' }}
@@ -140,6 +141,7 @@ def build_parental_script_linux(
     return f"""set -e
 HOSTS_FILE='/etc/hosts'
 ACTION='{action}'
+GROUP='{group}'
 SELECTED='{ ' '.join(selected) }'
 ALL_GROUPS='{ ' '.join(resolved) }'
 domains_for_group() {{
@@ -153,6 +155,10 @@ replace_group() {{
   {{ echo "# parental:$current:start"; if [ "$state" = 'on' ]; then domains_for_group "$current" | sed 's/^/0.0.0.0 /'; else domains_for_group "$current" | sed 's/^/# 0.0.0.0 /'; fi; echo "# parental:$current:end"; }} >> "$HOSTS_FILE"
 }}
 if grep -q '^# parental:start' "$HOSTS_FILE"; then
+  if [ "$GROUP" != 'all' ]; then
+    echo 'ERROR: Legacy parental block requires an all-groups migration before selective changes.' >&2
+    exit 1
+  fi
   active=$(sed -n '/# parental:start/,/# parental:end/p' "$HOSTS_FILE" | grep -Ec '^[[:space:]]*0\\.0\\.0\\.0[[:space:]]+' || true)
   off=$(sed -n '/# parental:start/,/# parental:end/p' "$HOSTS_FILE" | grep -Ec '^[[:space:]]*#[[:space:]]*0\\.0\\.0\\.0[[:space:]]+' || true)
   if [ "$active" -gt 0 ] && [ "$off" -gt 0 ]; then echo 'ERROR: Cannot migrate a partially enabled legacy parental block.' >&2; exit 1; fi
@@ -218,7 +224,12 @@ async def manage_parental(params: dict[str, Any], hub: Hub | None = None, config
             return f":no_entry_sign: Agent `{host}` is not connected. Connected agents: {connected}"
         is_windows = "win" in str(hub.agents[host].get("platform", "")).lower()
         kind = "ps1" if is_windows else "shell"
-        script = build_parental_script_windows(action, groups, group) if is_windows else build_parental_script_linux(action, groups, group)
+        script_groups = groups if group == "all" else {group: groups[group]}
+        script = (
+            build_parental_script_windows(action, script_groups, group)
+            if is_windows
+            else build_parental_script_linux(action, script_groups, group)
+        )
         target = f"{'Windows' if is_windows else 'Linux'} (`{host}` {'hosts' if is_windows else '/etc/hosts'})"
         try:
             raw_output = await hub.exec(host, kind=kind, cmd=script, timeout=60)

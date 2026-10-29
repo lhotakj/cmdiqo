@@ -52,7 +52,7 @@ agent.c/
 │           ├── protocol.hpp    # WebSocket message models (hello, exec, result)
 │           ├── process.hpp     # Cross-platform subprocess runner with timeouts & Job Objects
 │           ├── service.hpp     # Windows SCM & Linux systemd lifecycle manager
-│           ├── version.hpp     # Dynamic version macros and git SHA resolution
+│           ├── version.hpp     # Dynamic version macros and build-version resolution
 │           └── ws_client.hpp   # Async WebSocket client with auto-reconnect & exponential backoff
 ├── src/
 │   ├── config.cpp

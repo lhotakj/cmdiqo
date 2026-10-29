@@ -409,6 +409,19 @@ async def run_agent(
     while not (stop_event and stop_event.is_set()):
         try:
             async with connect(config.hub_url, config.token) as ws:
+                execution_tasks: set[asyncio.Task[None]] = set()
+
+                def _log_task_failure(task: asyncio.Task[None]) -> None:
+                    execution_tasks.discard(task)
+                    if task.cancelled():
+                        return
+                    exc = task.exception()
+                    if exc is not None:
+                        log.error(
+                            "Execution request handler failed",
+                            exc_info=(type(exc), exc, exc.__traceback__),
+                        )
+
                 await ws.send(
                     json.dumps(
                         {
@@ -428,12 +441,19 @@ async def run_agent(
                     get_version(),
                 )
                 delay = config.reconnect_delay  # reset delay on successful connection
-                while not (stop_event and stop_event.is_set()):
-                    try:
-                        raw = await asyncio.wait_for(ws.recv(), timeout=1.0)
-                        await handle(ws, raw)
-                    except TimeoutError:
-                        continue
+                try:
+                    while not (stop_event and stop_event.is_set()):
+                        try:
+                            raw = await asyncio.wait_for(ws.recv(), timeout=1.0)
+                            task = asyncio.create_task(handle(ws, raw))
+                            execution_tasks.add(task)
+                            task.add_done_callback(_log_task_failure)
+                        except TimeoutError:
+                            continue
+                finally:
+                    for task in tuple(execution_tasks):
+                        task.cancel()
+                    await asyncio.gather(*execution_tasks, return_exceptions=True)
         except (websockets.ConnectionClosed, OSError, TimeoutError) as exc:
             if stop_event and stop_event.is_set():
                 break

@@ -91,6 +91,9 @@ development/update_version.py
    - The third component (patch number) is the GitHub Actions workflow run number (`GITHUB_RUN_NUMBER` or `BUILD_ID`):
      $$\text{VERSION} = \langle\text{major}\rangle.\langle\text{minor}\rangle.\langle\text{GITHUB\_RUN\_NUMBER}\rangle$$
      *(Example: `0.10.42` for GitHub Actions run #42)*.
+   - A release request may select a major/minor baseline (for example,
+     `/release 0.10.0`), but the generated tag, artifacts, and embedded
+     version still use the workflow run number as the patch (`0.10.42`).
 
 3. **Local Builds (Developer Machine):**
    - The build system uses `devel+` followed by the uppercase hexadecimal Unix
@@ -145,6 +148,10 @@ If you want to test-build an ad-hoc version without modifying `version.txt`:
 - **Python script**: `python development/update_version.py --version 1.2.0`
 - **PowerShell**: `.\build.ps1 --version "1.2.0"`
 - **Bash**: `./build.sh -v 1.2.0`
+
+These direct local overrides are exact. In GitHub Actions, release-trigger
+version inputs select the major/minor baseline; the workflow run number remains
+the patch so every CI artifact has a unique version.
 
 ---
 

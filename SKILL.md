@@ -64,7 +64,7 @@ All build and maintenance scripts are organized across the repository:
 
 ### Dynamic Versioning Rules:
 - **CI Builds (GitHub Actions):** Derived dynamically as `<major>.<minor>.<GITHUB_RUN_NUMBER>` (e.g. `1.0.42`).
-- **Local Builds:** Derived dynamically using the hex Linux timestamp with `.dev`: `<major>.<minor>.dev<HEX_TIMESTAMP>` (e.g. `1.0.dev6AB4BAC9`).
+- **Local Builds:** Derived dynamically using the uppercase hexadecimal Unix timestamp: `<major>.<minor>.devel+<HEX_TIMESTAMP>` (e.g. `1.0.devel+6AB4BAC9`).
 - **Windows PE Executable Metadata:** Populated via `FixedFileInfo` tuple `(major, minor, ts & 0xFFFF, 0)` and matching string tables (`FileVersion`, `ProductVersion`, `LegalCopyright`).
 - See **[BUILD.md](BUILD.md)** for full build system details and Windows Authenticode signing instructions.
 

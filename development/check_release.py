@@ -55,6 +55,22 @@ def get_commit_message() -> str:
     return ""
 
 
+def resolve_build_version(base: str, requested_version: str | None = None) -> str:
+    """Resolve a release version, using the CI run number as its patch when available."""
+    candidate = (requested_version or base).lstrip("vV")
+    run_number = (
+        os.environ.get("GITHUB_RUN_NUMBER", "").strip()
+        or os.environ.get("BUILD_ID", "").strip()
+    )
+    if not run_number:
+        return candidate
+
+    match = re.match(r"^(\d+)\.(\d+)(?:\.\d+)?", candidate)
+    if not match:
+        return candidate
+    return f"{match.group(1)}.{match.group(2)}.{run_number}"
+
+
 @dataclass
 class ReleaseDecision:
     release_agent: bool
@@ -77,21 +93,7 @@ def evaluate_release(message: str | None = None) -> ReleaseDecision:
 
         release_agent = dispatch_target in ("all", "installer", "agent")
         release_bot = dispatch_target in ("all", "bot") and dispatch_push_docker
-        if dispatch_version:
-            version = dispatch_version.lstrip("vV")
-        else:
-            base = get_base_version()
-            run_number = (
-                os.environ.get("GITHUB_RUN_NUMBER", "").strip()
-                or os.environ.get("BUILD_ID", "").strip()
-            )
-            if run_number:
-                parts = base.split(".")
-                major = parts[0] if len(parts) > 0 else "1"
-                minor = parts[1] if len(parts) > 1 else "0"
-                version = f"{major}.{minor}.{run_number}"
-            else:
-                version = base
+        version = resolve_build_version(get_base_version(), dispatch_version or None)
         tag = f"v{version}"
         parts = version.split(".")
         major = parts[0] if len(parts) > 0 else "1"
@@ -129,20 +131,9 @@ def evaluate_release(message: str | None = None) -> ReleaseDecision:
     # Extract explicit version if specified in commit message (e.g. /release v1.1.0 or /release-bot 1.1.0)
     m = re.search(r"/(?:release|reelase)(?:-agent|-bot)?(?:\s+|:\s*)([vV]?\d+\.\d+(?:\.\d+)?\S*)", msg, re.IGNORECASE)
     if m:
-        version = m.group(1).strip().lstrip("vV")
+        version = resolve_build_version(get_base_version(), m.group(1).strip())
     else:
-        base = get_base_version()
-        run_number = (
-            os.environ.get("GITHUB_RUN_NUMBER", "").strip()
-            or os.environ.get("BUILD_ID", "").strip()
-        )
-        if run_number:
-            parts = base.split(".")
-            major = parts[0] if len(parts) > 0 else "1"
-            minor = parts[1] if len(parts) > 1 else "0"
-            version = f"{major}.{minor}.{run_number}"
-        else:
-            version = base
+        version = resolve_build_version(get_base_version())
 
     tag = f"v{version}"
     parts = version.split(".")

@@ -50,6 +50,13 @@ def test_release_agent_with_explicit_version():
     assert decision.tag == "v1.2.3"
 
 
+def test_release_explicit_version_uses_github_run_number_for_patch(monkeypatch):
+    monkeypatch.setenv("GITHUB_RUN_NUMBER", "321")
+    decision = evaluate_release(message="chore: release version /release v1.2.0")
+    assert decision.version == "1.2.321"
+    assert decision.tag == "v1.2.321"
+
+
 def test_release_bot_with_explicit_version():
     decision = evaluate_release(message="chore: release bot /release-bot 2.0.0")
     assert decision.release_agent is False
@@ -106,6 +113,17 @@ def test_workflow_dispatch_evaluation(monkeypatch):
     assert decision.release_bot is True
     assert decision.version == "0.11.0"
     assert decision.tag == "v0.11.0"
+
+
+def test_workflow_dispatch_explicit_version_uses_github_run_number_for_patch(monkeypatch):
+    monkeypatch.setenv("EVENT_NAME", "workflow_dispatch")
+    monkeypatch.setenv("DISPATCH_TARGET", "all")
+    monkeypatch.setenv("DISPATCH_VERSION", "0.11.0")
+    monkeypatch.setenv("DISPATCH_PUSH_DOCKER", "true")
+    monkeypatch.setenv("GITHUB_RUN_NUMBER", "322")
+    decision = evaluate_release()
+    assert decision.version == "0.11.322"
+    assert decision.tag == "v0.11.322"
 
 
 def test_release_uses_github_run_number(monkeypatch):

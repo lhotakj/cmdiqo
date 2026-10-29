@@ -128,7 +128,7 @@ Platform Selection:
 
 Versioning:
   -Version, --version <str>    Override version string (e.g. '1.2.0')
-  -Dev, --dev                  Tag version as development build (<major>.<minor>.dev<HEX>)
+  -Dev, --dev                  Tag version as development build (<major>.<minor>.devel+<HEX>)
 
 Compilation & Packaging:
   -Clean, --clean              Clean only selected agent and native installer build outputs

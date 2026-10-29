@@ -69,9 +69,11 @@ produce the Linux pair. `--all` / `-All` also includes the native installer in
 addition to the agent package and bot image.
 
 Release installers embed the precise version read from the payload ZIP:
-`major.minor.<12-character-git-sha>` in CI, or
+`major.minor.<GitHub-run-number>` in CI, or
 `major.minor.devel+<hex-timestamp>` locally; explicit numeric overrides such as
-`1.2.0` are also accepted. The Release executables are
+`1.2.0` are also accepted for local builds. GitHub Actions uses the workflow
+run number as the patch even when a release request supplies a baseline
+version. The Release executables are
 stripped after linking. MinGW Windows builds statically link the C/C++ runtime
 (`-static -static-libgcc -static-libstdc++`) via the `x64-mingw-static` vcpkg
 triplet so the output binary runs on any 64-bit Windows host without external MinGW DLLs. The native Windows GUI installer (`cmdiqo-agent-windows-x64-setup.exe`) is super-lightweight, taking only **~5.2 MB RAM** during execution while providing an interactive setup wizard with UAC elevation, token validation, and automated Windows Service (SCM) registration.

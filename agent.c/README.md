@@ -160,10 +160,10 @@ ctest --preset test-linux-x64 --output-on-failure
 ### 5.3 Unified Repository Build
 ```bash
 # Windows
-.\build.ps1 -Agent -Platform Windows -Config Release
+.\build.ps1 -Agent -Platform win64
 
 # Linux
-./build.sh --agent --platform linux64 --config Release
+./build.sh --agent --platform linux64
 ```
 
 ---

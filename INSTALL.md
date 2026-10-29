@@ -622,9 +622,10 @@ Once the bot and agents are running, test everything directly inside Slack:
      - Active system services: `/host MY-WINDOWS-PC services` or `/host nas services`
      - Service status & restart: `/host MY-WINDOWS-PC service status Spooler` or `/host nas service restart nginx`
      - Parental Controls (YouTube, Roblox, Minecraft & Discord):
-       - `/host MY-WINDOWS-PC parental on` (blocks YouTube, Roblox, Minecraft, and Discord in hosts file & flushes DNS).
-       - `/host MY-WINDOWS-PC parental off` (unblocks domains & flushes DNS).
-       - `/host MY-WINDOWS-PC parental status` (checks current block status).
+       - `/host MY-WINDOWS-PC parental youtube on` (blocks only the YouTube group in the hosts file & flushes DNS).
+       - `/host MY-WINDOWS-PC parental all off` (unblocks every configured group & flushes DNS).
+       - `/host MY-WINDOWS-PC parental all status` (checks every group's current block status).
+       - `/host MY-WINDOWS-PC parental on` (legacy shorthand for `/host MY-WINDOWS-PC parental all on`).
      - Application Execution Blocker (Roblox, Steam, Epic Games, Discord, Minecraft, TLauncher, or all):
        - `/host MY-WINDOWS-PC blockapp roblox on` (or `/host MY-WINDOWS-PC appblock roblox on` — blocks executables & terminates running processes via IFEO on Windows / Flatpak overrides on Linux).
        - `/host MY-WINDOWS-PC blockapp steam off` (unblocks application execution).

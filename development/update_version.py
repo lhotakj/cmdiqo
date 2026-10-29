@@ -5,9 +5,11 @@ Single Source of Truth:
 - version.txt in the repository root holds the true baseline version (e.g. 1.0.0).
 
 Build Version Resolution:
-- On GitHub Actions (GITHUB_SHA is present):
+- On GitHub Actions (GITHUB_RUN_NUMBER or BUILD_ID is present):
+    VERSION = <major>.<minor>.<GITHUB_RUN_NUMBER> (e.g. 1.0.42)
+- On CI systems that only expose GITHUB_SHA:
     VERSION = <major>.<minor>.<SHORT_GIT_SHA> (e.g. 1.0.a1b2c3d4)
-- On Local Builds (GitHub build ID not present):
+- On Local Builds:
     VERSION = <major>.<minor>.devel+<HEX_TIMESTAMP> (e.g. 1.0.devel+6A9C0B2D)
 - Explicit override via --version:
     VERSION = <override_version>
