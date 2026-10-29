@@ -1,6 +1,15 @@
 """Unit tests for development/check_release.py commit message parsing."""
 
+import pytest
+
 from development.check_release import evaluate_release, get_base_version
+
+
+@pytest.fixture(autouse=True)
+def clear_ci_build_identifiers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep local-version assertions independent of the GitHub Actions environment."""
+    monkeypatch.delenv("GITHUB_RUN_NUMBER", raising=False)
+    monkeypatch.delenv("BUILD_ID", raising=False)
 
 
 def test_release_agent_trigger():

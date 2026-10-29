@@ -24,8 +24,8 @@ def test_parental_groups_are_complete_and_ordered() -> None:
 def test_group_scripts_replace_only_selected_marker() -> None:
     windows = build_parental_script_windows("on", {"youtube": PARENTAL_GROUPS["youtube"]}, "youtube")
     linux = build_parental_script_linux("off", {"minecraft": PARENTAL_GROUPS["minecraft"]}, "minecraft")
-    assert "# parental:youtube:start" in windows
-    assert "# parental:minecraft:start" in linux
+    assert "$lines = @('# parental:' + $current + ':start')" in windows
+    assert 'echo "# parental:$current:start"' in linux
     assert "Cannot migrate a partially enabled legacy parental block" in windows
     assert "requires an all-groups migration before selective changes" in windows
     assert "requires an all-groups migration before selective changes" in linux
@@ -46,7 +46,8 @@ async def test_manage_single_group_dispatches_only_that_group() -> None:
     result = await manage_parental({"host": "kids", "group": "youtube", "action": "on"}, hub=hub)
     assert "for `youtube`" in result
     script = hub.exec.await_args.kwargs["cmd"]
-    assert "# parental:youtube:start" in script
+    assert "SELECTED='youtube'" in script
+    assert 'for current in $SELECTED; do replace_group "$current" "$ACTION"; done' in script
     assert "roblox.com" not in script
 
 
