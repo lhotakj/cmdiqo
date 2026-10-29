@@ -411,8 +411,11 @@ async def run_agent(
             async with connect(config.hub_url, config.token) as ws:
                 execution_tasks: set[asyncio.Task[None]] = set()
 
-                def _log_task_failure(task: asyncio.Task[None]) -> None:
-                    execution_tasks.discard(task)
+                def _log_task_failure(
+                    task: asyncio.Task[None],
+                    tasks: set[asyncio.Task[None]] = execution_tasks,
+                ) -> None:
+                    tasks.discard(task)
                     if task.cancelled():
                         return
                     exc = task.exception()
