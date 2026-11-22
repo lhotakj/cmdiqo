@@ -12,6 +12,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <iomanip>
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <thread>
@@ -26,40 +27,47 @@ void AgentRunner::run(std::atomic<bool>& stop_signal) {
     double delay = config_.reconnect_delay;
 
     while (!stop_signal.load()) {
-        ix::WebSocket ws;
-        ws.setUrl(config_.hub_url);
+        auto ws = std::make_shared<ix::WebSocket>();
+        ws->setUrl(config_.hub_url);
 
         ix::WebSocketHttpHeaders headers;
         headers["Authorization"] = "Bearer " + config_.token;
-        ws.setExtraHeaders(headers);
-        ws.setPingInterval(20);
+        ws->setExtraHeaders(headers);
+        ws->setPingInterval(20);
 
         // We control the reconnect loop to match Python's exponential backoff & logging
-        ws.disableAutomaticReconnection();
+        ws->disableAutomaticReconnection();
 
         std::atomic<bool> is_connected{false};
         std::atomic<bool> connection_closed{false};
         std::string close_reason = "connection closed";
 
-        ws.setOnMessageCallback([&](const ix::WebSocketMessagePtr& msg) {
+        std::weak_ptr<ix::WebSocket> weak_ws = ws;
+
+        ws->setOnMessageCallback([weak_ws, &config = this->config_, &is_connected, &delay, &close_reason, &connection_closed](const ix::WebSocketMessagePtr& msg) {
+            auto ws_ptr = weak_ws.lock();
+            if (!ws_ptr) {
+                return;
+            }
+
             if (msg->type == ix::WebSocketMessageType::Open) {
                 is_connected.store(true);
-                delay = config_.reconnect_delay; // reset delay on connection
+                delay = config.reconnect_delay; // reset delay on connection
 
                 HelloMessage hello{
-                    .name = config_.name,
+                    .name = config.name,
                     .version = std::string(get_version()),
                     .platform = get_platform_string(),
                     .arch = get_arch_string(),
-                    .agent_connection_notify = config_.agent_connection_notify
+                    .agent_connection_notify = config.agent_connection_notify
                 };
 
                 std::string hello_json = hello.to_json().dump();
-                ws.send(hello_json);
+                ws_ptr->send(hello_json);
 
                 Logger::instance().info(
-                    "Connected to ", config_.hub_url,
-                    " as '", config_.name, "' (v", get_version(), ")"
+                    "Connected to ", config.hub_url,
+                    " as '", config.name, "' (v", get_version(), ")"
                 );
             } else if (msg->type == ix::WebSocketMessageType::Message) {
                 try {
@@ -69,34 +77,41 @@ void AgentRunner::run(std::atomic<bool>& stop_signal) {
                         return;
                     }
 
-                    std::string id_prefix = req->id.size() >= 8 ? req->id.substr(0, 8) : req->id;
-                    std::string cwd_str = req->cwd.value_or("(default)");
+                    // Dispatch execution to a background worker thread so that the
+                    // IXWebSocket network loop remains completely responsive to
+                    // server PING keepalive frames during long-running commands.
+                    std::thread([req = *req, weak_ws]() {
+                        std::string id_prefix = req.id.size() >= 8 ? req.id.substr(0, 8) : req.id;
+                        std::string cwd_str = req.cwd.value_or("(default)");
 
-                    Logger::instance().info(
-                        "[", id_prefix, "] Received ", req->kind,
-                        " execution request: ", req->cmd,
-                        " (timeout=", req->timeout, "s, cwd=", cwd_str, ")"
-                    );
+                        Logger::instance().info(
+                            "[", id_prefix, "] Received ", req.kind,
+                            " execution request: ", req.cmd,
+                            " (timeout=", req.timeout, "s, cwd=", cwd_str, ")"
+                        );
 
-                    ProcessResult res = execute_process(req->kind, req->cmd, req->cwd, req->timeout);
+                        ProcessResult res = execute_process(req.kind, req.cmd, req.cwd, req.timeout);
 
-                    Logger::instance().info(
-                        "[", id_prefix, "] Execution finished: ok=",
-                        (res.ok ? "True" : "False"),
-                        ", code=", res.returncode,
-                        ", out_bytes=", res.output.size(),
-                        ", error=", res.error.value_or("none")
-                    );
+                        Logger::instance().info(
+                            "[", id_prefix, "] Execution finished: ok=",
+                            (res.ok ? "True" : "False"),
+                            ", code=", res.returncode,
+                            ", out_bytes=", res.output.size(),
+                            ", error=", res.error.value_or("none")
+                        );
 
-                    ResultResponse resp{
-                        .id = req->id,
-                        .ok = res.ok,
-                        .code = res.returncode,
-                        .output = res.output,
-                        .error = res.error
-                    };
+                        ResultResponse resp{
+                            .id = req.id,
+                            .ok = res.ok,
+                            .code = res.returncode,
+                            .output = res.output,
+                            .error = res.error
+                        };
 
-                    ws.send(resp.to_json().dump());
+                        if (auto target_ws = weak_ws.lock()) {
+                            target_ws->send(resp.to_json().dump());
+                        }
+                    }).detach();
                 } catch (const std::exception& exc) {
                     Logger::instance().warning("Failed to process message: ", exc.what());
                 }
@@ -109,14 +124,14 @@ void AgentRunner::run(std::atomic<bool>& stop_signal) {
             }
         });
 
-        ws.start();
+        ws->start();
 
         // Active connection loop
         while (!stop_signal.load() && !connection_closed.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
-        ws.stop();
+        ws->stop();
 
         if (stop_signal.load()) {
             break;

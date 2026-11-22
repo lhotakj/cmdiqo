@@ -1,5 +1,7 @@
 """Tests for grouped parental domain blocking."""
 
+import asyncio
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -112,6 +114,8 @@ def test_windows_script_handles_readonly_and_error_output() -> None:
     windows = build_parental_script_windows("on", {"youtube": PARENTAL_GROUPS["youtube"]}, "youtube")
     assert "$fileItem.IsReadOnly = $false" in windows
     assert "Write-Output ('ERROR:' + $err)" in windows
+    assert "& ipconfig /flushdns | Out-Null" in windows
+    assert "Clear-DnsClientCache" not in windows
     assert '"' not in windows
 
 
@@ -127,3 +131,31 @@ async def test_manage_parental_reports_clean_error_message() -> None:
 
     assert "Parental control failed on `JONAS-PC` for all groups" in result
     assert "Access to C:\\Windows\\System32\\drivers\\etc\\hosts is denied." in result
+
+
+@pytest.mark.asyncio
+async def test_manage_parental_serializes_concurrent_calls_per_host() -> None:
+    hub = MagicMock()
+    hub.agents = {"JONAS-PC": {"platform": "Windows"}}
+
+    active_executions = 0
+    max_concurrent = 0
+
+    async def mock_exec(*args: Any, **kwargs: Any) -> str:
+        nonlocal active_executions, max_concurrent
+        active_executions += 1
+        max_concurrent = max(max_concurrent, active_executions)
+        await asyncio.sleep(0.05)
+        active_executions -= 1
+        return "SUCCESS:on:youtube"
+
+    hub.exec = AsyncMock(side_effect=mock_exec)
+
+    res1, res2 = await asyncio.gather(
+        manage_parental({"host": "JONAS-PC", "group": "youtube", "action": "on"}, hub=hub),
+        manage_parental({"host": "JONAS-PC", "group": "youtube", "action": "on"}, hub=hub),
+    )
+
+    assert "ENABLED on `JONAS-PC` for `youtube`" in res1
+    assert "ENABLED on `JONAS-PC` for `youtube`" in res2
+    assert max_concurrent == 1, "Expected host lock to serialize concurrent executions"

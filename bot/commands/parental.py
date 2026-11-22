@@ -342,7 +342,6 @@ try {{
     if (-not $written) {{
         [IO.File]::WriteAllText($hostsPath, $content, (New-Object System.Text.UTF8Encoding($false)))
     }}
-    Clear-DnsClientCache -ErrorAction SilentlyContinue
     & ipconfig /flushdns | Out-Null
     Write-Output ('SUCCESS:' + $action + ':{group}')
 }} catch {{
@@ -428,6 +427,19 @@ echo 'SUCCESS:{action}:{group}'
 """
 
 
+_HOST_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+def _get_host_lock(host: str) -> asyncio.Lock:
+    """Return an asyncio Lock for the given host to prevent concurrent write collisions."""
+    key = host.lower().strip()
+    lock = _HOST_LOCKS.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _HOST_LOCKS[key] = lock
+    return lock
+
+
 async def _run_local_bash(script: str) -> str:
     try:
         proc = await asyncio.create_subprocess_exec("bash", "-c", script, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -459,29 +471,30 @@ async def manage_parental(params: dict[str, Any], hub: Hub | None = None, config
     if group != "all" and group not in groups:
         return f":warning: Unknown parental group `{group}`. Available groups: {', '.join(['all', *groups])}."
     is_local = host.lower() in ("local", "localhost", "container", "self") or (host.lower() == "home" and (hub is None or "home" not in getattr(hub, "agents", {})))
-    if is_local:
-        raw_output = await _run_local_bash(build_parental_script_linux(action, groups, group))
-        target = "Linux (local /etc/hosts)"
-    else:
-        if hub is None:
-            return ":no_entry_sign: Hub is disabled. Cannot communicate with remote agents."
-        if host not in hub.agents:
-            connected = ", ".join(sorted(hub.agents)) or "(none)"
-            return f":no_entry_sign: Agent `{host}` is not connected. Connected agents: {connected}"
-        is_windows = "win" in str(hub.agents[host].get("platform", "")).lower()
-        kind = "ps1" if is_windows else "shell"
-        script_groups = groups if group == "all" else {group: groups[group]}
-        script = (
-            build_parental_script_windows(action, script_groups, group)
-            if is_windows
-            else build_parental_script_linux(action, script_groups, group)
-        )
-        target = f"{'Windows' if is_windows else 'Linux'} (`{host}` {'hosts' if is_windows else '/etc/hosts'})"
-        try:
-            raw_output = await hub.exec(host, kind=kind, cmd=script, timeout=60)
-        except (ConnectionError, OSError, RuntimeError, TimeoutError) as exc:
-            log.exception("Remote parental command failed on agent '%s'", host)
-            return f":x: Failed to execute parental command on `{host}`: {exc}"
+    async with _get_host_lock(host):
+        if is_local:
+            raw_output = await _run_local_bash(build_parental_script_linux(action, groups, group))
+            target = "Linux (local /etc/hosts)"
+        else:
+            if hub is None:
+                return ":no_entry_sign: Hub is disabled. Cannot communicate with remote agents."
+            if host not in hub.agents:
+                connected = ", ".join(sorted(hub.agents)) or "(none)"
+                return f":no_entry_sign: Agent `{host}` is not connected. Connected agents: {connected}"
+            is_windows = "win" in str(hub.agents[host].get("platform", "")).lower()
+            kind = "ps1" if is_windows else "shell"
+            script_groups = groups if group == "all" else {group: groups[group]}
+            script = (
+                build_parental_script_windows(action, script_groups, group)
+                if is_windows
+                else build_parental_script_linux(action, script_groups, group)
+            )
+            target = f"{'Windows' if is_windows else 'Linux'} (`{host}` {'hosts' if is_windows else '/etc/hosts'})"
+            try:
+                raw_output = await hub.exec(host, kind=kind, cmd=script, timeout=60)
+            except (ConnectionError, OSError, RuntimeError, TimeoutError) as exc:
+                log.exception("Remote parental command failed on agent '%s'", host)
+                return f":x: Failed to execute parental command on `{host}`: {exc}"
     output = (raw_output or "").strip()
     label = "all groups" if group == "all" else f"`{group}`"
     if action == "status":
