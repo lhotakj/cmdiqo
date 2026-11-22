@@ -339,6 +339,18 @@ commands:
       ps1: "shutdown /r /t 10 /c 'Reboot requested from Slack'"
     timeout: 60
 
+  - name: host-restart
+    trigger: "/host {host} restart"
+    description: "Restart remote host after warning (synonym of reboot)"
+    details: "Safely restarts the remote host. Schedules shutdown on Linux or initiates shutdown warning on Windows."
+    examples:
+      - "/host home restart"
+      - "/host AMD restart"
+    command:
+      shell: "shutdown -r +1 'Reboot requested from Slack'"
+      ps1: "shutdown /r /t 10 /c 'Reboot requested from Slack'"
+    timeout: 60
+
   - name: host-shutdown
     trigger: "/host {host} shutdown"
     description: "Shutdown remote host after warning"

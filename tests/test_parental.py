@@ -106,3 +106,24 @@ async def test_manage_parental_webgames_aliases_dispatch_webgames(group_alias: s
     script = hub.exec.await_args.kwargs["cmd"]
     assert "SELECTED='webgames'" in script
     assert "bloxd.io" in script
+
+
+def test_windows_script_handles_readonly_and_error_output() -> None:
+    windows = build_parental_script_windows("on", {"youtube": PARENTAL_GROUPS["youtube"]}, "youtube")
+    assert "$fileItem.IsReadOnly = $false" in windows
+    assert "Write-Output ('ERROR:' + $err)" in windows
+    assert '"' not in windows
+
+
+@pytest.mark.asyncio
+async def test_manage_parental_reports_clean_error_message() -> None:
+    hub = MagicMock()
+    hub.agents = {"JONAS-PC": {"platform": "Windows"}}
+    hub.exec = AsyncMock(
+        return_value="ERROR:Access to C:\\Windows\\System32\\drivers\\etc\\hosts is denied. Ensure cmdiqo-agent is running with Administrator privileges."
+    )
+
+    result = await manage_parental({"host": "JONAS-PC", "group": "all", "action": "on"}, hub=hub)
+
+    assert "Parental control failed on `JONAS-PC` for all groups" in result
+    assert "Access to C:\\Windows\\System32\\drivers\\etc\\hosts is denied." in result

@@ -282,8 +282,14 @@ try {{
         if ('{group}' -ne 'all') {{ throw 'Legacy parental block requires an all-groups migration before selective changes.' }}
         $active = @([regex]::Matches($legacy.Groups[1].Value, '(?m)^\\s*0\\.0\\.0\\.0\\s+')).Count
         $off = @([regex]::Matches($legacy.Groups[1].Value, '(?m)^\\s*#\\s*0\\.0\\.0\\.0\\s+')).Count
-        if ($active -gt 0 -and $off -gt 0) {{ throw 'Cannot migrate a partially enabled legacy parental block.' }}
-        $legacyAction = if ($active -gt 0) {{ 'on' }} else {{ 'off' }}
+        if ($active -gt 0 -and $off -gt 0) {{
+            if ('{action}' -ne 'on' -and '{action}' -ne 'off') {{
+                throw 'Cannot migrate a partially enabled legacy parental block.'
+            }}
+            $legacyAction = '{action}'
+        }} else {{
+            $legacyAction = if ($active -gt 0) {{ 'on' }} else {{ 'off' }}
+        }}
         $content = $content -replace '(?s)# parental:start.*?# parental:end\\r?\\n?', ''
         foreach ($legacyGroup in $allGroups) {{
             $lines = @('# parental:' + $legacyGroup + ':start')
@@ -317,11 +323,37 @@ try {{
         $lines += '# parental:' + $current + ':end'
         $content = $content.TrimEnd() + [Environment]::NewLine + ($lines -join [Environment]::NewLine) + [Environment]::NewLine
     }}
-    [IO.File]::WriteAllText($hostsPath, $content, (New-Object System.Text.UTF8Encoding($false)))
+    if (Test-Path $hostsPath) {{
+        $fileItem = Get-Item -LiteralPath $hostsPath -Force
+        if ($fileItem.IsReadOnly) {{
+            $fileItem.IsReadOnly = $false
+        }}
+    }}
+    $written = $false
+    for ($i = 0; $i -lt 3; $i++) {{
+        try {{
+            [IO.File]::WriteAllText($hostsPath, $content, (New-Object System.Text.UTF8Encoding($false)))
+            $written = $true
+            break
+        }} catch {{
+            Start-Sleep -Milliseconds 250
+        }}
+    }}
+    if (-not $written) {{
+        [IO.File]::WriteAllText($hostsPath, $content, (New-Object System.Text.UTF8Encoding($false)))
+    }}
     Clear-DnsClientCache -ErrorAction SilentlyContinue
     & ipconfig /flushdns | Out-Null
     Write-Output ('SUCCESS:' + $action + ':{group}')
-}} catch {{ Write-Error $_; exit 1 }}
+}} catch {{
+    $err = $_.Exception.Message
+    if ($_.Exception.InnerException) {{ $err = $_.Exception.InnerException.Message }}
+    if ($err -match 'Access to the path .* is denied') {{
+        $err = 'Access to ' + $hostsPath + ' is denied. Ensure cmdiqo-agent is running with Administrator privileges or installed as the Windows Service (NT AUTHORITY\\SYSTEM), and antivirus is not locking the hosts file.'
+    }}
+    Write-Output ('ERROR:' + $err)
+    exit 1
+}}
 """
 
 
@@ -364,8 +396,15 @@ if grep -q '^# parental:start' "$HOSTS_FILE"; then
   fi
   active=$(sed -n '/# parental:start/,/# parental:end/p' "$HOSTS_FILE" | grep -Ec '^[[:space:]]*0\\.0\\.0\\.0[[:space:]]+' || true)
   off=$(sed -n '/# parental:start/,/# parental:end/p' "$HOSTS_FILE" | grep -Ec '^[[:space:]]*#[[:space:]]*0\\.0\\.0\\.0[[:space:]]+' || true)
-  if [ "$active" -gt 0 ] && [ "$off" -gt 0 ]; then echo 'ERROR: Cannot migrate a partially enabled legacy parental block.' >&2; exit 1; fi
-  legacy_action=off; [ "$active" -gt 0 ] && legacy_action=on
+  if [ "$active" -gt 0 ] && [ "$off" -gt 0 ]; then
+    if [ "$ACTION" != 'on' ] && [ "$ACTION" != 'off' ]; then
+      echo 'ERROR: Cannot migrate a partially enabled legacy parental block.' >&2
+      exit 1
+    fi
+    legacy_action="$ACTION"
+  else
+    legacy_action=off; [ "$active" -gt 0 ] && legacy_action=on
+  fi
   sed -i '/# parental:start/,/# parental:end/d' "$HOSTS_FILE"
   for current in $ALL_GROUPS; do replace_group "$current" "$legacy_action"; done
 fi
@@ -450,4 +489,7 @@ async def manage_parental(params: dict[str, Any], hub: Hub | None = None, config
     if f"SUCCESS:{action}:{group}" in output:
         verb = "ENABLED" if action == "on" else "DISABLED"
         return f":white_check_mark: *Parental controls {verb} on `{host}` for {label}.*\n• **Target:** {target}\n• **DNS:** Resolver cache flushed successfully."
+    if "ERROR:" in output:
+        clean_err = output.split("ERROR:", 1)[1].strip()
+        return f":x: *Parental control failed on `{host}` for {label}:*\n• **Target:** {target}\n```{clean_err}```"
     return f":warning: Parental control completed with output from `{host}`:\n```{output}```"

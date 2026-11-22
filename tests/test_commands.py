@@ -283,3 +283,23 @@ async def test_manage_users_handlers():
     res_ena = await manage_users({"host": "WIN-PC", "user": "john", "action": "enable"}, hub=mock_hub)
     assert "enabled" in res_ena
 
+
+def test_host_reboot_and_restart_triggers():
+    commands = load_commands("config/commands.yaml")
+    reboot_cmd = next((c for c in commands if c["spec"]["name"] == "host-reboot"), None)
+    restart_cmd = next((c for c in commands if c["spec"]["name"] == "host-restart"), None)
+
+    assert reboot_cmd is not None
+    assert restart_cmd is not None
+
+    assert reboot_cmd["spec"]["command"] == restart_cmd["spec"]["command"]
+
+    m_reboot = reboot_cmd["regex"].match("/host AMD reboot")
+    assert m_reboot is not None
+    assert m_reboot.group("host") == "AMD"
+
+    m_restart = restart_cmd["regex"].match("/host AMD restart")
+    assert m_restart is not None
+    assert m_restart.group("host") == "AMD"
+
+

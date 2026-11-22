@@ -751,6 +751,8 @@ HELP_SYNONYMS: dict[str, str] = {
     "mem": "memory",
     "ram": "memory",
     "rebooting": "reboot",
+    "restart": "reboot",
+    "restarting": "reboot",
     "youtube": "parental",
     "yt": "parental",
     "webgames": "parental",
