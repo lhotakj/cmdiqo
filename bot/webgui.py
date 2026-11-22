@@ -339,6 +339,18 @@ class WebGuiState:
                     "command": txt,
                 }
 
+            # Built-in help check
+            if txt.lower() == "/help" or txt.lower().startswith("/help "):
+                from bot.app import help_text
+
+                topic = txt[6:].strip() if txt.lower().startswith("/help ") else None
+                h_out = help_text(self.commands, aliases=self.aliases, topic=topic)
+                return {
+                    "success": True,
+                    "output": h_out,
+                    "command": txt,
+                }
+
             # Built-in agents check
             if self.hub is not None and txt.lower() in (
                 "/lan agents list",

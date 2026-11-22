@@ -20,6 +20,7 @@ from bot.app import (
     format_params,
     handle_command,
     help_text,
+    load_aliases,
     load_commands,
     reply_output,
     run_main,
@@ -1039,6 +1040,45 @@ async def test_agent_event_notification_logs_at_debug(caplog):
     assert len(debug_records) == 1
     assert len(info_records) == 0
     assert "channel C_TEST" in debug_records[0].message
+
+
+def test_help_users_category_and_consolidation():
+    commands = load_commands("config/commands.yaml")
+    aliases = load_aliases("config/commands.yaml")
+
+    # 1. /help users
+    txt_users = help_text(commands, aliases=aliases, topic="users")
+    assert "*Cmdiqo Help: `users`*" in txt_users
+    assert "`/host {host} users`" in txt_users
+    assert "`/host {host} user {user} {action}`" in txt_users
+    assert "`/host {host} screentime`" in txt_users
+    # Shorthand alias host-user-status should be filtered out
+    assert "• `/host {host} user {user}` [on `{host}`] —" not in txt_users
+
+    # 2. /help parental consolidation (no direct- or -legacy- spam)
+    txt_parental = help_text(commands, aliases=aliases, topic="parental")
+    assert "*Cmdiqo Help: `parental`*" in txt_parental
+    assert "`/host {host} parental {group} {action}`" in txt_parental
+    assert "`/host {host} blockapp {app} {action}`" in txt_parental
+    assert "`/host {host} restrict {user} set {schedule}`" in txt_parental
+    assert "`/direct-parental" not in txt_parental
+    assert "`/direct-blockapp" not in txt_parental
+    assert "`/direct-restrict" not in txt_parental
+    assert "`/host {host} appblock" not in txt_parental
+
+    # 3. Synonyms for parental (youtube, webgames)
+    txt_yt = help_text(commands, aliases=aliases, topic="youtube")
+    assert "*Cmdiqo Help: `parental`*" in txt_yt or "*Cmdiqo Help: `youtube`*" in txt_yt
+    assert "parental" in txt_yt.lower()
+
+    txt_webgames = help_text(commands, aliases=aliases, topic="webgames")
+    assert "parental" in txt_webgames.lower()
+
+    # 4. Target host formatting on /lan ping {host} (should NOT render [on {host}])
+    txt_lan = help_text(commands, aliases=aliases, topic="lan")
+    assert "• `/lan ping {host}` [on `{host}`]" not in txt_lan
+    assert "• `/lan ping {host}` —" in txt_lan
+
 
 
 

@@ -594,7 +594,7 @@ async def _execute_command_raw(
     agent_name = ""
     if spec.get("target"):
         agent_name = format_params(str(spec["target"]), params, config=config).strip()
-    elif "host" in params:
+    elif "host" in params and not str(spec.get("trigger", "")).startswith("/lan "):
         agent_name = str(params["host"]).strip()
 
     is_local_target = agent_name.lower() in ("local", "localhost", "container", "self")
@@ -681,6 +681,7 @@ CATEGORY_LABELS: dict[str, str] = {
     "lan": ":satellite_antenna: *LAN Operations & Wake-on-LAN*",
     "host": ":computer: *Host-Agnostic Remote Operations*",
     "system": ":bar_chart: *System Health & Resource Monitoring*",
+    "users": ":bust_in_silhouette: *User Management & Screentime Sessions*",
     "docker": ":whale: *Docker Containers & Compose*",
     "services": ":gear: *Systemd Service Management*",
     "windows": ":desktop_computer: *Windows Agent & PowerShell*",
@@ -706,15 +707,16 @@ BUILTIN_COMMANDS: list[dict[str, Any]] = [
         "trigger": "/help [category_or_command]",
         "category": "system",
         "description": "Show interactive help manual and dynamic recap of commands",
-        "details": "Displays structured guidance, command syntax, parameters, and examples. Supports nested filtering by category (e.g. /help lan, /help docker, /help parental) or keyword / multi-word sub-command (e.g. /help host restriction, /help wake, /help docker ps).",
+        "details": "Displays structured guidance, command syntax, parameters, and examples. Supports nested filtering by category (e.g. /help lan, /help host, /help users, /help parental, /help docker) or keyword / multi-word sub-command (e.g. /help host restriction, /help wake, /help docker ps, /help blockapp).",
         "examples": [
             "/help",
             "/help lan",
             "/help host",
+            "/help users",
             "/help parental",
             "/help docker",
-            "/help host restriction",
-            "/help home",
+            "/help blockapp",
+            "/help restrict",
         ],
     },
 ]
@@ -728,13 +730,18 @@ HELP_SYNONYMS: dict[str, str] = {
     "limit": "restrict",
     "schedule": "restrict",
     "services": "service",
-    "users": "user",
-    "accounts": "user",
-    "account": "user",
+    "users": "users",
+    "user": "users",
+    "accounts": "users",
+    "account": "users",
+    "screentime": "users",
+    "session": "users",
+    "sessions": "users",
     "containers": "docker",
     "container": "docker",
     "apps": "blockapp",
     "app": "blockapp",
+    "appblock": "blockapp",
     "applications": "blockapp",
     "application": "blockapp",
     "wol": "wake",
@@ -744,6 +751,14 @@ HELP_SYNONYMS: dict[str, str] = {
     "mem": "memory",
     "ram": "memory",
     "rebooting": "reboot",
+    "youtube": "parental",
+    "yt": "parental",
+    "webgames": "parental",
+    "webgame": "parental",
+    "web-games": "parental",
+    "games": "parental",
+    "bloxd": "parental",
+    "bloxdio": "parental",
 }
 
 HELP_STOPWORDS: set[str] = {"help", "cmd", "command", "the", "a", "an", "on", "for", "in"}
@@ -777,6 +792,15 @@ def get_spec_category(spec: dict[str, Any]) -> str:
         or "appblock" in trig
     ):
         return "parental"
+    if (
+        " user" in trig
+        or " users" in trig
+        or trig.endswith((" user", " users"))
+        or "screentime" in trig
+        or "screentime" in name
+        or name.startswith("host-user")
+    ):
+        return "users"
     if trig.startswith("/lan"):
         return "lan"
     if "docker" in trig:
@@ -789,6 +813,25 @@ def get_spec_category(spec: dict[str, Any]) -> str:
     if "win " in trig:
         return "windows"
     return "system"
+
+
+def _is_redundant_alias_spec(spec: dict[str, Any]) -> bool:
+    """Determine if a command spec is an internal alias or redundant shortcut that clutters help listings."""
+    name = str(spec.get("name", ""))
+    if "-legacy-" in name:
+        return True
+    if name.startswith(("direct-restrict", "direct-blockapp", "direct-appblock", "direct-parental")):
+        return True
+    return name in (
+        "host-restrict-default",
+        "host-user-status",
+        "host-parental",
+        "host-blockapp-query",
+        "host-blockapp-all",
+        "host-appblock",
+        "host-appblock-query",
+        "host-appblock-all",
+    )
 
 
 def help_text(
@@ -806,9 +849,9 @@ def help_text(
     elif req_topic.endswith(" ?"):
         req_topic = req_topic[:-2].strip()
 
-    # Filter out internal legacy fallback specs from help display
+    # Filter out internal legacy fallback specs and redundant alias specs from help display
     all_specs: list[dict[str, Any]] = [
-        c["spec"] for c in commands if "-legacy-" not in c.get("spec", {}).get("name", "")
+        c["spec"] for c in commands if not _is_redundant_alias_spec(c.get("spec", {}))
     ] + BUILTIN_COMMANDS
 
     # 1. General Overview (no topic requested)
@@ -819,7 +862,8 @@ def help_text(
             "*Available Categories:*",
             "• *`lan`* — Network scanning, pinging, and Wake-on-LAN (`/help lan`)",
             "• *`host`* — All host-agnostic remote operations (`/help host`)",
-            "• *`system`* — CPU, RAM, disk, and uptime monitoring (`/help system`)",
+            "• *`system`* — CPU, RAM, disk, speedtest, and power management (`/help system`)",
+            "• *`users`* — User accounts, locking/unlocking, and screentime sessions (`/help users`)",
             "• *`docker`* — Container inspection, restart, logs, and stats (`/help docker`)",
             "• *`services`* — Systemd service management (`/help services`)",
             "• *`windows`* — Windows updates, services, memory, reboot, and shutdown (`/help windows`)",
@@ -847,13 +891,18 @@ def help_text(
                 tgt = (
                     f" [on `{s['target']}`]"
                     if s.get("target")
-                    else (" [on `{host}`]" if "{host}" in s.get("trigger", "") else "")
+                    else (
+                        " [on `{host}`]"
+                        if ("{host}" in s.get("trigger", "") and not s.get("trigger", "").startswith("/lan "))
+                        else ""
+                    )
                 )
                 lines.append(f"• `{s['trigger']}`{tgt} — {s['description']}")
 
         lines.append(
-            "\n:information_source: *Tip:* Type `/help <category>` (e.g. `/help lan`, `/help host`, `/help parental`, `/help docker`) "
-            "or specific sub-commands like `/help host restriction` for detailed parameters, usage instructions, and examples."
+            "\n:information_source: *Tip:* Type `/help <category>` (e.g. `/help lan`, `/help host`, `/help users`, `/help parental`, `/help docker`) "
+            "or specific sub-commands like `/help host restriction` or `/help blockapp` for detailed parameters, usage instructions, and examples.\n"
+            "Direct command shortcuts are also supported: `/parental <host> <group> <action>`, `/blockapp <host> <app> <action>`, `/restrict <host> <user> set|status|off`."
         )
         return "\n".join(lines)
 
@@ -950,7 +999,11 @@ def help_text(
             tgt = (
                 f" [on `{s['target']}`]"
                 if s.get("target")
-                else (" [on `{host}`]" if "{host}" in s.get("trigger", "") else "")
+                else (
+                    " [on `{host}`]"
+                    if ("{host}" in s.get("trigger", "") and not s.get("trigger", "").startswith("/lan "))
+                    else ""
+                )
             )
             lines.append(f"• `{s['trigger']}`{tgt} — *{s['description']}*")
             if s.get("details"):

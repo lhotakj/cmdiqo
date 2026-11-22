@@ -201,6 +201,54 @@
       border-radius: 999px;
     }
 
+    .card-tools {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn-tool {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: rgba(12, 21, 46, 0.9);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      font-family: var(--font-sans);
+      font-weight: 500;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .btn-tool:hover {
+      background: rgba(0, 242, 254, 0.1);
+      border-color: rgba(0, 242, 254, 0.35);
+      color: var(--cyan-neon);
+      box-shadow: 0 0 12px rgba(0, 242, 254, 0.2);
+    }
+
+    .btn-tool-primary {
+      background: linear-gradient(135deg, rgba(0, 242, 254, 0.18), rgba(37, 99, 235, 0.25));
+      border-color: rgba(0, 242, 254, 0.35);
+      color: var(--cyan-neon);
+    }
+
+    .btn-tool-primary:hover {
+      background: linear-gradient(135deg, rgba(0, 242, 254, 0.3), rgba(37, 99, 235, 0.4));
+      border-color: var(--cyan-neon);
+      box-shadow: 0 0 15px rgba(0, 242, 254, 0.35);
+    }
+
+    .tool-svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
     /* Table */
     .table-responsive {
       width: 100%;
@@ -1269,8 +1317,15 @@
     }
 
     @keyframes cursorBlink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0; }
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0;
+      }
     }
 
     .terminal-modal-footer {
@@ -1322,6 +1377,45 @@
         <div class="card-title">
           <span>Connected Agents</span>
           <span class="badge-count" id="agent-count-badge">{{ agent_count }} Active</span>
+        </div>
+        <div class="card-tools">
+          <button type="button" class="btn-tool" id="btn-lan-scan" title="Scan local network for devices (ARP scan)">
+            <svg class="tool-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
+              <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
+              <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+              <line x1="12" y1="20" x2="12.01" y2="20"></line>
+            </svg>
+            <span>Scan LAN</span>
+          </button>
+          <button type="button" class="btn-tool" id="btn-lan-wake" title="Send Wake-on-LAN magic packet">
+            <svg class="tool-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+              <line x1="12" y1="2" x2="12" y2="12"></line>
+            </svg>
+            <span>Wake-on-LAN</span>
+          </button>
+          <button type="button" class="btn-tool" id="btn-lan-ping" title="Ping IP or host from Hub">
+            <svg class="tool-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="2" y1="12" x2="22" y2="12"></line>
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z">
+              </path>
+            </svg>
+            <span>Hub Ping</span>
+          </button>
+          <button type="button" class="btn-tool btn-tool-primary" id="btn-cmd-run"
+            title="Run interactive command on Hub or remote agents">
+            <svg class="tool-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="4 17 10 11 4 5"></polyline>
+              <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+            <span>Terminal</span>
+          </button>
         </div>
       </div>
 
@@ -1432,8 +1526,8 @@
         </div>
         <div class="terminal-controls">
           <label for="reverse-order-toggle" title="Display latest log entries first">
-            <input type="checkbox" id="reverse-order-toggle" aria-label="Toggle reverse order to show latest log entries first"
-              checked>
+            <input type="checkbox" id="reverse-order-toggle"
+              aria-label="Toggle reverse order to show latest log entries first" checked>
             <span>Reverse order</span>
           </label>
           <label for="auto-scroll-toggle" title="Toggle automatic scrolling of log output">
@@ -1506,8 +1600,8 @@
       </div>
       <div class="terminal-modal-body">
         <div class="terminal-prompt-line">
-          <span class="prompt-user">cmdiqo@hub</span>:<span class="prompt-path">~</span>$ <span
-            id="terminal-active-cmd" class="prompt-cmd"></span>
+          <span class="prompt-user">cmdiqo@hub</span>:<span class="prompt-path">~</span>$ <span id="terminal-active-cmd"
+            class="prompt-cmd"></span>
         </div>
         <div id="terminal-output" class="terminal-output-text"></div>
         <div id="terminal-spinner-line" class="terminal-spinner-line">
@@ -2070,7 +2164,7 @@
             {
               label: 'Domain Blocking',
               desc: 'Block a selected domain group via the local hosts file',
-              parentalGroups: ['all', 'youtube', 'roblox', 'minecraft', 'discord', 'tiktok', 'twitch', 'instagram', 'reddit', 'ai', 'web-games', 'proxies'],
+              parentalGroups: ['all', 'youtube', 'roblox', 'minecraft', 'discord', 'tiktok', 'twitch', 'instagram', 'reddit', 'ai', 'webgames', 'proxies'],
               subActions: [
                 { cmd: 'status', label: 'Status', desc: 'Check selected domain group blocking' },
                 { cmd: 'on', label: 'Enable', desc: 'Enable selected group blocking (redirect to 0.0.0.0)' },
@@ -2079,15 +2173,12 @@
             },
             {
               label: 'App Blocking',
-              desc: 'Block games & apps (e.g. roblox, steam, all)',
-              hasInput: true,
-              inputPlaceholder: 'all, roblox, steam...',
-              inputPrefix: 'blockapp',
-              submitLabel: 'Check',
+              desc: 'Block games & launchers (e.g. roblox, steam, all)',
+              blockappApps: ['all', 'roblox', 'minecraft', 'tlauncher', 'steam', 'epic', 'discord', 'riot', 'battlenet', 'tiktok', 'gfn'],
               subActions: [
-                { cmd: 'blockapp status', label: 'Status', desc: 'Check app blocking status across all apps' },
-                { cmd: 'blockapp on', label: 'Enable All', desc: 'Block all configured games and apps' },
-                { cmd: 'blockapp off', label: 'Disable All', desc: 'Unblock all games and apps' }
+                { cmd: 'status', label: 'Status', desc: 'Check app blocking status across all apps or selected' },
+                { cmd: 'on', label: 'Block', desc: 'Block execution of selected app or all configured apps' },
+                { cmd: 'off', label: 'Unblock', desc: 'Unblock execution of selected app or all configured apps' }
               ]
             },
             {
@@ -2104,7 +2195,13 @@
           icon: '👤',
           items: [
             { cmd: 'users', label: 'List Users', desc: 'List OS user accounts & status' },
-            { cmd: 'screentime', label: 'Screentime & Sessions', desc: 'Active logged-in sessions & idle time' }
+            { cmd: 'screentime', label: 'Screentime & Sessions', desc: 'Active logged-in sessions & idle time' },
+            {
+              id: 'user-account',
+              label: 'User Account Control',
+              desc: 'Check user info, lock or unlock account',
+              isUserAccount: true
+            }
           ]
         }
       ];
@@ -2425,6 +2522,23 @@
                   </div>
                 </div>
               `;
+            } else if (item.isUserAccount) {
+              menuHtml += `
+                <div class="menu-item has-interactive menu-user-account-block">
+                  <div class="item-cmd-line">
+                    <span class="item-cmd">${escapeHtml(item.label)}</span>
+                  </div>
+                  <div class="item-desc">${escapeHtml(item.desc)}</div>
+                  <div class="menu-user-container" onclick="event.stopPropagation();" style="margin-top:6px; padding-top:4px; border-top:1px solid rgba(255, 255, 255, 0.06); display:flex; flex-direction:column; gap:5px;">
+                    <input type="text" class="menu-text-input user-account-input" placeholder="Username (e.g. jonas)" style="width:100%;" />
+                    <div class="menu-sub-pills" style="margin-top:2px; padding-top:4px; display:flex; gap:6px;">
+                      <button type="button" class="sub-pill-btn user-status-btn" title="Show user details, logon status, and session duration">Status</button>
+                      <button type="button" class="sub-pill-btn pill-enable user-enable-btn" title="Unlock user account on host">Enable</button>
+                      <button type="button" class="sub-pill-btn pill-disable user-disable-btn" title="Lock user account on host">Disable</button>
+                    </div>
+                  </div>
+                </div>
+              `;
             } else if (item.hasInput || item.subActions) {
               menuHtml += `
                 <div class="menu-item has-interactive">
@@ -2447,14 +2561,22 @@
                 `;
                 if (item.parentalGroups) {
                   menuHtml += `<select class="menu-text-input parental-group-select" aria-label="Parental domain group">${item.parentalGroups.map(group => `<option value="${escapeHtml(group)}">${escapeHtml(group === 'all' ? 'All groups' : group)}</option>`).join('')}</select>`;
+                } else if (item.blockappApps) {
+                  menuHtml += `<select class="menu-text-input blockapp-app-select" aria-label="Target application">${item.blockappApps.map(app => `<option value="${escapeHtml(app)}">${escapeHtml(app === 'all' ? 'All apps' : app)}</option>`).join('')}</select>`;
                 }
                 item.subActions.forEach(sub => {
                   const labelLower = (sub.label || '').toLowerCase();
-                  const isEnable = labelLower === 'enable' || labelLower === 'on';
-                  const isDisable = labelLower.includes('disable') || labelLower === 'off';
+                  const isEnable = labelLower === 'enable' || labelLower === 'on' || labelLower === 'block';
+                  const isDisable = labelLower.includes('disable') || labelLower === 'off' || labelLower === 'unblock';
                   const pillClass = isEnable ? ' pill-enable' : (isDisable ? ' pill-disable' : '');
+                  let actionAttr = `data-action-cmd="/host ${escapeHtml(host)} ${escapeHtml(sub.cmd)}"`;
+                  if (item.parentalGroups) {
+                    actionAttr = `data-parental-action="${escapeHtml(sub.cmd)}"`;
+                  } else if (item.blockappApps) {
+                    actionAttr = `data-blockapp-action="${escapeHtml(sub.cmd)}"`;
+                  }
                   menuHtml += `
-                    <button type="button" class="sub-pill-btn${pillClass}" ${item.parentalGroups ? `data-parental-action="${escapeHtml(sub.cmd)}"` : `data-action-cmd="/host ${escapeHtml(host)} ${escapeHtml(sub.cmd)}"`} title="${escapeHtml(sub.desc || sub.label)}">
+                    <button type="button" class="sub-pill-btn${pillClass}" ${actionAttr} title="${escapeHtml(sub.desc || sub.label)}">
                       ${escapeHtml(sub.label)}
                     </button>
                   `;
@@ -2529,7 +2651,7 @@
 
         // Command click dispatch
         contextMenu.querySelectorAll('[data-action-cmd]').forEach(itemBtn => {
-          itemBtn.addEventListener('click', function(e) {
+          itemBtn.addEventListener('click', function (e) {
             e.stopPropagation();
             const cmd = itemBtn.getAttribute('data-action-cmd');
             if (cmd) {
@@ -2537,12 +2659,21 @@
             }
           });
           contextMenu.querySelectorAll('[data-parental-action]').forEach(itemBtn => {
-            itemBtn.addEventListener('click', function(e) {
+            itemBtn.addEventListener('click', function (e) {
               e.stopPropagation();
               const groupSelect = itemBtn.closest('.menu-item').querySelector('.parental-group-select');
               const group = groupSelect ? groupSelect.value : 'all';
               const action = itemBtn.getAttribute('data-parental-action');
               openTerminalAndExecute(host, `/host ${host} parental ${group} ${action}`);
+            });
+          });
+          contextMenu.querySelectorAll('[data-blockapp-action]').forEach(itemBtn => {
+            itemBtn.addEventListener('click', function (e) {
+              e.stopPropagation();
+              const appSelect = itemBtn.closest('.menu-item').querySelector('.blockapp-app-select');
+              const app = appSelect ? appSelect.value : 'all';
+              const action = itemBtn.getAttribute('data-blockapp-action');
+              openTerminalAndExecute(host, `/host ${host} blockapp ${app} ${action}`);
             });
           });
         });
@@ -2573,13 +2704,13 @@
             openTerminalAndExecute(host, full);
           };
 
-          submitBtn.addEventListener('click', function(e) {
+          submitBtn.addEventListener('click', function (e) {
             e.stopPropagation();
             if (submitBtn.disabled) return;
             doSubmit();
           });
 
-          input.addEventListener('keydown', function(e) {
+          input.addEventListener('keydown', function (e) {
             if (e.key === 'Enter') {
               e.preventDefault();
               e.stopPropagation();
@@ -2611,7 +2742,7 @@
           };
 
           if (setBtn) {
-            setBtn.addEventListener('click', function(e) {
+            setBtn.addEventListener('click', function (e) {
               e.stopPropagation();
               const u = getValidUser();
               if (!u) return;
@@ -2629,7 +2760,7 @@
           }
 
           if (statusBtn) {
-            statusBtn.addEventListener('click', function(e) {
+            statusBtn.addEventListener('click', function (e) {
               e.stopPropagation();
               const u = getValidUser();
               if (!u) return;
@@ -2638,7 +2769,7 @@
           }
 
           if (resetBtn) {
-            resetBtn.addEventListener('click', function(e) {
+            resetBtn.addEventListener('click', function (e) {
               e.stopPropagation();
               const u = getValidUser();
               if (!u) return;
@@ -2665,10 +2796,71 @@
           if (userInput) userInput.addEventListener('keydown', onEnter);
           if (timeInput) timeInput.addEventListener('keydown', onEnter);
         });
+
+        // User account block event handlers (Username, Status, Enable, Disable)
+        contextMenu.querySelectorAll('.menu-user-account-block').forEach(block => {
+          const userInput = block.querySelector('.user-account-input');
+          const statusBtn = block.querySelector('.user-status-btn');
+          const enableBtn = block.querySelector('.user-enable-btn');
+          const disableBtn = block.querySelector('.user-disable-btn');
+
+          const getValidUser = () => {
+            const u = (userInput ? userInput.value : '').trim();
+            if (!u) {
+              if (userInput) {
+                userInput.focus();
+                userInput.style.borderColor = '#ef4444';
+                setTimeout(() => { userInput.style.borderColor = ''; }, 1800);
+              }
+              return null;
+            }
+            return u;
+          };
+
+          if (statusBtn) {
+            statusBtn.addEventListener('click', function (e) {
+              e.stopPropagation();
+              const u = getValidUser();
+              if (!u) return;
+              openTerminalAndExecute(host, `/host ${host} user ${u} status`);
+            });
+          }
+
+          if (enableBtn) {
+            enableBtn.addEventListener('click', function (e) {
+              e.stopPropagation();
+              const u = getValidUser();
+              if (!u) return;
+              openTerminalAndExecute(host, `/host ${host} user ${u} enable`);
+            });
+          }
+
+          if (disableBtn) {
+            disableBtn.addEventListener('click', function (e) {
+              e.stopPropagation();
+              const u = getValidUser();
+              if (!u) return;
+              openTerminalAndExecute(host, `/host ${host} user ${u} disable`);
+            });
+          }
+
+          if (userInput) {
+            userInput.addEventListener('keydown', function (e) {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                const u = getValidUser();
+                if (u) {
+                  openTerminalAndExecute(host, `/host ${host} user ${u} status`);
+                }
+              }
+            });
+          }
+        });
       }
 
       // Close menu when clicking outside
-      document.addEventListener('click', function(e) {
+      document.addEventListener('click', function (e) {
         if (contextMenu && contextMenu.classList.contains('active')) {
           if (!contextMenu.contains(e.target) && !e.target.closest('.btn-action')) {
             closeActionMenu();
@@ -2677,7 +2869,7 @@
       });
 
       // Esc key listener (closes menu or modal)
-      window.addEventListener('keydown', function(e) {
+      window.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
           if (contextMenu && contextMenu.classList.contains('active')) {
             closeActionMenu();
@@ -2694,7 +2886,7 @@
         terminalCloseBtn.addEventListener('click', closeTerminalModal);
       }
       if (terminalModal) {
-        terminalModal.addEventListener('click', function(e) {
+        terminalModal.addEventListener('click', function (e) {
           if (e.target === terminalModal) {
             closeTerminalModal();
           }
@@ -2703,7 +2895,7 @@
 
       // Terminal copy button
       if (terminalCopyBtn) {
-        terminalCopyBtn.addEventListener('click', function() {
+        terminalCopyBtn.addEventListener('click', function () {
           if (!terminalOutput) return;
           const textToCopy = terminalOutput.dataset.raw || terminalOutput.innerText || terminalOutput.textContent || '';
           if (!textToCopy) return;
@@ -2722,7 +2914,7 @@
       }
 
       // Action button click handler
-      document.addEventListener('click', function(e) {
+      document.addEventListener('click', function (e) {
         const btn = e.target.closest('.btn-action');
         if (btn) {
           e.stopPropagation();
@@ -2733,6 +2925,44 @@
           }
         }
       });
+
+      // Header LAN tools
+      const scanBtn = document.getElementById('btn-lan-scan');
+      if (scanBtn) {
+        scanBtn.addEventListener('click', function () {
+          openTerminalAndExecute('Hub', '/lan devices list');
+        });
+      }
+
+      const wakeBtn = document.getElementById('btn-lan-wake');
+      if (wakeBtn) {
+        wakeBtn.addEventListener('click', function () {
+          const target = prompt('Enter MAC address or IP to wake (e.g. 00:11:22:33:44:55 or 192.168.1.50):');
+          if (target && target.trim()) {
+            openTerminalAndExecute('Hub', `/lan wake ${target.trim()}`);
+          }
+        });
+      }
+
+      const pingBtn = document.getElementById('btn-lan-ping');
+      if (pingBtn) {
+        pingBtn.addEventListener('click', function () {
+          const host = prompt('Enter IP address or host to ping from Hub (e.g. 1.1.1.1 or nas.lan):');
+          if (host && host.trim()) {
+            openTerminalAndExecute('Hub', `/lan ping ${host.trim()}`);
+          }
+        });
+      }
+
+      const runBtn = document.getElementById('btn-cmd-run');
+      if (runBtn) {
+        runBtn.addEventListener('click', function () {
+          const cmd = prompt('Enter command to execute (e.g. /help, /lan agents list, /lan version):', '/help');
+          if (cmd && cmd.trim()) {
+            openTerminalAndExecute('Hub', cmd.trim());
+          }
+        });
+      }
     })();
   </script>
 </body>

@@ -409,6 +409,19 @@ class TestWebGui(unittest.TestCase):
         self.assertIn("restrict-status-btn", html)
         self.assertIn("restrict-reset-btn", html)
 
+        # 4b. Verify LAN Header Tools, Granular App Blocking & User Account Controls
+        self.assertIn('id="btn-lan-scan"', html)
+        self.assertIn('id="btn-lan-wake"', html)
+        self.assertIn('id="btn-lan-ping"', html)
+        self.assertIn('id="btn-cmd-run"', html)
+        self.assertIn("blockapp-app-select", html)
+        self.assertIn("data-blockapp-action", html)
+        self.assertIn("User Account Control", html)
+        self.assertIn("user-account-input", html)
+        self.assertIn("user-status-btn", html)
+        self.assertIn("user-enable-btn", html)
+        self.assertIn("user-disable-btn", html)
+
         # 5. Verify Terminal rich formatting & emoji styling
         self.assertIn("formatSlackToHtml", html)
         self.assertIn("SLACK_EMOJI_MAP", html)
@@ -708,6 +721,37 @@ class TestWebGui(unittest.TestCase):
             error_logs = [l for l in logs if l["level"] == "ERROR"]
             self.assertTrue(len(error_logs) > 0)
             self.assertTrue(any("Command failed" in l["message"] for l in error_logs))
+
+        asyncio.run(_run_test())
+
+    def test_api_exec_help_builtin(self) -> None:
+        """Verify WebGUI execute_command_sync directly supports /help and /help <category>."""
+        import asyncio
+
+        from bot.app import load_commands
+
+        async def _run_test() -> None:
+            state = WebGuiState()
+            state.loop = asyncio.get_running_loop()
+            state.commands = load_commands("config/commands.yaml")
+
+            # 1. General /help
+            res_help = await asyncio.to_thread(state.execute_command_sync, "/help")
+            self.assertTrue(res_help["success"])
+            self.assertIn("*Cmdiqo Command Manual*", res_help["output"])
+            self.assertIn("Available Categories:", res_help["output"])
+
+            # 2. Topic /help lan
+            res_lan = await asyncio.to_thread(state.execute_command_sync, "/help lan")
+            self.assertTrue(res_lan["success"])
+            self.assertIn("*Cmdiqo Help: `lan`*", res_lan["output"])
+            self.assertIn("/lan devices list", res_lan["output"])
+
+            # 3. Topic /help users
+            res_users = await asyncio.to_thread(state.execute_command_sync, "/help users")
+            self.assertTrue(res_users["success"])
+            self.assertIn("*Cmdiqo Help: `users`*", res_users["output"])
+            self.assertIn("/host {host} users", res_users["output"])
 
         asyncio.run(_run_test())
 

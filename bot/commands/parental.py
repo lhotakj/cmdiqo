@@ -13,16 +13,189 @@ if TYPE_CHECKING:
 log = logging.getLogger("cmdiqo-bot.commands.parental")
 
 PARENTAL_GROUPS: dict[str, list[str]] = {
-    "youtube": ["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "youtubekids.com", "www.youtubekids.com", "youtube-nocookie.com", "www.youtube-nocookie.com", "ytimg.com", "s.ytimg.com", "i.ytimg.com", "yt3.ggpht.com", "youtube.googleapis.com", "youtubei.googleapis.com"],
+    "youtube": [
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube.com",
+        "kids.youtube.com",
+        "music.youtube.com",
+        "studio.youtube.com",
+        "tv.youtube.com",
+        "gaming.youtube.com",
+        "img.youtube.com",
+        "youtu.be",
+        "yt.be",
+        "youtubekids.com",
+        "www.youtubekids.com",
+        "youtube-nocookie.com",
+        "www.youtube-nocookie.com",
+        "youtubeeducation.com",
+        "www.youtubeeducation.com",
+        "youtubegaming.com",
+        "www.youtubegaming.com",
+        "ytimg.com",
+        "www.ytimg.com",
+        "s.ytimg.com",
+        "i.ytimg.com",
+        "i1.ytimg.com",
+        "i2.ytimg.com",
+        "i3.ytimg.com",
+        "i4.ytimg.com",
+        "ytimg.l.google.com",
+        "youtube-ui.l.google.com",
+        "wide-youtube.l.google.com",
+        "yt-video-upload.l.google.com",
+        "yt1.ggpht.com",
+        "yt2.ggpht.com",
+        "yt3.ggpht.com",
+        "yt4.ggpht.com",
+        "youtube.googleapis.com",
+        "youtubei.googleapis.com",
+        "jnn-pa.googleapis.com",
+        "googlevideo.com",
+        "www.googlevideo.com",
+        "redirector.googlevideo.com",
+        "manifest.googlevideo.com",
+        "video.google.com",
+    ],
     "roblox": ["roblox.com", "www.roblox.com", "api.roblox.com", "web.roblox.com", "assetgame.roblox.com", "setup.roblox.com", "rbxcdn.com", "www.rbxcdn.com", "robloxlabs.com"],
-    "minecraft": ["minecraft.net", "www.minecraft.net", "mojang.com", "www.mojang.com", "mojangapi.com", "minecraftservices.com", "api.minecraftservices.com", "sessionserver.mojang.com", "authserver.mojang.com", "textures.minecraft.net", "launchermeta.mojang.com", "launchercontent.mojang.com", "libraries.minecraft.net", "resources.download.minecraft.net", "dl.mojang.com", "piston-meta.mojang.com", "piston-data.mojang.com", "login.live.com", "login.microsoftonline.com", "xboxlive.com", "www.xboxlive.com", "user.auth.xboxlive.com", "xsts.auth.xboxlive.com", "profile.xboxlive.com", "realms.minecraft.net", "gamedata.minecraft.net", "events.data.microsoft.com", "vortex.data.microsoft.com", "playfabapi.com", "multiplayer.minecraft.net", "clientconfig.minecraft.net", "geo-prod.do.dsp.mp.microsoft.com", "packages.microsoft.com"],
+    "minecraft": ["minecraft.net", "www.minecraft.net", "mojang.com", "www.mojang.com", "mojangapi.com", "minecraftservices.com", "api.minecraftservices.com", "sessionserver.mojang.com", "authserver.mojang.com", "textures.minecraft.net", "launchermeta.mojang.com", "launchercontent.mojang.com", "libraries.minecraft.net", "resources.download.minecraft.net", "dl.mojang.com", "piston-meta.mojang.com", "piston-data.mojang.com", "login.live.com", "login.microsoftonline.com", "xboxlive.com", "www.xboxlive.com", "user.auth.xboxlive.com", "xsts.auth.xboxlive.com", "profile.xboxlive.com", "realms.minecraft.net", "gamedata.minecraft.net", "events.data.microsoft.com", "vortex.data.microsoft.com", "playfabapi.com", "multiplayer.minecraft.net", "clientconfig.minecraft.net", "geo-prod.do.dsp.mp.microsoft.com", "packages.microsoft.com", "aka.ms", "play.minecraft.net", "education.minecraft.net"],
     "discord": ["discord.com", "www.discord.com", "discord.gg", "discordapp.com", "www.discordapp.com", "discord.app", "discord.media", "discord.net", "discordcdn.com", "cdn.discordapp.com", "media.discordapp.net", "router.discord.gg", "gateway.discord.gg", "status.discord.com"],
     "tiktok": ["tiktok.com", "www.tiktok.com", "tiktokcdn.com", "tiktokv.com"],
     "twitch": ["twitch.tv", "www.twitch.tv", "ttvnw.net", "jtvnw.net"],
     "instagram": ["instagram.com", "www.instagram.com", "cdninstagram.com"],
     "reddit": ["reddit.com", "www.reddit.com", "redd.it"],
     "ai": ["character.ai", "beta.character.ai"],
-    "web-games": ["now.gg", "www.now.gg", "poki.com", "crazygames.com", "coolmathgames.com"],
+    "webgames": [
+        "bloxd.io",
+        "www.bloxd.io",
+        "bloxd.net",
+        "www.bloxd.net",
+        "now.gg",
+        "www.now.gg",
+        "poki.com",
+        "www.poki.com",
+        "crazygames.com",
+        "www.crazygames.com",
+        "coolmathgames.com",
+        "www.coolmathgames.com",
+        "coolmath-games.com",
+        "1v1.lol",
+        "www.1v1.lol",
+        "1v1.school",
+        "krunker.io",
+        "www.krunker.io",
+        "paper-io.com",
+        "www.paper-io.com",
+        "paper.io",
+        "slither.io",
+        "www.slither.io",
+        "slither.com",
+        "agar.io",
+        "www.agar.io",
+        "smashkarts.io",
+        "www.smashkarts.io",
+        "shellshock.io",
+        "www.shellshock.io",
+        "zombsroyale.io",
+        "www.zombsroyale.io",
+        "voxiom.io",
+        "www.voxiom.io",
+        "ev.io",
+        "www.ev.io",
+        "diep.io",
+        "www.diep.io",
+        "hole-io.com",
+        "hole.io",
+        "survev.io",
+        "surviv.io",
+        "skribbl.io",
+        "garticphone.com",
+        "www.garticphone.com",
+        "gartic.io",
+        "geoguessr.com",
+        "www.geoguessr.com",
+        "friv.com",
+        "www.friv.com",
+        "y8.com",
+        "www.y8.com",
+        "armorgames.com",
+        "www.armorgames.com",
+        "kongregate.com",
+        "www.kongregate.com",
+        "itch.io",
+        "www.itch.io",
+        "miniclip.com",
+        "www.miniclip.com",
+        "addictinggames.com",
+        "www.addictinggames.com",
+        "iogames.space",
+        "io-games.io",
+        "unblocked-games.com",
+        "minecraft.net",
+        "mojang.com",
+        "aka.ms",
+        "xboxlive.com",
+        "play.minecraft.net",
+        "education.minecraft.net",
+        "blockahedes.com",
+        "blockoid.net",
+        "orteil.dashnet.org",
+        "dashnet.org",
+        "neal.fun",
+        "tetr.io",
+        "eaglercraft.com",
+        "eaglymc.com",
+        "roblox.com",
+        "powerline.io",
+        "poki.games",
+        "kids.poki.com",
+        "miniplay.com",
+        "gameflare.com",
+        "silvergames.com",
+        "kevin.games",
+        "hoodamath.com",
+        "staging.bloxd.io",
+        "preprod.bloxd.io",
+        "cdn.bloxd.io",
+        "auth.bloxd.io",
+        "bloxd.com",
+        "bloxd.dev",
+        "playbloxd.com",
+        "unblockedbloxd.com",
+        "unblockedbloxd.us",
+        "unbloxd.com",
+        "unbloxd.site",
+        "bloxdunblocked.com",
+        "bloxdunblocked.space",
+        "bloxdunblocked.org",
+        "bloxdunblocked.work",
+        "bloxdio.space",
+        "bloxed.net",
+        "doodlecube.io",
+        "bloxdhop.io",
+        "eviltower.io",
+        "bedwars.space",
+        "bedwarsonline.net",
+        "bloxdk12.com",
+        "classcraft.space",
+        "classcraft.site",
+        "math.wales",
+        "math.icu",
+        "geometry.com.de",
+        "geometry.quest",
+        "geometries.top",
+        "trigonometry.website",
+        "geology.top",
+        "archeology.top",
+        "buildhub.work",
+        "buildhub.club",
+        "skillhub.vip",
+        "collabspace.space",
+        "creativebuilding.site",
+        "creativebuilding.space",
+        "buildminecreate.com",
+    ],
     "proxies": ["croxyproxy.com", "proxysite.com", "blockaway.net"],
 }
 PARENTAL_DOMAINS: list[str] = sorted({domain for domains in PARENTAL_GROUPS.values() for domain in domains})
@@ -36,19 +209,32 @@ TWITCH_DOMAINS = PARENTAL_GROUPS["twitch"]
 INSTAGRAM_DOMAINS = PARENTAL_GROUPS["instagram"]
 REDDIT_DOMAINS = PARENTAL_GROUPS["reddit"]
 AI_DOMAINS = PARENTAL_GROUPS["ai"]
-GAMING_BYPASS_DOMAINS = PARENTAL_GROUPS["web-games"]
+WEBGAMES_DOMAINS = PARENTAL_GROUPS["webgames"]
+GAMING_BYPASS_DOMAINS = WEBGAMES_DOMAINS
 PROXY_DOMAINS = PARENTAL_GROUPS["proxies"]
+
+PARENTAL_GROUP_ALIASES: dict[str, str] = {
+    "web-games": "webgames",
+    "web_games": "webgames",
+    "webgame": "webgames",
+    "bloxdio": "webgames",
+    "bloxd": "webgames",
+    "games": "webgames",
+    "yt": "youtube",
+}
 
 
 def _normalise_groups(config: dict[str, Any] | None) -> dict[str, list[str]]:
     """Return trusted configured groups, retaining legacy flat-domain configuration."""
     candidate = config.get("groups") if isinstance(config, dict) else None
     if isinstance(candidate, Mapping):
-        groups = {
-            str(name).strip().lower(): [str(domain).strip() for domain in domains if str(domain).strip()]
-            for name, domains in candidate.items()
-            if isinstance(domains, list) and str(name).strip()
-        }
+        groups = {}
+        for name, domains in candidate.items():
+            if isinstance(domains, list) and str(name).strip():
+                clean_name = str(name).strip().lower()
+                clean_name = PARENTAL_GROUP_ALIASES.get(clean_name, clean_name)
+                clean_domains = [str(domain).strip() for domain in domains if str(domain).strip()]
+                groups[clean_name] = clean_domains
         if groups:
             return groups
     domains = config.get("domains") if isinstance(config, dict) else None
@@ -56,6 +242,14 @@ def _normalise_groups(config: dict[str, Any] | None) -> dict[str, list[str]]:
         configured = [str(domain).strip() for domain in domains if str(domain).strip()]
         if set(configured) == set(PARENTAL_DOMAINS):
             return {name: list(group_domains) for name, group_domains in PARENTAL_GROUPS.items()}
+        matched_groups: dict[str, list[str]] = {}
+        configured_set = set(configured)
+        for name, group_domains in PARENTAL_GROUPS.items():
+            overlap = [d for d in group_domains if d in configured_set]
+            if overlap:
+                matched_groups[name] = overlap
+        if matched_groups and len(matched_groups) > 1:
+            return matched_groups
         return {"all": configured}
     return {name: list(domains) for name, domains in PARENTAL_GROUPS.items()}
 
@@ -101,6 +295,9 @@ try {{
     if ($action -eq 'status') {{
         foreach ($current in $selected) {{
             $match = [regex]::Match($content, '(?s)# parental:' + [regex]::Escape($current) + ':start(.*?)# parental:' + [regex]::Escape($current) + ':end')
+            if (-not $match.Success -and $current -eq 'webgames') {{
+                $match = [regex]::Match($content, '(?s)# parental:web-games:start(.*?)# parental:web-games:end')
+            }}
             if (-not $match.Success) {{ Write-Output ('STATUS:' + $current + ':NOT_CONFIGURED:0'); continue }}
             $active = @([regex]::Matches($match.Groups[1].Value, '(?m)^\\s*0\\.0\\.0\\.0\\s+')).Count
             $off = @([regex]::Matches($match.Groups[1].Value, '(?m)^\\s*#\\s*0\\.0\\.0\\.0\\s+')).Count
@@ -112,6 +309,9 @@ try {{
     foreach ($current in $selected) {{
         $escaped = [regex]::Escape($current)
         $content = $content -replace ('(?s)# parental:' + $escaped + ':start.*?# parental:' + $escaped + ':end\\r?\\n?'), ''
+        if ($current -eq 'webgames') {{
+            $content = $content -replace '(?s)# parental:web-games:start.*?# parental:web-games:end\\r?\\n?', ''
+        }}
         $lines = @('# parental:' + $current + ':start')
         foreach ($domain in $domainsByGroup[$current]) {{ $lines += $(if ($action -eq 'on') {{ '0.0.0.0 ' + $domain }} else {{ '# 0.0.0.0 ' + $domain }}) }}
         $lines += '# parental:' + $current + ':end'
@@ -152,6 +352,9 @@ domains_for_group() {{
 replace_group() {{
   current="$1"; state="$2"
   sed -i "\\|# parental:$current:start|,|# parental:$current:end|d" "$HOSTS_FILE"
+  if [ "$current" = 'webgames' ]; then
+    sed -i "\\|# parental:web-games:start|,|# parental:web-games:end|d" "$HOSTS_FILE"
+  fi
   {{ echo "# parental:$current:start"; if [ "$state" = 'on' ]; then domains_for_group "$current" | sed 's/^/0.0.0.0 /'; else domains_for_group "$current" | sed 's/^/# 0.0.0.0 /'; fi; echo "# parental:$current:end"; }} >> "$HOSTS_FILE"
 }}
 if grep -q '^# parental:start' "$HOSTS_FILE"; then
@@ -169,6 +372,9 @@ fi
 if [ "$ACTION" = 'status' ]; then
   for current in $SELECTED; do
     block=$(sed -n "/# parental:$current:start/,/# parental:$current:end/p" "$HOSTS_FILE")
+    if [ -z "$block" ] && [ "$current" = 'webgames' ]; then
+      block=$(sed -n '/# parental:web-games:start/,/# parental:web-games:end/p' "$HOSTS_FILE")
+    fi
     if [ -z "$block" ]; then echo "STATUS:$current:NOT_CONFIGURED:0"; continue; fi
     active=$(printf '%s\\n' "$block" | grep -Ec '^[[:space:]]*0\\.0\\.0\\.0[[:space:]]+' || true)
     off=$(printf '%s\\n' "$block" | grep -Ec '^[[:space:]]*#[[:space:]]*0\\.0\\.0\\.0[[:space:]]+' || true)
@@ -200,7 +406,8 @@ async def manage_parental(params: dict[str, Any], hub: Hub | None = None, config
     """Manage a selected parental domain group on a local or remote host."""
     host = str(params.get("host", "")).strip()
     action = str(params.get("action", "")).lower().strip() or "status"
-    group = str(params.get("group", "all")).lower().strip() or "all"
+    raw_group = str(params.get("group", "all")).lower().strip() or "all"
+    group = PARENTAL_GROUP_ALIASES.get(raw_group, raw_group)
     if not host:
         return ":no_entry_sign: Target host is required."
     if action in ("enable", "block"):

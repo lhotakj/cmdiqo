@@ -125,10 +125,11 @@ commands:
   - name: host-restrict-set
     trigger: "/host {host} restrict {user} set {schedule}"
     description: "Enforce allowed logon hours for {user} on {host}"
-    details: "Restricts allowed login hours for a specific user on Windows (net user /time + 5m toast reminder + 1m alert + forced logoff) or Linux (/etc/security/time.conf). Days: M, T, W, Th, F, Sa, Su. Range: M-F, Sa-Su. Hours: 24h format (e.g. 07:00-18:00). Multiple rules separated by semicolon."
+    details: "Restricts allowed login hours for a specific user on Windows (net user /time + toast notification + forced logoff) or Linux (/etc/security/time.conf). Direct shortcut: /restrict <host> <user> set <schedule>. Days: M, T, W, Th, F, Sa, Su. Range: M-F, Sa-Su. Hours: 24h format (e.g. 07:00-18:00). Multiple rules separated by semicolon."
     examples:
       - "/host PC-KIDS restrict jonas set M-F,07:00-18:00;Sa-Su,08:00-18:00"
       - "/host PC-KIDS restrict jonas set M-F,16:00-20:00"
+      - "/restrict PC-KIDS jonas set M-F,16:00-20:00"
     command:
       python: "commands.restrict:manage_restrict"
     config:
@@ -137,9 +138,10 @@ commands:
   - name: host-restrict-status
     trigger: "/host {host} restrict {user} status"
     description: "Check allowed logon hours status for {user} on {host}"
-    details: "Displays the active logon hours restrictions and scheduled enforcement tasks for a specific user on the target host."
+    details: "Displays the active logon hours restrictions and scheduled enforcement tasks for a specific user on the target host. Direct shortcut: /restrict <host> <user> status."
     examples:
       - "/host PC-KIDS restrict jonas status"
+      - "/restrict PC-KIDS jonas status"
     command:
       python: "commands.restrict:manage_restrict"
     config:
@@ -148,9 +150,10 @@ commands:
   - name: host-restrict-off
     trigger: "/host {host} restrict {user} off"
     description: "Remove logon hours restrictions for {user} on {host} (restore 24/7)"
-    details: "Clears all logon time limits for the user, removes all warning/logoff scheduled tasks, and restores unlimited 24/7 access (/time:all)."
+    details: "Clears all logon time limits for the user, removes all warning/logoff scheduled tasks, and restores unlimited 24/7 access (/time:all). Direct shortcut: /restrict <host> <user> off."
     examples:
       - "/host PC-KIDS restrict jonas off"
+      - "/restrict PC-KIDS jonas off"
     command:
       python: "commands.restrict:manage_restrict"
     config:
@@ -514,110 +517,522 @@ commands:
   # ---- Parental Controls (OS Agnostic with Configurable Domains) -----------
   - name: host-parental-group
     trigger: "/host {host} parental {group} {action}"
-    description: "Manage one parental domain group (all | youtube | roblox | minecraft | discord | tiktok | twitch | instagram | reddit | ai | web-games | proxies)"
-    details: "Changes only the selected hosts-file group and preserves every other parental group. Legacy on/off/status syntax remains an alias for the all group."
+    description: "Manage one parental domain group (all | youtube | roblox | minecraft | discord | tiktok | twitch | instagram | reddit | ai | webgames | proxies)"
+    details: "Changes only the selected hosts-file group and preserves every other parental group. Direct shortcut: /parental <host> <group> <action>. Actions: on (block), off (restore/unblock), status."
     examples:
       - "/host PC-KIDS parental youtube on"
+      - "/host PC-KIDS parental webgames on"
       - "/host PC-KIDS parental youtube off"
       - "/host PC-KIDS parental all status"
+      - "/parental PC-KIDS youtube on"
+      - "/parental PC-KIDS webgames on"
     command:
       python: "commands.parental:manage_parental"
     config:
+      groups: &parental_groups
+        youtube:
+          - youtube.com
+          - www.youtube.com
+          - m.youtube.com
+          - kids.youtube.com
+          - music.youtube.com
+          - studio.youtube.com
+          - tv.youtube.com
+          - gaming.youtube.com
+          - img.youtube.com
+          - youtu.be
+          - yt.be
+          - youtubekids.com
+          - www.youtubekids.com
+          - youtube-nocookie.com
+          - www.youtube-nocookie.com
+          - youtubeeducation.com
+          - www.youtubeeducation.com
+          - youtubegaming.com
+          - www.youtubegaming.com
+          - ytimg.com
+          - www.ytimg.com
+          - s.ytimg.com
+          - i.ytimg.com
+          - i1.ytimg.com
+          - i2.ytimg.com
+          - i3.ytimg.com
+          - i4.ytimg.com
+          - ytimg.l.google.com
+          - youtube-ui.l.google.com
+          - wide-youtube.l.google.com
+          - yt-video-upload.l.google.com
+          - yt1.ggpht.com
+          - yt2.ggpht.com
+          - yt3.ggpht.com
+          - yt4.ggpht.com
+          - youtube.googleapis.com
+          - youtubei.googleapis.com
+          - jnn-pa.googleapis.com
+          - googlevideo.com
+          - www.googlevideo.com
+          - redirector.googlevideo.com
+          - manifest.googlevideo.com
+          - video.google.com
+        roblox:
+          - roblox.com
+          - www.roblox.com
+          - api.roblox.com
+          - web.roblox.com
+          - assetgame.roblox.com
+          - setup.roblox.com
+          - rbxcdn.com
+          - www.rbxcdn.com
+          - robloxlabs.com
+        minecraft:
+          - minecraft.net
+          - www.minecraft.net
+          - mojang.com
+          - www.mojang.com
+          - mojangapi.com
+          - minecraftservices.com
+          - api.minecraftservices.com
+          - sessionserver.mojang.com
+          - authserver.mojang.com
+          - textures.minecraft.net
+          - launchermeta.mojang.com
+          - launchercontent.mojang.com
+          - libraries.minecraft.net
+          - resources.download.minecraft.net
+          - dl.mojang.com
+          - piston-meta.mojang.com
+          - piston-data.mojang.com
+          - login.live.com
+          - login.microsoftonline.com
+          - xboxlive.com
+          - www.xboxlive.com
+          - user.auth.xboxlive.com
+          - xsts.auth.xboxlive.com
+          - profile.xboxlive.com
+          - realms.minecraft.net
+          - gamedata.minecraft.net
+          - events.data.microsoft.com
+          - vortex.data.microsoft.com
+          - playfabapi.com
+          - multiplayer.minecraft.net
+          - clientconfig.minecraft.net
+          - geo-prod.do.dsp.mp.microsoft.com
+          - packages.microsoft.com
+          - aka.ms
+          - play.minecraft.net
+          - education.minecraft.net
+        discord:
+          - discord.com
+          - www.discord.com
+          - discord.gg
+          - discordapp.com
+          - www.discordapp.com
+          - discord.app
+          - discord.media
+          - discord.net
+          - discordcdn.com
+          - cdn.discordapp.com
+          - media.discordapp.net
+          - router.discord.gg
+          - gateway.discord.gg
+          - status.discord.com
+        tiktok:
+          - tiktok.com
+          - www.tiktok.com
+          - tiktokcdn.com
+          - tiktokv.com
+        twitch:
+          - twitch.tv
+          - www.twitch.tv
+          - ttvnw.net
+          - jtvnw.net
+        instagram:
+          - instagram.com
+          - www.instagram.com
+          - cdninstagram.com
+        reddit:
+          - reddit.com
+          - www.reddit.com
+          - redd.it
+        ai:
+          - character.ai
+          - beta.character.ai
+        webgames:
+          - bloxd.io
+          - www.bloxd.io
+          - bloxd.net
+          - www.bloxd.net
+          - now.gg
+          - www.now.gg
+          - poki.com
+          - www.poki.com
+          - crazygames.com
+          - www.crazygames.com
+          - coolmathgames.com
+          - www.coolmathgames.com
+          - coolmath-games.com
+          - 1v1.lol
+          - www.1v1.lol
+          - 1v1.school
+          - krunker.io
+          - www.krunker.io
+          - paper-io.com
+          - www.paper-io.com
+          - paper.io
+          - slither.io
+          - www.slither.io
+          - slither.com
+          - agar.io
+          - www.agar.io
+          - smashkarts.io
+          - www.smashkarts.io
+          - shellshock.io
+          - www.shellshock.io
+          - zombsroyale.io
+          - www.zombsroyale.io
+          - voxiom.io
+          - www.voxiom.io
+          - ev.io
+          - www.ev.io
+          - diep.io
+          - www.diep.io
+          - hole-io.com
+          - hole.io
+          - survev.io
+          - surviv.io
+          - skribbl.io
+          - garticphone.com
+          - www.garticphone.com
+          - gartic.io
+          - geoguessr.com
+          - www.geoguessr.com
+          - friv.com
+          - www.friv.com
+          - y8.com
+          - www.y8.com
+          - armorgames.com
+          - www.armorgames.com
+          - kongregate.com
+          - www.kongregate.com
+          - itch.io
+          - www.itch.io
+          - miniclip.com
+          - www.miniclip.com
+          - addictinggames.com
+          - www.addictinggames.com
+          - iogames.space
+          - io-games.io
+          - unblocked-games.com
+          - minecraft.net
+          - mojang.com
+          - aka.ms
+          - xboxlive.com
+          - play.minecraft.net
+          - education.minecraft.net
+          - blockahedes.com
+          - blockoid.net
+          - orteil.dashnet.org
+          - dashnet.org
+          - neal.fun
+          - tetr.io
+          - eaglercraft.com
+          - eaglymc.com
+          - roblox.com
+          - powerline.io
+          - poki.games
+          - kids.poki.com
+          - miniplay.com
+          - gameflare.com
+          - silvergames.com
+          - kevin.games
+          - hoodamath.com
+          - staging.bloxd.io
+          - preprod.bloxd.io
+          - cdn.bloxd.io
+          - auth.bloxd.io
+          - bloxd.com
+          - bloxd.dev
+          - playbloxd.com
+          - unblockedbloxd.com
+          - unblockedbloxd.us
+          - unbloxd.com
+          - unbloxd.site
+          - bloxdunblocked.com
+          - bloxdunblocked.space
+          - bloxdunblocked.org
+          - bloxdunblocked.work
+          - bloxdio.space
+          - bloxed.net
+          - doodlecube.io
+          - bloxdhop.io
+          - eviltower.io
+          - bedwars.space
+          - bedwarsonline.net
+          - bloxdk12.com
+          - classcraft.space
+          - classcraft.site
+          - math.wales
+          - math.icu
+          - geometry.com.de
+          - geometry.quest
+          - geometries.top
+          - trigonometry.website
+          - geology.top
+          - archeology.top
+          - buildhub.work
+          - buildhub.club
+          - skillhub.vip
+          - collabspace.space
+          - creativebuilding.site
+          - creativebuilding.space
+          - buildminecreate.com
+        proxies:
+          - croxyproxy.com
+          - proxysite.com
+          - blockaway.net
       domains: &parental_domains
-        - youtube.com
-        - www.youtube.com
-        - m.youtube.com
-        - youtu.be
-        - youtubekids.com
-        - www.youtubekids.com
-        - youtube-nocookie.com
-        - www.youtube-nocookie.com
-        - ytimg.com
-        - s.ytimg.com
-        - i.ytimg.com
-        - yt3.ggpht.com
-        - youtube.googleapis.com
-        - youtubei.googleapis.com
-        - roblox.com
-        - www.roblox.com
-        - api.roblox.com
-        - web.roblox.com
-        - assetgame.roblox.com
-        - setup.roblox.com
-        - rbxcdn.com
-        - www.rbxcdn.com
-        - robloxlabs.com
-        - minecraft.net
-        - www.minecraft.net
-        - mojang.com
-        - www.mojang.com
-        - mojangapi.com
-        - minecraftservices.com
+        - 1v1.lol
+        - 1v1.school
+        - addictinggames.com
+        - agar.io
+        - aka.ms
         - api.minecraftservices.com
-        - sessionserver.mojang.com
+        - api.roblox.com
+        - archeology.top
+        - armorgames.com
+        - assetgame.roblox.com
+        - auth.bloxd.io
         - authserver.mojang.com
-        - textures.minecraft.net
-        - launchermeta.mojang.com
-        - launchercontent.mojang.com
-        - libraries.minecraft.net
-        - resources.download.minecraft.net
-        - dl.mojang.com
-        - piston-meta.mojang.com
-        - piston-data.mojang.com
-        - login.live.com
-        - login.microsoftonline.com
-        - xboxlive.com
-        - www.xboxlive.com
-        - user.auth.xboxlive.com
-        - xsts.auth.xboxlive.com
-        - profile.xboxlive.com
-        - realms.minecraft.net
-        - gamedata.minecraft.net
-        - events.data.microsoft.com
-        - vortex.data.microsoft.com
-        - playfabapi.com
-        - multiplayer.minecraft.net
+        - bedwars.space
+        - bedwarsonline.net
+        - beta.character.ai
+        - blockahedes.com
+        - blockaway.net
+        - blockoid.net
+        - bloxd.com
+        - bloxd.dev
+        - bloxd.io
+        - bloxd.net
+        - bloxdhop.io
+        - bloxdio.space
+        - bloxdk12.com
+        - bloxdunblocked.com
+        - bloxdunblocked.org
+        - bloxdunblocked.space
+        - bloxdunblocked.work
+        - bloxed.net
+        - buildhub.club
+        - buildhub.work
+        - buildminecreate.com
+        - cdn.bloxd.io
+        - cdn.discordapp.com
+        - cdninstagram.com
+        - character.ai
+        - classcraft.site
+        - classcraft.space
         - clientconfig.minecraft.net
-        - geo-prod.do.dsp.mp.microsoft.com
-        - packages.microsoft.com
-        - discord.com
-        - www.discord.com
-        - discord.gg
-        - discordapp.com
-        - www.discordapp.com
+        - collabspace.space
+        - coolmath-games.com
+        - coolmathgames.com
+        - crazygames.com
+        - creativebuilding.site
+        - creativebuilding.space
+        - croxyproxy.com
+        - dashnet.org
+        - diep.io
         - discord.app
+        - discord.com
+        - discord.gg
         - discord.media
         - discord.net
+        - discordapp.com
         - discordcdn.com
-        - cdn.discordapp.com
-        - media.discordapp.net
-        - router.discord.gg
+        - dl.mojang.com
+        - doodlecube.io
+        - eaglercraft.com
+        - eaglymc.com
+        - education.minecraft.net
+        - ev.io
+        - events.data.microsoft.com
+        - eviltower.io
+        - friv.com
+        - gamedata.minecraft.net
+        - gameflare.com
+        - gaming.youtube.com
+        - gartic.io
+        - garticphone.com
         - gateway.discord.gg
+        - geo-prod.do.dsp.mp.microsoft.com
+        - geoguessr.com
+        - geology.top
+        - geometries.top
+        - geometry.com.de
+        - geometry.quest
+        - googlevideo.com
+        - hole-io.com
+        - hole.io
+        - hoodamath.com
+        - i.ytimg.com
+        - i1.ytimg.com
+        - i2.ytimg.com
+        - i3.ytimg.com
+        - i4.ytimg.com
+        - img.youtube.com
+        - instagram.com
+        - io-games.io
+        - iogames.space
+        - itch.io
+        - jnn-pa.googleapis.com
+        - jtvnw.net
+        - kevin.games
+        - kids.poki.com
+        - kids.youtube.com
+        - kongregate.com
+        - krunker.io
+        - launchercontent.mojang.com
+        - launchermeta.mojang.com
+        - libraries.minecraft.net
+        - login.live.com
+        - login.microsoftonline.com
+        - m.youtube.com
+        - manifest.googlevideo.com
+        - math.icu
+        - math.wales
+        - media.discordapp.net
+        - minecraft.net
+        - minecraftservices.com
+        - miniclip.com
+        - miniplay.com
+        - mojang.com
+        - mojangapi.com
+        - multiplayer.minecraft.net
+        - music.youtube.com
+        - neal.fun
+        - now.gg
+        - orteil.dashnet.org
+        - packages.microsoft.com
+        - paper-io.com
+        - paper.io
+        - piston-data.mojang.com
+        - piston-meta.mojang.com
+        - play.minecraft.net
+        - playbloxd.com
+        - playfabapi.com
+        - poki.com
+        - poki.games
+        - powerline.io
+        - preprod.bloxd.io
+        - profile.xboxlive.com
+        - proxysite.com
+        - rbxcdn.com
+        - realms.minecraft.net
+        - redd.it
+        - reddit.com
+        - redirector.googlevideo.com
+        - resources.download.minecraft.net
+        - roblox.com
+        - robloxlabs.com
+        - router.discord.gg
+        - s.ytimg.com
+        - sessionserver.mojang.com
+        - setup.roblox.com
+        - shellshock.io
+        - silvergames.com
+        - skillhub.vip
+        - skribbl.io
+        - slither.com
+        - slither.io
+        - smashkarts.io
+        - staging.bloxd.io
         - status.discord.com
+        - studio.youtube.com
+        - survev.io
+        - surviv.io
+        - tetr.io
+        - textures.minecraft.net
         - tiktok.com
-        - www.tiktok.com
         - tiktokcdn.com
         - tiktokv.com
-        - twitch.tv
-        - www.twitch.tv
+        - trigonometry.website
         - ttvnw.net
-        - jtvnw.net
-        - instagram.com
+        - tv.youtube.com
+        - twitch.tv
+        - unblocked-games.com
+        - unblockedbloxd.com
+        - unblockedbloxd.us
+        - unbloxd.com
+        - unbloxd.site
+        - user.auth.xboxlive.com
+        - video.google.com
+        - vortex.data.microsoft.com
+        - voxiom.io
+        - web.roblox.com
+        - wide-youtube.l.google.com
+        - www.1v1.lol
+        - www.addictinggames.com
+        - www.agar.io
+        - www.armorgames.com
+        - www.bloxd.io
+        - www.bloxd.net
+        - www.coolmathgames.com
+        - www.crazygames.com
+        - www.diep.io
+        - www.discord.com
+        - www.discordapp.com
+        - www.ev.io
+        - www.friv.com
+        - www.garticphone.com
+        - www.geoguessr.com
+        - www.googlevideo.com
         - www.instagram.com
-        - cdninstagram.com
-        - reddit.com
-        - www.reddit.com
-        - redd.it
-        - character.ai
-        - beta.character.ai
-        - now.gg
+        - www.itch.io
+        - www.kongregate.com
+        - www.krunker.io
+        - www.minecraft.net
+        - www.miniclip.com
+        - www.mojang.com
         - www.now.gg
-        - poki.com
-        - crazygames.com
-        - coolmathgames.com
-        - croxyproxy.com
-        - proxysite.com
-        - blockaway.net
+        - www.paper-io.com
+        - www.poki.com
+        - www.rbxcdn.com
+        - www.reddit.com
+        - www.roblox.com
+        - www.shellshock.io
+        - www.slither.io
+        - www.smashkarts.io
+        - www.tiktok.com
+        - www.twitch.tv
+        - www.voxiom.io
+        - www.xboxlive.com
+        - www.y8.com
+        - www.youtube-nocookie.com
+        - www.youtube.com
+        - www.youtubeeducation.com
+        - www.youtubegaming.com
+        - www.youtubekids.com
+        - www.ytimg.com
+        - www.zombsroyale.io
+        - xboxlive.com
+        - xsts.auth.xboxlive.com
+        - y8.com
+        - youtu.be
+        - youtube-nocookie.com
+        - youtube-ui.l.google.com
+        - youtube.com
+        - youtube.googleapis.com
+        - youtubeeducation.com
+        - youtubegaming.com
+        - youtubei.googleapis.com
+        - youtubekids.com
+        - yt-video-upload.l.google.com
+        - yt.be
+        - yt1.ggpht.com
+        - yt2.ggpht.com
+        - yt3.ggpht.com
+        - yt4.ggpht.com
+        - ytimg.com
+        - ytimg.l.google.com
+        - zombsroyale.io
 
   - name: host-parental
     trigger: "/host {host} parental {action}"
@@ -631,6 +1046,7 @@ commands:
     command:
       python: "commands.parental:manage_parental"
     config:
+      groups: *parental_groups
       domains: *parental_domains
 
   - name: direct-parental-group
@@ -643,6 +1059,7 @@ commands:
     command:
       python: "commands.parental:manage_parental"
     config:
+      groups: *parental_groups
       domains: *parental_domains
 
   - name: direct-parental
@@ -657,21 +1074,22 @@ commands:
     command:
       python: "commands.parental:manage_parental"
     config:
+      groups: *parental_groups
       domains: *parental_domains
 
   # ---- Application Execution Blocker (OS Agnostic) -------------------------
   - name: host-blockapp
     trigger: "/host {host} blockapp {app} {action}"
     description: "Block or unblock applications from running on Windows or Linux (on | off | status)"
-    details: "Blocks execution of specified games, launchers, and apps on target host. On Windows, intercepts process creation via IFEO (Image File Execution Options) and AppX package status, terminating active processes. On Linux, revokes display and network sockets via system-wide Flatpak overrides and terminates running processes."
+    details: "Blocks execution of specified games, launchers, and apps on target host (e.g. roblox, minecraft, tlauncher, steam, epic, discord, riot, battlenet, tiktok, gfn, or all). Direct shortcut: /blockapp <host> <app> <action> (or /appblock). Actions: on (block), off (unblock), status."
     examples:
       - "/host PC-KIDS blockapp roblox on"
       - "/host PC-KIDS blockapp steam on"
-      - "/host PC-KIDS blockapp roblox off"
-      - "/host PC-KIDS blockapp steam status"
+      - "/host PC-KIDS blockapp minecraft on"
+      - "/host PC-KIDS blockapp tlauncher on"
       - "/host PC-KIDS blockapp all on"
       - "/host PC-KIDS blockapp all status"
-      - "/host PC-KIDS blockapp tlauncher on"
+      - "/blockapp PC-KIDS roblox on"
     command:
       python: "commands.appblock:manage_appblock"
     config:
