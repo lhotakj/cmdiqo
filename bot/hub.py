@@ -339,6 +339,26 @@ class Hub:
                 )
                 fut.set_result(msg)
 
+    @staticmethod
+    def _summarize_cmd_for_log(cmd: str, max_len: int = 90) -> str:
+        """Return a concise single-line command summary for logs without dumping multiline scripts."""
+        lines = [line.strip() for line in cmd.splitlines() if line.strip()]
+        if not lines:
+            return "(empty)"
+        if len(lines) == 1:
+            single = lines[0]
+            return single if len(single) <= max_len else single[: max_len - 3] + "..."
+
+        preview_parts: list[str] = []
+        for line in lines[:4]:
+            if "ERROR:" in line:
+                break
+            preview_parts.append(line)
+        preview = "; ".join(preview_parts) if preview_parts else lines[0]
+        if len(preview) > max_len:
+            preview = preview[: max_len - 3] + "..."
+        return f"{preview} ({len(lines)} lines)"
+
     # ------------------------------------------------------------------ exec
     async def exec(
         self,
@@ -366,7 +386,7 @@ class Hub:
             req_id[:8],
             kind,
             name,
-            cmd,
+            self._summarize_cmd_for_log(cmd),
             timeout,
             cwd or "(default)",
         )

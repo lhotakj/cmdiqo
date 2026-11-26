@@ -470,9 +470,14 @@ if [ ! -f "$SUDOERS_FILE" ]; then
     exit 1
 fi
 
+if [ ! -r "$SUDOERS_FILE" ]; then
+    echo "ERROR:Cannot read $SUDOERS_FILE (permission denied)."
+    exit 1
+fi
+
 has_sudoers_entry() {{
     awk -v u="$TARGET_USER" '
-        /^[[:space:]]*#/ || /^[[:space:]]*$/ {{ next }}
+        /^[ \t]*#/ || /^[ \t]*$/ {{ next }}
         $1 == u && NF >= 2 {{ found = 1; exit }}
         END {{ exit(found ? 0 : 1) }}
     ' "$SUDOERS_FILE"
@@ -498,12 +503,12 @@ report_extra_privs() {{
     if [ -d /etc/sudoers.d ]; then
         dropins=""
         for f in /etc/sudoers.d/*; do
-            [ -f "$f" ] || continue
+            [ -f "$f" ] && [ -r "$f" ] || continue
             base=$(basename "$f")
             case "$base" in
                 .*|*~|README) continue ;;
             esac
-            if awk -v u="$TARGET_USER" '/^[[:space:]]*#/ || /^[[:space:]]*$/ {{ next }} $1 == u && NF >= 2 {{ found = 1; exit }} END {{ exit(found ? 0 : 1) }}' "$f" 2>/dev/null; then
+            if awk -v u="$TARGET_USER" '/^[ \t]*#/ || /^[ \t]*$/ {{ next }} $1 == u && NF >= 2 {{ found = 1; exit }} END {{ exit(found ? 0 : 1) }}' "$f" 2>/dev/null; then
                 if [ -z "$dropins" ]; then
                     dropins="$f"
                 else
@@ -568,7 +573,7 @@ if [ "$ACTION" = "disable" ]; then
     TMP_SUDOERS=$(mktemp "${{SUDOERS_DIR}}/.sudoers.cmdiqo.XXXXXX")
     trap 'rm -f "$TMP_SUDOERS"' EXIT
     awk -v u="$TARGET_USER" '
-        /^[[:space:]]*#/ || /^[[:space:]]*$/ {{ print; next }}
+        /^[ \t]*#/ || /^[ \t]*$/ {{ print; next }}
         $1 == u && NF >= 2 {{ next }}
         {{ print }}
     ' "$SUDOERS_FILE" > "$TMP_SUDOERS"

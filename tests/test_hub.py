@@ -252,6 +252,48 @@ async def test_hub_exec_fallback_failure():
     assert "(failed: permission denied)" in output
 
 
+def test_hub_summarize_cmd_for_log():
+    assert Hub._summarize_cmd_for_log("uptime") == "uptime"
+    assert Hub._summarize_cmd_for_log("") == "(empty)"
+
+    multiline = 'set -e\nACTION="status"\nTARGET_USER="jarda"\nif [ -z "$x" ]; then echo "ERROR:bad"; fi\nexit 0'
+    summary = Hub._summarize_cmd_for_log(multiline)
+    assert "\n" not in summary
+    assert "ERROR:" not in summary
+    assert 'ACTION="status"' in summary
+    assert "(5 lines)" in summary
+
+
+@pytest.mark.asyncio
+async def test_hub_exec_logs_single_line_for_multiline_script(caplog):
+    hub = Hub()
+    mock_ws = AsyncMock()
+    hub.agents["home"] = {
+        "ws": mock_ws,
+        "platform": "Linux",
+        "since": "2026-09-23 12:00:00",
+        "addr": "10.0.0.100:59892",
+    }
+
+    async def respond():
+        await asyncio.sleep(0.01)
+        req_id = next(iter(hub.pending.keys()))
+        await hub._on_message(
+            json.dumps({"id": req_id, "type": "result", "ok": True, "code": 0, "output": "ok"})
+        )
+
+    script = 'set -e\nACTION="status"\nTARGET_USER="jarda"\necho "ERROR:bad"\nexit 0'
+    with caplog.at_level(logging.INFO, logger="cmdiqo-bot.hub"):
+        asyncio.create_task(respond())
+        await hub.exec("home", "shell", script, timeout=60)
+
+    dispatch_logs = [r.message for r in caplog.records if "Dispatching shell command to agent 'home'" in r.message]
+    assert len(dispatch_logs) == 1
+    assert "\n" not in dispatch_logs[0]
+    assert "ERROR:" not in dispatch_logs[0]
+    assert "(5 lines)" in dispatch_logs[0]
+
+
 @pytest.mark.asyncio
 async def test_hub_handle_hello_timeout():
     hub = Hub(token=None)
