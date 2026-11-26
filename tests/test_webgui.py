@@ -421,6 +421,11 @@ class TestWebGui(unittest.TestCase):
         self.assertIn("user-status-btn", html)
         self.assertIn("user-enable-btn", html)
         self.assertIn("user-disable-btn", html)
+        self.assertIn("Power User (Sudo / Admin)", html)
+        self.assertIn("poweruser-account-input", html)
+        self.assertIn("poweruser-status-btn", html)
+        self.assertIn("poweruser-enable-btn", html)
+        self.assertIn("poweruser-disable-btn", html)
 
         # 5. Verify Terminal rich formatting & emoji styling
         self.assertIn("formatSlackToHtml", html)
@@ -752,6 +757,53 @@ class TestWebGui(unittest.TestCase):
             self.assertTrue(res_users["success"])
             self.assertIn("*Cmdiqo Help: `users`*", res_users["output"])
             self.assertIn("/host {host} users", res_users["output"])
+            self.assertIn("/host {host} poweruser {user} {action}", res_users["output"])
+
+        asyncio.run(_run_test())
+
+    def test_api_exec_poweruser_combinations(self) -> None:
+        """Verify WebGUI execute_command_sync dispatches poweruser, sudo, and administrator combinations."""
+        import asyncio
+        from unittest.mock import AsyncMock
+
+        from bot.app import load_commands
+
+        async def _run_test() -> None:
+            state = WebGuiState()
+            state.loop = asyncio.get_running_loop()
+            state.register_agent("node1", {"platform": "Windows 11", "arch": "AMD64"})
+
+            mock_hub = AsyncMock()
+            mock_hub.agents = {"node1": {"platform": "Windows 11"}}
+
+            async def mock_exec(host, kind, cmd, timeout=60):
+                if "$action = 'enable'" in cmd:
+                    return "SUCCESS:enabled:jonas:Administrators"
+                if "$action = 'disable'" in cmd:
+                    return "SUCCESS:disabled:jonas:Administrators"
+                return "POWERUSER_STATUS:enabled:jonas:Administrators"
+
+            mock_hub.exec = mock_exec
+            state.hub = mock_hub
+            state.commands = load_commands("config/commands.yaml")
+
+            res_add = await asyncio.to_thread(
+                state.execute_command_sync, "/host node1 sudo jonas add"
+            )
+            self.assertTrue(res_add["success"])
+            self.assertIn("enabled for `jonas`", res_add["output"])
+
+            res_rem = await asyncio.to_thread(
+                state.execute_command_sync, "/host node1 administrator jonas remove"
+            )
+            self.assertTrue(res_rem["success"])
+            self.assertIn("disabled for `jonas`", res_rem["output"])
+
+            res_st = await asyncio.to_thread(
+                state.execute_command_sync, "/host node1 poweruser jonas status"
+            )
+            self.assertTrue(res_st["success"])
+            self.assertIn("ENABLED", res_st["output"])
 
         asyncio.run(_run_test())
 

@@ -1051,9 +1051,17 @@ def test_help_users_category_and_consolidation():
     assert "*Cmdiqo Help: `users`*" in txt_users
     assert "`/host {host} users`" in txt_users
     assert "`/host {host} user {user} {action}`" in txt_users
+    assert "`/host {host} poweruser {user} {action}`" in txt_users
     assert "`/host {host} screentime`" in txt_users
-    # Shorthand alias host-user-status should be filtered out
+    # Shorthand alias host-user-status and poweruser aliases should be filtered out
     assert "• `/host {host} user {user}` [on `{host}`] —" not in txt_users
+    assert "• `/host {host} sudo {user} {action}` [on `{host}`] —" not in txt_users
+    assert "• `/host {host} administrator {user} {action}` [on `{host}`] —" not in txt_users
+
+    # 1b. /help sudo, /help administrator, /help poweruser all resolve cleanly
+    for p_topic in ("poweruser", "sudo", "administrator", "admin"):
+        txt_p = help_text(commands, aliases=aliases, topic=p_topic)
+        assert "`/host {host} poweruser {user} {action}`" in txt_p
 
     # 2. /help parental consolidation (no direct- or -legacy- spam)
     txt_parental = help_text(commands, aliases=aliases, topic="parental")
@@ -1078,6 +1086,47 @@ def test_help_users_category_and_consolidation():
     txt_lan = help_text(commands, aliases=aliases, topic="lan")
     assert "• `/lan ping {host}` [on `{host}`]" not in txt_lan
     assert "• `/lan ping {host}` —" in txt_lan
+
+
+@pytest.mark.asyncio
+async def test_handle_command_poweruser_aliases_dispatch():
+    commands = load_commands("config/commands.yaml")
+    aliases = load_aliases("config/commands.yaml")
+
+    mock_hub = AsyncMock()
+    mock_hub.agents = {
+        "home": {"platform": "Linux/6.8"},
+        "AMD": {"platform": "Windows/11"},
+    }
+    mock_hub.exec.side_effect = [
+        "SUCCESS:enabled:john:/etc/sudoers",
+        "SUCCESS:enabled:jonas:Administrators",
+        "SUCCESS:disabled:jonas:Administrators",
+        "SUCCESS:disabled:john:/etc/sudoers",
+    ]
+
+    for cmd_text, expected_substr in (
+        ("/host home sudo john enable", "enabled for `john` on `home`"),
+        ("/host AMD administrator jonas add", "enabled for `jonas` on `AMD`"),
+        ("/host AMD poweruser jonas remove", "disabled for `jonas` on `AMD`"),
+        ("/home poweruser john disable", "disabled for `john` on `home`"),
+    ):
+        posted = []
+
+        async def post(t: str, _p=posted) -> None:
+            _p.append(t)
+
+        await handle_command(
+            text=cmd_text,
+            user_id="U1",
+            channel_id="C1",
+            post=post,
+            commands=commands,
+            hub=mock_hub,
+            aliases=aliases,
+        )
+        assert len(posted) == 2
+        assert expected_substr in posted[1]
 
 
 

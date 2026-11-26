@@ -621,6 +621,12 @@ Once the bot and agents are running, test everything directly inside Slack:
      - Remote machine reboot: `/host MY-WINDOWS-PC reboot` or `/host nas reboot`
      - Active system services: `/host MY-WINDOWS-PC services` or `/host nas services`
      - Service status & restart: `/host MY-WINDOWS-PC service status Spooler` or `/host nas service restart nginx`
+     - User & Power User Privilege Control (Windows `Administrators` / Linux `/etc/sudoers`):
+       - `/host MY-WINDOWS-PC user jonas enable` (or `disable` — unlocks/locks user account and automatically refreshes Windows `LogonUI.exe` on an active lock/sign-in screen so newly enabled users appear immediately without rebooting).
+       - `/host MY-WINDOWS-PC poweruser jonas enable` (or `add`, `sudo`, `administrator` — adds `jonas` to Windows `Administrators` group).
+       - `/host nas sudo john enable` (surgically adds `john` to `/etc/sudoers` with `visudo` validation).
+       - `/host nas poweruser john disable` (or `remove` — surgically removes `john` from `/etc/sudoers`; on Windows removes from `Administrators`).
+       - `/host nas poweruser john status` (checks current sudoers / Administrators status).
      - Parental Controls (YouTube, Roblox, Minecraft & Discord):
        - `/host MY-WINDOWS-PC parental youtube on` (blocks only the YouTube group in the hosts file & flushes DNS).
        - `/host MY-WINDOWS-PC parental all off` (unblocks every configured group & flushes DNS).

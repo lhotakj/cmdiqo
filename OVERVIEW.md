@@ -161,7 +161,8 @@ Commands defined in `config/commands.yaml` (under `aliases:` and `commands:`) ar
 | `/lan ping {host}` | `python` | Local | Bot Container | Local ping utility (`commands.devices:ping_host`) |
 | `/lan agents list` | `internal` | Local | Hub Registry | Lists connected agents, OS platform, and remote addresses |
 | `/host {host} users` | `python` | `{host}` | Host / Agent | Local user accounts & status inspection (Win & Linux) |
-| `/host {host} user {user} {action}` | `python` | `{host}` | Host / Agent | User account status / enable / disable (Win & Linux) |
+| `/host {host} user {user} {action}` | `python` | `{host}` | Host / Agent | User account status / enable / disable (auto-refreshes Windows `LogonUI.exe` on lock screen) |
+| `/host {host} poweruser {user} {action}` | `python` | `{host}` | Host / Agent | Surgical Linux `/etc/sudoers` or Windows `Administrators` grant/revoke (`sudo` / `administrator` aliases; `enable`/`add`, `disable`/`remove`, `status`) |
 | `/host {host} uptime` | `shell` + `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `uptime` / Windows `Win32_OperatingSystem` |
 | `/host {host} memory` | `shell` + `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `free -h` / Windows `Win32_OperatingSystem` |
 | `/host {host} disk` | `shell` + `ps1` | `{host}` | Host / Agent | Cross-platform: Linux `df -h` / Windows `Win32_LogicalDisk` |

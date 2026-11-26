@@ -91,7 +91,7 @@ commands:
   - name: host-user
     trigger: "/host {host} user {user} {action}"
     description: "Manage a user account on {host} (status | disable | enable)"
-    details: "Displays user details and session duration ('status'), locks account ('disable'), or unlocks account ('enable') on Windows or Linux target host."
+    details: "Displays user details and session duration ('status'), locks account ('disable'), or unlocks account ('enable') on Windows or Linux target host. On Windows, when the lock/sign-in screen is active, enabling or disabling an account automatically ensures UserSwitch and restarts LogonUI.exe so newly unlocked users appear immediately without rebooting."
     examples:
       - "/host home user john status"
       - "/host AMD user Administrator status"
@@ -109,6 +109,72 @@ commands:
       - "/host AMD user Administrator"
     command:
       python: "commands.users:manage_users"
+
+  - name: host-poweruser
+    trigger: "/host {host} poweruser {user} {action}"
+    description: "Grant or revoke sudo/Administrator privileges for {user} on {host} (enable | disable | add | remove | status)"
+    details: "Surgically adds or removes {user} in /etc/sudoers on Linux (validated with visudo) or adds/removes {user} in the local Administrators group on Windows. Supports aliases 'sudo' and 'administrator', and action aliases 'add'/'enable', 'remove'/'disable', and 'status'."
+    examples:
+      - "/host home poweruser john enable"
+      - "/host home poweruser john disable"
+      - "/host home poweruser john add"
+      - "/host home poweruser john remove"
+      - "/host home sudo john enable"
+      - "/host AMD administrator jonas disable"
+    command:
+      python: "commands.users:manage_poweruser"
+
+  - name: host-poweruser-status
+    trigger: "/host {host} poweruser {user}"
+    description: "Check sudo/Administrator privilege status for {user} on {host}"
+    details: "Checks whether {user} has /etc/sudoers privileges on Linux or belongs to the Administrators group on Windows."
+    examples:
+      - "/host home poweruser john"
+      - "/host AMD poweruser jonas"
+    command:
+      python: "commands.users:manage_poweruser"
+
+  - name: host-sudo
+    trigger: "/host {host} sudo {user} {action}"
+    description: "Alias for /host {host} poweruser {user} {action}"
+    details: "Alias for /host {host} poweruser {user} {action}. Actions: enable, add, disable, remove, status."
+    examples:
+      - "/host home sudo john enable"
+      - "/host home sudo john disable"
+      - "/host home sudo john add"
+      - "/host home sudo john remove"
+    command:
+      python: "commands.users:manage_poweruser"
+
+  - name: host-sudo-status
+    trigger: "/host {host} sudo {user}"
+    description: "Alias for /host {host} poweruser {user} status"
+    details: "Checks sudo/Administrator privilege status for {user} on {host}."
+    examples:
+      - "/host home sudo john"
+    command:
+      python: "commands.users:manage_poweruser"
+
+  - name: host-administrator
+    trigger: "/host {host} administrator {user} {action}"
+    description: "Alias for /host {host} poweruser {user} {action}"
+    details: "Alias for /host {host} poweruser {user} {action}. Actions: enable, add, disable, remove, status."
+    examples:
+      - "/host AMD administrator jonas enable"
+      - "/host AMD administrator jonas disable"
+      - "/host AMD administrator jonas add"
+      - "/host AMD administrator jonas remove"
+    command:
+      python: "commands.users:manage_poweruser"
+
+  - name: host-administrator-status
+    trigger: "/host {host} administrator {user}"
+    description: "Alias for /host {host} poweruser {user} status"
+    details: "Checks sudo/Administrator privilege status for {user} on {host}."
+    examples:
+      - "/host AMD administrator jonas"
+    command:
+      python: "commands.users:manage_poweruser"
 
   - name: host-screentime
     trigger: "/host {host} screentime"

@@ -734,6 +734,13 @@ HELP_SYNONYMS: dict[str, str] = {
     "user": "users",
     "accounts": "users",
     "account": "users",
+    "poweruser": "poweruser",
+    "sudo": "poweruser",
+    "sudoers": "poweruser",
+    "administrator": "poweruser",
+    "admin": "poweruser",
+    "admins": "poweruser",
+    "administrators": "poweruser",
     "screentime": "users",
     "session": "users",
     "sessions": "users",
@@ -797,10 +804,13 @@ def get_spec_category(spec: dict[str, Any]) -> str:
     if (
         " user" in trig
         or " users" in trig
+        or " poweruser" in trig
+        or " sudo" in trig
+        or " administrator" in trig
         or trig.endswith((" user", " users"))
         or "screentime" in trig
         or "screentime" in name
-        or name.startswith("host-user")
+        or name.startswith(("host-user", "host-poweruser", "host-sudo", "host-administrator"))
     ):
         return "users"
     if trig.startswith("/lan"):
@@ -827,6 +837,11 @@ def _is_redundant_alias_spec(spec: dict[str, Any]) -> bool:
     return name in (
         "host-restrict-default",
         "host-user-status",
+        "host-poweruser-status",
+        "host-sudo",
+        "host-sudo-status",
+        "host-administrator",
+        "host-administrator-status",
         "host-parental",
         "host-blockapp-query",
         "host-blockapp-all",
@@ -1154,6 +1169,8 @@ async def handle_command(
         "/services", "services",
         "/windows", "windows",
         "/system", "system",
+        "/users", "users",
+        "/poweruser", "poweruser",
         "/parental", "parental",
         "/blockapp", "blockapp",
         "/appblock", "appblock",

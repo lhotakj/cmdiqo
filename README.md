@@ -157,8 +157,9 @@ Edit `config/commands.yaml` to define your commands and aliases (see **Adding yo
 | `/lan version`                     | Local container         | Displays bot version                                     |
 | `/host <host> users`               | Remote host (All OS)    | Lists all local OS users (active ✔️ or locked 🚫)         |
 | `/host <host> user <user> status`  | Remote host (All OS)    | Shows user profile info, status, and active session time |
-| `/host <host> user <user> disable` | Remote host (All OS)    | Locks / disables user account login                      |
-| `/host <host> user <user> enable`  | Remote host (All OS)    | Unlocks / enables user account login                     |
+| `/host <host> user <user> disable` | Remote host (All OS)    | Locks / disables user account login (auto-refreshes Windows `LogonUI.exe` if at lock screen) |
+| `/host <host> user <user> enable`  | Remote host (All OS)    | Unlocks / enables user account login (auto-refreshes Windows `LogonUI.exe` without reboot) |
+| `/host <host> poweruser <user> <enable\|disable\|add\|remove\|status>` | Remote host (Linux/Win) | Surgically adds/removes user in Linux `/etc/sudoers` (`visudo`-checked) or Windows `Administrators` group (`sudo` / `administrator` aliases) |
 | `/host <host> uptime`              | Remote host (Linux/Win) | System uptime & boot time                                |
 | `/host <host> memory`              | Remote host (Linux/Win) | Free and used physical RAM memory                        |
 | `/host <host> disk`                | Remote host (Linux/Win) | Filesystem and drive usage breakdown                     |
@@ -297,6 +298,7 @@ Cmdiqo features a built-in, dynamically generated command manual:
 - `/help host` — Detailed manual for host and remote agent operations.
 - `/help docker` — Specific guidance for Docker container and compose management.
 - `/help system` — Guidance for resource monitoring (uptime, memory, disk, top CPU).
+- `/help users` (or `/help poweruser`, `/help sudo`, `/help administrator`) — Guidance for user accounts, locking/unlocking, screentime, and sudo/Administrators privilege management.
 - `/help windows` — Windows agent PowerShell command specifications.
 - `/help parental` — Guidance for domain distraction blocking in hosts file.
 - `/help blockapp` or `/help appblock` — Guidance for executable process blocking via IFEO & Flatpak.
@@ -746,6 +748,7 @@ Set `WEB_PORT` in your `.env` or container environment (e.g. `WEB_PORT=8080`). T
     - **System Metrics**: Uptime, Memory (`free -m`), Storage (`disk`), Top CPU (`top`).
     - **Docker Control**: Containers (`docker ps`), Resource Stats (`docker stats`), Tail Logs, Restart Service.
     - **Services & Windows**: System Services list, Query Service Status, Restart Service, Windows Hotfix Updates.
+    - **User Management**: List Users, Screentime & Sessions, User Account Control (Status, Enable, Disable), Power User Privileges (Status, Enable/Disable Linux `/etc/sudoers` or Windows `Administrators`).
     - **Parental Controls**: Domain Blocking (Status, Enable, Disable), Logon Hours Restriction (Status, Set Schedule, Disable), Application Blocking (Status, Block, Unblock).
     - **Power**: Remote Reboot, Remote Shutdown.
 - **In-Browser Terminal Modal**:

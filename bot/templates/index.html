@@ -2200,7 +2200,31 @@
               id: 'user-account',
               label: 'User Account Control',
               desc: 'Check user info, lock or unlock account',
-              isUserAccount: true
+              isUserAccount: true,
+              cmdPrefix: 'user',
+              blockClass: 'menu-user-account-block',
+              inputClass: 'user-account-input',
+              statusClass: 'user-status-btn',
+              enableClass: 'user-enable-btn',
+              disableClass: 'user-disable-btn',
+              statusTitle: 'Show user details, logon status, and session duration',
+              enableTitle: 'Unlock user account on host',
+              disableTitle: 'Lock user account on host'
+            },
+            {
+              id: 'power-user',
+              label: 'Power User (Sudo / Admin)',
+              desc: 'Grant or revoke sudoers (Linux) / Administrators (Windows)',
+              isUserAccount: true,
+              cmdPrefix: 'poweruser',
+              blockClass: 'menu-poweruser-block',
+              inputClass: 'poweruser-account-input',
+              statusClass: 'poweruser-status-btn',
+              enableClass: 'poweruser-enable-btn',
+              disableClass: 'poweruser-disable-btn',
+              statusTitle: 'Check sudoers / Administrators group privilege status for user',
+              enableTitle: 'Grant sudoers (Linux) or Administrators group (Windows)',
+              disableTitle: 'Revoke sudoers (Linux) or Administrators group (Windows)'
             }
           ]
         }
@@ -2523,18 +2547,24 @@
                 </div>
               `;
             } else if (item.isUserAccount) {
+              const cmdPrefix = item.cmdPrefix || 'user';
+              const blockClass = item.blockClass || 'menu-user-account-block';
+              const inputClass = item.inputClass || 'user-account-input';
+              const statusClass = item.statusClass || 'user-status-btn';
+              const enableClass = item.enableClass || 'user-enable-btn';
+              const disableClass = item.disableClass || 'user-disable-btn';
               menuHtml += `
-                <div class="menu-item has-interactive menu-user-account-block">
+                <div class="menu-item has-interactive menu-user-control-block ${escapeHtml(blockClass)}" data-cmd-prefix="${escapeHtml(cmdPrefix)}">
                   <div class="item-cmd-line">
                     <span class="item-cmd">${escapeHtml(item.label)}</span>
                   </div>
                   <div class="item-desc">${escapeHtml(item.desc)}</div>
                   <div class="menu-user-container" onclick="event.stopPropagation();" style="margin-top:6px; padding-top:4px; border-top:1px solid rgba(255, 255, 255, 0.06); display:flex; flex-direction:column; gap:5px;">
-                    <input type="text" class="menu-text-input user-account-input" placeholder="Username (e.g. jonas)" style="width:100%;" />
+                    <input type="text" class="menu-text-input user-control-input ${escapeHtml(inputClass)}" placeholder="Username (e.g. jonas)" style="width:100%;" />
                     <div class="menu-sub-pills" style="margin-top:2px; padding-top:4px; display:flex; gap:6px;">
-                      <button type="button" class="sub-pill-btn user-status-btn" title="Show user details, logon status, and session duration">Status</button>
-                      <button type="button" class="sub-pill-btn pill-enable user-enable-btn" title="Unlock user account on host">Enable</button>
-                      <button type="button" class="sub-pill-btn pill-disable user-disable-btn" title="Lock user account on host">Disable</button>
+                      <button type="button" class="sub-pill-btn user-control-action ${escapeHtml(statusClass)}" data-user-action="status" title="${escapeHtml(item.statusTitle || 'Check status')}">Status</button>
+                      <button type="button" class="sub-pill-btn pill-enable user-control-action ${escapeHtml(enableClass)}" data-user-action="enable" title="${escapeHtml(item.enableTitle || 'Enable')}">Enable</button>
+                      <button type="button" class="sub-pill-btn pill-disable user-control-action ${escapeHtml(disableClass)}" data-user-action="disable" title="${escapeHtml(item.disableTitle || 'Disable')}">Disable</button>
                     </div>
                   </div>
                 </div>
@@ -2797,12 +2827,10 @@
           if (timeInput) timeInput.addEventListener('keydown', onEnter);
         });
 
-        // User account block event handlers (Username, Status, Enable, Disable)
-        contextMenu.querySelectorAll('.menu-user-account-block').forEach(block => {
-          const userInput = block.querySelector('.user-account-input');
-          const statusBtn = block.querySelector('.user-status-btn');
-          const enableBtn = block.querySelector('.user-enable-btn');
-          const disableBtn = block.querySelector('.user-disable-btn');
+        // User account & Power User control handlers (Username, Status, Enable, Disable)
+        contextMenu.querySelectorAll('.menu-user-control-block').forEach(block => {
+          const cmdPrefix = block.getAttribute('data-cmd-prefix') || 'user';
+          const userInput = block.querySelector('.user-control-input');
 
           const getValidUser = () => {
             const u = (userInput ? userInput.value : '').trim();
@@ -2817,32 +2845,15 @@
             return u;
           };
 
-          if (statusBtn) {
-            statusBtn.addEventListener('click', function (e) {
+          block.querySelectorAll('.user-control-action').forEach(btn => {
+            btn.addEventListener('click', function (e) {
               e.stopPropagation();
               const u = getValidUser();
               if (!u) return;
-              openTerminalAndExecute(host, `/host ${host} user ${u} status`);
+              const act = btn.getAttribute('data-user-action') || 'status';
+              openTerminalAndExecute(host, `/host ${host} ${cmdPrefix} ${u} ${act}`);
             });
-          }
-
-          if (enableBtn) {
-            enableBtn.addEventListener('click', function (e) {
-              e.stopPropagation();
-              const u = getValidUser();
-              if (!u) return;
-              openTerminalAndExecute(host, `/host ${host} user ${u} enable`);
-            });
-          }
-
-          if (disableBtn) {
-            disableBtn.addEventListener('click', function (e) {
-              e.stopPropagation();
-              const u = getValidUser();
-              if (!u) return;
-              openTerminalAndExecute(host, `/host ${host} user ${u} disable`);
-            });
-          }
+          });
 
           if (userInput) {
             userInput.addEventListener('keydown', function (e) {
@@ -2851,7 +2862,7 @@
                 e.stopPropagation();
                 const u = getValidUser();
                 if (u) {
-                  openTerminalAndExecute(host, `/host ${host} user ${u} status`);
+                  openTerminalAndExecute(host, `/host ${host} ${cmdPrefix} ${u} status`);
                 }
               }
             });

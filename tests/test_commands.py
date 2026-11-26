@@ -146,6 +146,18 @@ def test_load_commands_valid_file():
     assert "host-user" in specs_by_name
     assert specs_by_name["host-user"]["trigger"] == "/host {host} user {user} {action}"
 
+    # Verify poweruser / sudo / administrator privilege commands
+    for pname in (
+        "host-poweruser",
+        "host-poweruser-status",
+        "host-sudo",
+        "host-sudo-status",
+        "host-administrator",
+        "host-administrator-status",
+    ):
+        assert pname in specs_by_name
+        assert specs_by_name[pname]["command"]["python"] == "commands.users:manage_poweruser"
+
     # Verify appblock command with apps config
     assert "host-blockapp" in specs_by_name
     blockapp_spec = specs_by_name["host-blockapp"]
@@ -238,6 +250,16 @@ async def test_manage_users_handlers():
     assert "john" in win_status
     assert '"' not in win_status
 
+    win_enable = build_user_script_windows("enable", "john")
+    assert "Refresh-CmdiqoLogonUI -EnsureUserSwitch $true" in win_enable
+    assert "UserSwitch" in win_enable
+    assert "Stop-Process -Force" in win_enable
+    assert '"' not in win_enable
+
+    win_disable = build_user_script_windows("disable", "john")
+    assert "Refresh-CmdiqoLogonUI -EnsureUserSwitch $false" in win_disable
+    assert '"' not in win_disable
+
     linux_script = build_user_script_linux("users")
     assert "getent passwd" in linux_script
 
@@ -262,9 +284,9 @@ async def test_manage_users_handlers():
             if "$action = 'status'" in cmd or 'ACTION="status"' in cmd:
                 return "USER_STATUS|john|John Doe|C:\\Users\\john|active|✔️|1h 20m 5s"
             if "$action = 'disable'" in cmd or 'ACTION="disable"' in cmd:
-                return "SUCCESS:disabled:john"
+                return "LOGONUI_REFRESHED\nSUCCESS:disabled:john"
             if "$action = 'enable'" in cmd or 'ACTION="enable"' in cmd:
-                return "SUCCESS:enabled:john"
+                return "LOGONUI_REFRESHED\nSUCCESS:enabled:john"
             return ""
 
     mock_hub = MockHub()
@@ -279,9 +301,11 @@ async def test_manage_users_handlers():
 
     res_dis = await manage_users({"host": "WIN-PC", "user": "john", "action": "disable"}, hub=mock_hub)
     assert "disabled" in res_dis
+    assert "LogonUI.exe" in res_dis
 
     res_ena = await manage_users({"host": "WIN-PC", "user": "john", "action": "enable"}, hub=mock_hub)
     assert "enabled" in res_ena
+    assert "LogonUI.exe" in res_ena
 
 
 def test_host_reboot_and_restart_triggers():
@@ -301,5 +325,160 @@ def test_host_reboot_and_restart_triggers():
     m_restart = restart_cmd["regex"].match("/host AMD restart")
     assert m_restart is not None
     assert m_restart.group("host") == "AMD"
+
+
+def test_poweruser_trigger_combinations():
+    commands = load_commands("config/commands.yaml")
+    by_name = {c["spec"]["name"]: c["regex"] for c in commands}
+
+    for keyword, spec_name in (
+        ("poweruser", "host-poweruser"),
+        ("sudo", "host-sudo"),
+        ("administrator", "host-administrator"),
+    ):
+        for action in ("enable", "disable", "add", "remove", "status"):
+            m = by_name[spec_name].match(f"/host nas-01 {keyword} john.doe {action}")
+            assert m is not None, f"Failed to match {keyword} {action}"
+            assert m.group("host") == "nas-01"
+            assert m.group("user") == "john.doe"
+            assert m.group("action") == action
+
+        # Reject shell injection in username or action
+        assert by_name[spec_name].match(f"/host nas-01 {keyword} john;id enable") is None
+        assert by_name[spec_name].match(f"/host nas-01 {keyword} john enable|id") is None
+
+    for keyword, spec_name in (
+        ("poweruser", "host-poweruser-status"),
+        ("sudo", "host-sudo-status"),
+        ("administrator", "host-administrator-status"),
+    ):
+        m = by_name[spec_name].match(f"/host AMD {keyword} jonas")
+        assert m is not None
+        assert m.group("host") == "AMD"
+        assert m.group("user") == "jonas"
+
+
+@pytest.mark.asyncio
+async def test_manage_poweruser_handlers():
+    from bot.commands.users import (
+        build_poweruser_script_linux,
+        build_poweruser_script_windows,
+        manage_poweruser,
+    )
+
+    # 1. Verify Windows PowerShell script safety (strict single quotes, SID S-1-5-32-544, ADSI fallback)
+    for act in ("status", "enable", "disable"):
+        win_script = build_poweruser_script_windows(act, "john")
+        assert '"' not in win_script
+        assert "S-1-5-32-544" in win_script
+        assert "Get-LocalGroup" in win_script
+        assert "Add-LocalGroupMember" in win_script
+        assert "Remove-LocalGroupMember" in win_script
+        assert "WinNT://./" in win_script
+
+    # 2. Verify Linux Bash script surgical sudoers editing & visudo verification
+    linux_enable = build_poweruser_script_linux("enable", "john.doe")
+    assert 'SUDOERS_FILE="/etc/sudoers"' in linux_enable
+    assert "visudo -cf" in linux_enable
+    assert "chmod 0440" in linux_enable
+    assert "$1 == u && NF >= 2" in linux_enable
+    assert "ALL=(ALL:ALL) ALL" in linux_enable
+
+    linux_disable = build_poweruser_script_linux("disable", "john.doe")
+    assert 'if [ "$TARGET_USER" = "root" ]; then' in linux_disable
+    assert "awk -v u=" in linux_disable
+
+    # 3. Validation error cases
+    assert "Target host is required" in await manage_poweruser({})
+    assert "Username is required" in await manage_poweruser({"host": "WIN-PC", "action": "enable"})
+    assert "Invalid privilege action" in await manage_poweruser(
+        {"host": "WIN-PC", "user": "john", "action": "promote"}
+    )
+    assert "Invalid username" in await manage_poweruser(
+        {"host": "WIN-PC", "user": "john;rm", "action": "enable"}
+    )
+
+    # 4. Mock remote execution across Windows and Linux, including all action aliases
+    class MockHub:
+        def __init__(self):
+            self.agents = {
+                "WIN-PC": {"platform": "Windows/11"},
+                "LINUX-SRV": {"platform": "Linux/6.8"},
+            }
+            self.calls = []
+
+        async def exec(self, host, kind, cmd, timeout=60):
+            self.calls.append((host, kind, cmd))
+            if host == "WIN-PC":
+                assert kind == "ps1"
+                if "$action = 'status'" in cmd:
+                    return "POWERUSER_STATUS:enabled:jonas:Administrators"
+                if "$action = 'enable'" in cmd:
+                    return "SUCCESS:enabled:jonas:Administrators"
+                if "$action = 'disable'" in cmd:
+                    return "SUCCESS:disabled:jonas:Administrators"
+            else:
+                assert kind == "shell"
+                if 'ACTION="status"' in cmd:
+                    return "POWERUSER_STATUS:disabled:john:/etc/sudoers\nEXTRA_GROUPS:sudo"
+                if 'ACTION="enable"' in cmd:
+                    if "already" in cmd:
+                        pass
+                    return "SUCCESS:enabled:john:/etc/sudoers"
+                if 'ACTION="disable"' in cmd:
+                    return "SUCCESS:disabled:john:/etc/sudoers"
+            return ""
+
+    hub = MockHub()
+
+    # Windows enable / add / disable / remove / status
+    res_win_add = await manage_poweruser({"host": "WIN-PC", "user": "jonas", "action": "add"}, hub=hub)
+    assert "enabled" in res_win_add
+    assert "Administrators" in res_win_add
+
+    res_win_remove = await manage_poweruser({"host": "WIN-PC", "user": "jonas", "action": "remove"}, hub=hub)
+    assert "disabled" in res_win_remove
+    assert "Administrators" in res_win_remove
+
+    res_win_status = await manage_poweruser({"host": "WIN-PC", "user": "jonas"}, hub=hub)
+    assert "ENABLED" in res_win_status
+    assert "Administrators" in res_win_status
+
+    # Linux enable / disable / status with extra group notice
+    res_lin_en = await manage_poweruser({"host": "LINUX-SRV", "user": "john", "action": "enable"}, hub=hub)
+    assert "enabled" in res_lin_en
+    assert "/etc/sudoers" in res_lin_en
+
+    res_lin_dis = await manage_poweruser({"host": "LINUX-SRV", "user": "john", "action": "disable"}, hub=hub)
+    assert "disabled" in res_lin_dis
+
+    res_lin_st = await manage_poweruser({"host": "LINUX-SRV", "user": "john", "action": "status"}, hub=hub)
+    assert "DISABLED" in res_lin_st
+    assert "sudo" in res_lin_st
+
+    # 5. Edge cases: already enabled/disabled, error response, unknown host, disabled hub
+    assert "Hub is disabled" in await manage_poweruser({"host": "LINUX-SRV", "user": "john", "action": "status"}, hub=None)
+    assert "is not connected" in await manage_poweruser({"host": "MISSING", "user": "john", "action": "status"}, hub=hub)
+
+    class EdgeHub:
+        def __init__(self):
+            self.agents = {"LINUX-SRV": {"platform": "Linux/6.8"}}
+            self.responses = [
+                "SUCCESS:already_enabled:john:/etc/sudoers",
+                "SUCCESS:already_disabled:john:/etc/sudoers\nEXTRA_SUDOERS_D:/etc/sudoers.d/john",
+                "ERROR:User 'ghost' not found.",
+                "UNEXPECTED_RAW_OUTPUT",
+            ]
+
+        async def exec(self, host, kind, cmd, timeout=60):
+            return self.responses.pop(0)
+
+    edge_hub = EdgeHub()
+    assert "already enabled" in await manage_poweruser({"host": "LINUX-SRV", "user": "john", "action": "enable"}, hub=edge_hub)
+    res_already_dis = await manage_poweruser({"host": "LINUX-SRV", "user": "john", "action": "disable"}, hub=edge_hub)
+    assert "already disabled" in res_already_dis
+    assert "/etc/sudoers.d/john" in res_already_dis
+    assert ":x: User 'ghost' not found." in await manage_poweruser({"host": "LINUX-SRV", "user": "ghost", "action": "enable"}, hub=edge_hub)
+    assert "Failed to enable power user privileges" in await manage_poweruser({"host": "LINUX-SRV", "user": "john", "action": "enable"}, hub=edge_hub)
 
 
