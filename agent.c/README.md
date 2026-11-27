@@ -73,6 +73,7 @@ $$\text{CLI Flags} > \text{Environment Variables} > \text{JSON Configuration Fil
 | `--log-level` | — | Log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) | `INFO` |
 | `--agent-connection-notify` | — | Notify Slack when agent connects/disconnects | `false` |
 | `--service` | — | Run as Windows Service under SCM (Windows only) | `false` |
+| `--no-tamper-protect` | — | Opt out of Windows Service stop/DACL tamper protection (`--allow-service-stop` alias) | `false` |
 
 ### 3.3 Environment Variables
 - `HUB_URL`: WebSocket endpoint (e.g. `ws://192.168.1.10:8765`).
@@ -83,16 +84,18 @@ $$\text{CLI Flags} > \text{Environment Variables} > \text{JSON Configuration Fil
 - `AGENT_CONNECTION_NOTIFY`: Boolean (`true`, `1`, `yes`, `on`).
 - `LOG_LEVEL`: Verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
 
-### 3.4 JSON Configuration File (`agent.json`)
+### 3.4 JSON Configuration File (`agent.json` / `config.json`)
 ```json
 {
   "hub_url": "ws://192.168.1.10:8765",
   "token": "your-agent-token-here",
   "name": "AMD-Desktop",
   "reconnect_delay": 5.0,
-  "agent_connection_notify": true
+  "agent_connection_notify": true,
+  "tamper_protect": true
 }
 ```
+*(Legacy `< 0.34` configs omitting `"tamper_protect"` default telemetry to `false`.)*
 
 ---
 
@@ -106,7 +109,8 @@ Sent immediately after WebSocket handshake:
   "name": "AMD-Desktop",
   "version": "1.0.0",
   "platform": "Windows/10.0",
-  "agent_connection_notify": true
+  "agent_connection_notify": true,
+  "tamper_protect": true
 }
 ```
 
@@ -174,7 +178,7 @@ ctest --preset test-linux-x64 --output-on-failure
 ```powershell
 .\install-service.ps1 -HubUrl "ws://192.168.1.10:8765" -Token "SECRET_TOKEN"
 ```
-Logs are automatically written to `C:\ProgramData\Cmdiqo\Agent\logs\service.log`.
+Tamper protection is enabled by default (`SERVICE_ACCEPT_STOP` omitted and SCM DACL hardened; local installs, upgrades, and uninstalls retain full access via an automatic `SYSTEM` helper using control code `135`). Pass `-NoTamperProtect` (or `--no-tamper-protect` in `cmdiqo-agent-windows-x64-setup.exe`) to opt out. Logs are automatically written to `C:\ProgramData\Cmdiqo\Agent\logs\service.log`.
 
 ### 6.2 Linux (Systemd)
 ```bash

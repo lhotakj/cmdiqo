@@ -104,11 +104,14 @@ sequenceDiagram
      "name": "PC-OLO",
      "version": "1.0.devel+6AB4BAC9",
      "platform": "windows",
-     "arch": "x86_64"
+     "arch": "x86_64",
+     "agent_connection_notify": false,
+     "tamper_protect": true
    }
    ```
+   *(If `"tamper_protect"` is omitted in a legacy `< 0.34` `config.json`, the agent reports `false`.)*
 4. **Registration**:
-   - Hub stores the WebSocket reference, version, platform, arch, remote IP, and connection timestamp in `self.agents["PC-OLO"]`.
+   - Hub stores the WebSocket reference, version, platform, arch, `tamper_protect`, remote IP, and connection timestamp in `self.agents["PC-OLO"]`. Slack `/lan agents list` renders `🛡️` next to protected hosts.
 
 ### Execution Message Schema (`Hub` $\rightarrow$ `Agent`)
 ```json
@@ -216,7 +219,7 @@ flowchart LR
 - **Connected Agents Table**:
   - Sortable by **Arch**, **Host Name** (default ascending), **Operating System**, and **Uptime** with visual ascending/descending indicators (`▲▼`), highlighted active sort arrow, and automatic `localStorage` preference persistence.
   - Newly connected agents received via SSE are immediately inserted into the table in their properly sorted position.
-  - Displays host name, architecture badge with 32x32 WebP icons (`WIN64`, `Linux64`, `ARM64`, `ARMv6`), operating system, and live standardized uptime (`<days>d <hours>h <m>m <s>s`).
+  - Displays host name (with a shield icon and `"service protected"` hover tooltip when `tamper_protect` is enabled), architecture badge with 32x32 WebP icons (`WIN64`, `Linux64`, `ARM64`, `ARMv6`), operating system, and live standardized uptime (`<days>d <hours>h <m>m <s>s`).
   - Architecture and boot epoch timestamps are cached in-memory upon agent connection; reconnects/disconnects automatically update or purge the cache.
   - Client JavaScript ticks uptime every second locally without generating periodic network requests.
 - **Latest Events Log**:

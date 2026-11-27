@@ -35,6 +35,14 @@ COPY config ./config
 COPY docker/compress_assets.py ./compress_assets.py
 COPY version.txt ./version.txt
 
+# Ensure container version.txt matches the full three-part CI/release build version
+ARG CMDIQO_BUILD_VERSION=""
+RUN if [ -n "$CMDIQO_BUILD_VERSION" ]; then \
+      printf '%s\n' "$CMDIQO_BUILD_VERSION" > ./version.txt; \
+    else \
+      python -c "import pathlib, re; t = pathlib.Path('bot/_version.py').read_text(encoding='utf-8'); m = re.search(r'__version__\s*=\s*\"([^\"]+)\"', t); m and pathlib.Path('version.txt').write_text(m.group(1) + '\n', encoding='utf-8')"; \
+    fi
+
 # 5. In-place minify all HTML (including inline CSS & JS), standalone CSS, and JS
 RUN python compress_assets.py bot
 

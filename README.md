@@ -50,7 +50,7 @@ nothing to expose, TLS handled for you. Ideal for a home server.
   - **Windows Installer GUI**: only **~5.2 MB RAM**
   - Instant cold boot (<10 ms), zero Python runtime dependency on target nodes
 - 🌐 **Integrated Real-time WebGUI & Remote Control Console** — optional single-page dashboard (`WEB_PORT=8080`) styled with Obsidian Cyberpunk design:
-  - **Live Connected Agents Table**: Sortable columns (`Host Name`, `Arch`, `OS`, `Uptime`), `localStorage` sort preference persistence, 32x32 WebP architecture badges (`WIN64`, `Linux64`, `ARM64`, `ARMv6`), and standardized zero-padded uptime with client-side 1Hz local refresh.
+  - **Live Connected Agents Table**: Sortable columns (`Host Name`, `Arch`, `OS`, `Uptime`), `localStorage` sort preference persistence, 32x32 WebP architecture badges (`WIN64`, `Linux64`, `ARM64`, `ARMv6`), a shield indicator (`service protected` hover tooltip) next to tamper-protected Windows hosts, and standardized zero-padded uptime with client-side 1Hz local refresh.
   - **Interactive Host Actions Menu**: One-click execution for System Metrics (Uptime, Memory, Disk, Top), Docker (Containers, Stats, Logs, Restart), Power (Reboot, Shutdown), Services (Status, Restart), and Parental / Access Guards.
   - **Live Terminal Modal**: In-browser command output with full Slack formatting, emoji rendering, italics/code styles, and automated failure detection with red `FAILED` badges.
   - **Server-Sent Events (SSE)**: Last 50 events live-streamed with reverse-order toggle and zero polling overhead.
@@ -624,15 +624,17 @@ Install and register the background service on any machine with a single termina
 
 #### Windows: Deploy as an Automatic Background Service
 
-1. **Automated Installation Script (PowerShell):**
+1. **Automated Installation Script (PowerShell) or Native Setup (`cmdiqo-agent-windows-x64-setup.exe`):**
    Open PowerShell as **Administrator** and run:
    ```powershell
    .\agent\install-service.ps1 -HubUrl "ws://192.168.1.10:8765" -Token "change-me-long-random-string" -Name "WIN-PC"
    ```
-   The script automatically:
+   *(Pass `-NoTamperProtect` or `--no-tamper-protect` / uncheck **Service Protection** in the GUI setup if you want to opt out of Windows service tamper protection).*
+   The installer automatically:
    - Installs `cmdiqo-agent.exe` into `C:\Program Files\Cmdiqo\Agent\`
-   - Generates configuration at `C:\ProgramData\Cmdiqo\Agent\config.json` (accessible for easy editing)
+   - Generates configuration at `C:\ProgramData\Cmdiqo\Agent\config.json` (including `"tamper_protect": true` by default; legacy `< 0.34` configs without this key default to `false`)
    - Registers a native Windows Service (`CmdiqoAgent`) running under `NT AUTHORITY\SYSTEM` on boot
+   - Hardens the service by default against local tampering (`SERVICE_ACCEPT_STOP` omitted and service DACL restricted so local Stop/Disable/Delete in `services.msc` or `sc.exe` are blocked; WebGUI displays a shield icon and Slack `/lan agents list` shows `🛡️`)
    - Starts the service immediately
 
 2. **Managing the Windows Service:**
@@ -640,13 +642,15 @@ Install and register the background service on any machine with a single termina
    # Check service state
    Get-Service CmdiqoAgent
 
-   # Start / Stop / Restart service
+   # Stop / Restart / Upgrade / Uninstall via native setup or scripts (works even with Tamper-Protect enabled):
+   .\cmdiqo-agent-windows-x64-setup.exe --cli --restart
+   .\cmdiqo-agent-windows-x64-setup.exe --cli --stop
+   .\uninstall-service.ps1
+
+   # Direct SCM commands (only allowed when installed with -NoTamperProtect / --no-tamper-protect):
    Start-Service CmdiqoAgent
    Stop-Service CmdiqoAgent
    Restart-Service CmdiqoAgent
-
-   # Uninstall service completely
-   .\agent\uninstall-service.ps1
    ```
 
 ---
@@ -741,7 +745,7 @@ Set `WEB_PORT` in your `.env` or container environment (e.g. `WEB_PORT=8080`). T
 
 ### Key Features
 - **Live Agent Fleet Table**:
-  - Displays all connected agents with 32×32 WebP architecture badges (`WIN64`, `Linux64`, `ARM64`, `ARMv6`), host name, version, IP address, operating system, and synchronized live 1Hz uptimes.
+  - Displays all connected agents with 32×32 WebP architecture badges (`WIN64`, `Linux64`, `ARM64`, `ARMv6`), host name (with a shield icon and `"service protected"` hover tooltip when tamper protection is enabled), version, IP address, operating system, and synchronized live 1Hz uptimes.
   - Interactive multi-column sorting (`Arch`, `Host Name`, `Operating System`, `Uptime`) with automatic `localStorage` persistence across page reloads.
 - **Interactive Host Actions Menu**:
   - Click the terminal action icon (`>_`) in any host row to open a categorized context menu:

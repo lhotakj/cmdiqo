@@ -133,3 +133,17 @@ def test_get_version_fallback_when_version_txt_missing():
         ver = bot.app.get_version()
         assert ver != ""
 
+
+def test_docker_build_wires_full_build_version():
+    """Verify Docker build embeds CMDIQO_BUILD_VERSION so full three-part versions reach WebGUI."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    dockerfile = (root / "docker" / "Dockerfile").read_text(encoding="utf-8")
+    build_sh = (root / "build.sh").read_text(encoding="utf-8")
+    build_ps1 = (root / "build.ps1").read_text(encoding="utf-8")
+
+    assert "ARG CMDIQO_BUILD_VERSION" in dockerfile
+    assert '--build-arg "CMDIQO_BUILD_VERSION=${VERSION}"' in build_sh
+    assert '--build-arg "CMDIQO_BUILD_VERSION=$currentVersion"' in build_ps1
+

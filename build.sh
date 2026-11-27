@@ -834,6 +834,7 @@ if [[ "$BUILD_BOT" = true ]]; then
         docker_cli buildx build \
             --platform linux/amd64,linux/arm64 \
             --no-cache \
+            --build-arg "CMDIQO_BUILD_VERSION=${VERSION}" \
             -t "$TAG_LATEST" \
             -t "$TAG_SHORT" \
             -t "$TAG_FULL" \
@@ -845,6 +846,7 @@ if [[ "$BUILD_BOT" = true ]]; then
     else
         info "Building local container image (${TAG_FULL}) ..."
         docker_cli buildx build --load \
+            --build-arg "CMDIQO_BUILD_VERSION=${VERSION}" \
             -t "$TAG_LATEST" \
             -t "$TAG_SHORT" \
             -t "$TAG_FULL" \

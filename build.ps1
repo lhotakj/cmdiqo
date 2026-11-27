@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Builds Cmdiqo platform agents and the optional bot container.
 
@@ -643,6 +643,7 @@ if ($buildBot) {
             docker buildx build `
                 --platform linux/amd64,linux/arm64 `
                 --no-cache `
+                --build-arg "CMDIQO_BUILD_VERSION=$currentVersion" `
                 -t $imgLatest `
                 -t $imgShort `
                 -t $imgFull `
@@ -653,6 +654,7 @@ if ($buildBot) {
         } else {
             Write-Info "Building local container image ($imgFull) ..."
             docker buildx build --load `
+                --build-arg "CMDIQO_BUILD_VERSION=$currentVersion" `
                 -t $imgLatest `
                 -t $imgShort `
                 -t $imgFull `

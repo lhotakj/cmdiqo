@@ -508,15 +508,16 @@ To verify and ensure the `.exe` is authentic and safe:
 > **Alternative: Native Windows Setup Application (`cmdiqo-agent-windows-x64-setup.exe`)**:
 > You can also launch the native graphical setup wizard directly (self-contained executable with embedded agent payload, taking only **~5.2 MB RAM**):
 > - Double-click `cmdiqo-agent-windows-x64-setup.exe`.
-> - Configure your Hub URL, Agent Token, and Machine Name.
+> - Configure your Hub URL, Agent Token, and Machine Name (keep **Service Protection** checked for default Windows service tamper protection, or uncheck to opt out).
 > - Click **Install Service** (runs with standard Windows UAC elevation).
 > - Or in-place upgrade via CLI (replaces binary and restarts service, keeping configuration):
->   `.\cmdiqo-agent-windows-x64-setup.exe --cli --upgrade`
+>   `.\cmdiqo-agent-windows-x64-setup.exe --cli --upgrade` (add `--no-tamper-protect` to opt out)
 
 #### What the installer sets up automatically:
 - **Real Windows Service (`CmdiqoAgent`)**: Registered directly in Windows Service Control Manager (SCM). Visible in `services.msc`.
+- **Tamper Protection (Default On)**: Omits `SERVICE_ACCEPT_STOP` (grays out Stop/Pause/Restart in `services.msc`) and hardens the SCM service DACL so local users and elevated admins cannot disable or delete the service via `services.msc`, `sc.exe`, or `Stop-Service`. Persists `"tamper_protect": true` in `config.json` (showing a shield icon in WebGUI and `🛡️` in `/lan agents list`). Local upgrades, stops, and uninstalls via `cmdiqo-agent-windows-x64-setup.exe` or `install-service.ps1` / `uninstall-service.ps1` retain full access automatically. Pass `-NoTamperProtect` / `--no-tamper-protect` to opt out.
 - **Native C++ Execution Engine**: High-performance native service dispatcher invoked via `cmdiqo-agent.exe --service` (super-lightweight background memory footprint of only **~3.3 MB RAM**, Win32 Job Objects for instant process tree isolation).
-- **Accessible Config in `C:\ProgramData\Cmdiqo\Agent\config.json`**: Grants Full Control to Administrators and the current user (plus Modify to Users) so you can freely view and edit settings in Notepad, VS Code, or any shell without UAC access issues.
+- **Accessible Config in `C:\ProgramData\Cmdiqo\Agent\config.json`**: Stores Hub connection parameters and `"tamper_protect"` (legacy `< 0.34` configs without `"tamper_protect"` default to `false`).
 - **Automatic Self-Healing**: Configures SCM failure recovery to automatically restart the service if it ever terminates.
 - **Log Redirection**: Redirects stdout/stderr to `C:\ProgramData\Cmdiqo\Agent\logs\service.log`.
 - **Strips Mark-of-the-Web & Trusts Certificate**: Removes download flags and imports the Authenticode certificate into machine stores.
@@ -540,21 +541,17 @@ Running  CmdiqoAgent        Cmdiqo LAN Remote Agent
 # Check service status:
 Get-Service CmdiqoAgent
 
-# Restart service:
+# Recommended (works even with Tamper-Protect enabled):
+.\cmdiqo-agent-windows-x64-setup.exe --cli --restart
+.\cmdiqo-agent-windows-x64-setup.exe --cli --stop
+
+# Direct SCM stop/restart (only works when installed with -NoTamperProtect / --no-tamper-protect):
 Restart-Service CmdiqoAgent
-
-# Stop service:
 Stop-Service CmdiqoAgent
-
-# Start service:
 Start-Service CmdiqoAgent
 
 # View live service logs:
 Get-Content "C:\ProgramData\Cmdiqo\Agent\logs\service.log" -Tail 20 -Wait
-
-# Re-configure (edit config file):
-notepad "C:\ProgramData\Cmdiqo\Agent\config.json"
-Restart-Service CmdiqoAgent
 ```
 
 ---
@@ -588,11 +585,11 @@ Once the bot and agents are running, test everything directly inside Slack:
    ```text
    /lan agents list
    ```
-   **Expected output:** A table listing every online machine, its operating system, and connect time:
+   **Expected output:** A table listing every online machine, its operating system, and connect time (`🛡️` appears after host names with Tamper-Protect enabled):
    ```text
-   AGENT          PLATFORM        CONNECTED SINCE      ADDRESS
-   MY-WINDOWS-PC  Windows/11      2026-09-23 21:05:12  192.168.1.15:58392
-   nas            Linux/6.1.0     2026-09-23 21:02:44  192.168.1.50:41208
+   AGENT             VERSION   PLATFORM      ARCH    CONNECTED SINCE      ADDRESS
+   MY-WINDOWS-PC 🛡️  0.36.0    Windows/10.0  win64   2026-09-23 21:05:12  192.168.1.15:58392
+   nas               0.36.0    Linux/6.1.0   linux64 2026-09-23 21:02:44  192.168.1.50:41208
    ```
    *(If an agent is missing from this table, it is not connected to the hub).*
 
