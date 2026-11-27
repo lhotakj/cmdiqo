@@ -110,7 +110,7 @@ std::string fetch_github_release_json(std::string_view target_version, int timeo
     }
 #if defined(_WIN32)
     const std::string ps_cmd =
-        "$ErrorActionPreference = 'Stop'; "
+        "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; "
         "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; "
         "(Invoke-WebRequest -Uri '" + ps_single_quote(url) + "' "
         "-Headers @{Accept='application/vnd.github+json'; 'User-Agent'='cmdiqo-agent-updater'} "
@@ -298,7 +298,7 @@ UpdateOutcome perform_self_update(
     const std::filesystem::path helper_cmd = temp_dir / "cmdiqo-agent-self-update.cmd";
 
     const std::string dl_ps =
-        "$ErrorActionPreference = 'Stop'; "
+        "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; "
         "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; "
         "Invoke-WebRequest -Uri '" + ps_single_quote(download_url) + "' "
         "-OutFile '" + ps_single_quote(setup_exe.string()) + "' "

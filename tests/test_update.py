@@ -10,10 +10,12 @@ import pytest
 from bot.commands.update import (
     build_linux_update_script,
     build_windows_update_script,
+    format_update_output,
     is_newer_version,
     manage_update,
     normalize_target_arch,
     parse_semver_tuple,
+    strip_clixml,
 )
 from bot.hub import Hub
 
@@ -45,6 +47,7 @@ def test_generated_scripts_avoid_unescaped_quotes_and_preserve_tamper():
     assert "--cli --upgrade" in ps_protected
     assert "--no-tamper-protect" not in ps_protected
     assert "NT AUTHORITY\\SYSTEM" in ps_protected
+    assert "$ProgressPreference = 'SilentlyContinue'" in ps_protected
 
     ps_optout = build_windows_update_script(
         "https://github.com/lhotakj/cmdiqo/releases/download/v0.37.0/cmdiqo-agent-windows-x64-setup.exe",
@@ -52,6 +55,7 @@ def test_generated_scripts_avoid_unescaped_quotes_and_preserve_tamper():
     )
     assert '"' not in ps_optout
     assert "--cli --upgrade --no-tamper-protect" in ps_optout
+    assert "$ProgressPreference = 'SilentlyContinue'" in ps_optout
 
     sh_script = build_linux_update_script(
         "https://github.com/lhotakj/cmdiqo/releases/download/v0.37.0/cmdiqo-agent-linux-arm64"
@@ -101,13 +105,13 @@ async def test_manage_update_status_and_native_dispatch(monkeypatch):
     upd_native = await manage_update({"host": "AMD", "action": "latest"}, hub=hub)
     hub.update_agent.assert_awaited_once()
     assert "via native updater" in upd_native
-    assert "UPDATE_SCHEDULED" in upd_native
+    assert "Update scheduled" in upd_native
 
     upd_legacy = await manage_update({"host": "legacy-pi", "action": "latest"}, hub=hub)
     hub.exec.assert_awaited_once()
     assert hub.exec.await_args.args[1] == "shell"
     assert "cmdiqo-agent-linux-arm64" in hub.exec.await_args.args[2]
-    assert "UPDATE_SCHEDULED" in upd_legacy
+    assert "Update scheduled" in upd_legacy
 
 
 @pytest.mark.asyncio
@@ -155,3 +159,39 @@ async def test_hub_update_agent_sends_update_frame():
     assert res == "UPDATE_APPLIED"
     assert sent_payloads[0]["type"] == "update"
     assert sent_payloads[0]["version"] == "0.37.5"
+
+
+def test_strip_clixml_and_format_update_output():
+    # Raw output containing PowerShell progress stream serialized as CLIXML
+    raw_with_clixml = (
+        "#< CLIXML\r\n"
+        "<Objs Version=\"1.1.0.1\" xmlns=\"http://schemas.microsoft.com/powershell/2004/04\">"
+        "<Obj S=\"progress\" RefId=\"0\"><TN RefId=\"0\"><T>System.Management.Automation.PSCustomObject</T>"
+        "<T>System.Object</T></TN><MS><I64 N=\"SourceId\">1</I64><PR N=\"Record\"><AV>Preparing modules</AV>"
+        "<AI>0</AI><Nil /><PI>-1</PI><PC>-1</PC><T>Completed</T><SR>-1</SR><SD> </SD></PR></MS></Obj>"
+        "<Obj S=\"progress\" RefId=\"1\"><TNRef RefId=\"0\" /><MS><I64 N=\"SourceId\">2</I64><PR N=\"Record\">"
+        "<AV>Writing web request...</AV><AI>174593042</AI><Nil /><PI>-1</PI><PC>-1</PC><T>Processing</T>"
+        "<SR>-1</SR><SD> (Number of bytes written: 81920)</SD></PR></MS></Obj>"
+        "</Objs>\r\n"
+        "UPDATE_SCHEDULED:Windows agent upgrade queued; service restarting shortly."
+    )
+
+    cleaned = strip_clixml(raw_with_clixml)
+    assert "#< CLIXML" not in cleaned
+    assert "<Objs" not in cleaned
+    assert "UPDATE_SCHEDULED:Windows agent upgrade queued; service restarting shortly." == cleaned
+
+    # Formatted output should be clean, concise, and informative
+    formatted = format_update_output("JONAS-PC", "0.31.40", "v0.37.48", raw_with_clixml, via_native=False)
+    assert "#< CLIXML" not in formatted
+    assert "<Objs" not in formatted
+    assert ":package: *JONAS-PC* (`v0.31.40` → `v0.37.48`):" in formatted
+    assert ":white_check_mark: Update scheduled: Windows agent upgrade queued; service restarting shortly." in formatted
+
+    # Test error output formatting
+    err_formatted = format_update_output("JONAS-PC", "0.31.40", "v0.37.48", "ERROR:Download failed: HTTP 404", via_native=False)
+    assert ":x: Update failed: Download failed: HTTP 404" in err_formatted
+
+    # Test already up to date formatting
+    up2date_formatted = format_update_output("JONAS-PC", "0.37.48", "v0.37.48", "ALREADY_UP_TO_DATE: Running v0.37.48", via_native=True)
+    assert "already up to date" in up2date_formatted

@@ -102,6 +102,7 @@ def build_windows_update_script(download_url: str, tamper_protect: bool) -> str:
     clean_url = download_url.replace("'", "''")
     opt_flag = "" if tamper_protect else " --no-tamper-protect"
     return f"""$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 $url = '{clean_url}'
 $exePath = Join-Path $env:TEMP 'cmdiqo-agent-remote-setup.exe'
 $cmdPath = Join-Path $env:TEMP 'cmdiqo-agent-remote-upgrade.cmd'
@@ -162,6 +163,62 @@ fi
 echo 'UPDATE_SCHEDULED:Linux agent binary replaced; service restarting.'"""
 
 
+def strip_clixml(text: str) -> str:
+    """Strip PowerShell #< CLIXML progress/error XML serialization blocks from output."""
+    if not text:
+        return ""
+    if "#< CLIXML" not in text and "<Objs" not in text:
+        return text.strip()
+    clean = re.sub(r"#<\s*CLIXML[\r\n]+<Objs[\s\S]*?</Objs>[\r\n]*", "", text, flags=re.IGNORECASE)
+    lines = [
+        line for line in clean.splitlines()
+        if not (
+            line.strip().startswith(
+                ("#< CLIXML", "<Objs", "<Obj ", "</Objs>", "<MS>", "</MS>", "<PR ", "</PR>", "<AV>", "</AV>", "<T>", "</T>")
+            )
+            or "<AV>Writing web request" in line
+            or "System.Management.Automation.PSCustomObject" in line
+        )
+    ]
+    return "\n".join(lines).strip()
+
+
+def format_update_output(
+    host: str,
+    current_ver: str,
+    target_tag: str,
+    raw_output: str,
+    via_native: bool = False,
+) -> str:
+    """Format agent update command output into clean, readable Slack/terminal markdown."""
+    clean = strip_clixml(raw_output)
+    native_note = " via native updater" if via_native else ""
+    header = f":package: *{host}* (`v{current_ver}` → `{target_tag}`{native_note})"
+
+    if not clean:
+        return f"{header}:\n:white_check_mark: Update command dispatched successfully."
+
+    for line in clean.splitlines():
+        line_s = line.strip()
+        if "UPDATE_SCHEDULED:" in line_s:
+            msg = line_s.split("UPDATE_SCHEDULED:", 1)[1].strip()
+            detail = msg if msg else "Upgrade queued; service restarting shortly."
+            return f"{header}:\n:white_check_mark: Update scheduled: {detail}"
+        if "UPDATE_APPLIED:" in line_s:
+            msg = line_s.split("UPDATE_APPLIED:", 1)[1].strip()
+            detail = msg if msg else "Agent binary replaced; restarting service."
+            return f"{header}:\n:white_check_mark: Update applied: {detail}"
+        if "ALREADY_UP_TO_DATE:" in line_s:
+            msg = line_s.split("ALREADY_UP_TO_DATE:", 1)[1].strip()
+            detail = msg if msg else f"`v{current_ver}` vs `{target_tag}`"
+            return f":white_check_mark: Agent `{host}` is already up to date ({detail})."
+        if "ERROR:" in line_s:
+            msg = line_s.split("ERROR:", 1)[1].strip()
+            return f"{header}:\n:x: Update failed: {msg}"
+
+    return f"{header}:\n{clean}"
+
+
 async def _update_single_host(
     host: str,
     action: str,
@@ -212,7 +269,7 @@ async def _update_single_host(
 
     if update_capable and hasattr(hub, "update_agent"):
         raw = await hub.update_agent(host, version=target_ver, url=download_url, timeout=180)
-        return f"🔄 *{host}* (`v{current_ver}` → `{tag}` via native updater):\n{raw}"
+        return format_update_output(host, current_ver, tag, raw, via_native=True)
 
     if canonical_arch == "win64":
         script = build_windows_update_script(download_url, tamper_protect)
@@ -220,7 +277,7 @@ async def _update_single_host(
     else:
         script = build_linux_update_script(download_url)
         raw = await hub.exec(host, "shell", script, timeout=180)
-    return f"🔄 *{host}* (`v{current_ver}` → `{tag}`):\n{raw}"
+    return format_update_output(host, current_ver, tag, raw, via_native=False)
 
 
 async def manage_update(
