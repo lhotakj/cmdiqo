@@ -37,9 +37,13 @@
     Opt out of Windows Service tamper protection (allows local Administrators to
     stop, disable, or delete the service directly from services.msc / sc.exe).
 
+.PARAMETER AutoUpdate
+    Enable periodic automatic self-update from GitHub Releases (default: disabled).
+
 .EXAMPLE
     .\install-service.ps1 -HubUrl "ws://192.168.1.10:8765" -Token "my-secret-token" -Name "WIN-PC"
     .\install-service.ps1 -NoTamperProtect
+    .\install-service.ps1 -AutoUpdate
     .\install-service.ps1 -Uninstall
 #>
 
@@ -68,7 +72,9 @@ param(
 
     [switch]$Uninstall,
 
-    [switch]$NoTamperProtect
+    [switch]$NoTamperProtect,
+
+    [switch]$AutoUpdate
 )
 
 $ErrorActionPreference = "Stop"
@@ -251,6 +257,7 @@ $ConfigData = @{
     reconnect_delay         = 5.0
     agent_connection_notify = $AgentConnectionNotifyBool
     tamper_protect          = (-not $NoTamperProtect)
+    auto_update             = [bool]$AutoUpdate
 } | ConvertTo-Json -Depth 3
 
 [IO.File]::WriteAllText($ConfigFile, $ConfigData, (New-Object System.Text.UTF8Encoding($false)))

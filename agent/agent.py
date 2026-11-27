@@ -116,6 +116,7 @@ class AgentConfig:
     reconnect_delay: float = 5.0
     agent_connection_notify: bool = True
     tamper_protect: bool = False
+    auto_update: bool = False
 
     @classmethod
     def from_env(cls) -> AgentConfig:
@@ -173,6 +174,18 @@ class AgentConfig:
             action="store_true",
             dest="allow_service_stop",
             help="Allow local SCM STOP controls (opt out of Windows service tamper protection)",
+        )
+        parser.add_argument(
+            "--auto-update",
+            action="store_true",
+            default=False,
+            help="Automatically check and install agent updates from GitHub Releases",
+        )
+        parser.add_argument(
+            "--no-auto-update",
+            action="store_true",
+            default=False,
+            help="Disable automatic agent updates",
         )
 
         parsed, _ = parser.parse_known_args(args if args is not None else sys.argv[1:])
@@ -282,6 +295,24 @@ class AgentConfig:
         else:
             tamper_protect = False
 
+        auto_update_env = os.environ.get("AUTO_UPDATE")
+        if parsed.no_auto_update:
+            auto_update = False
+        elif parsed.auto_update:
+            auto_update = True
+        elif auto_update_env is not None:
+            auto_update = auto_update_env.strip().lower() in ("true", "1", "yes", "on")
+        elif "auto_update" in file_cfg:
+            raw_au = file_cfg["auto_update"]
+            if isinstance(raw_au, bool):
+                auto_update = raw_au
+            elif isinstance(raw_au, int):
+                auto_update = raw_au != 0
+            else:
+                auto_update = str(raw_au).strip().lower() in ("true", "1", "yes", "on")
+        else:
+            auto_update = False
+
         name = (
             parsed.name
             or os.environ.get("AGENT_NAME")
@@ -295,6 +326,7 @@ class AgentConfig:
             reconnect_delay=reconnect_delay,
             agent_connection_notify=agent_notify,
             tamper_protect=tamper_protect,
+            auto_update=auto_update,
         )
 
 
@@ -342,13 +374,164 @@ async def execute(msg: dict[str, Any]) -> tuple[bool, int | None, str, str | Non
         return False, 1, "", f"OS error: {exc}"
 
 
-async def handle(ws: Any, raw: str) -> None:
+async def perform_self_update_py(
+    config: AgentConfig,
+    target_version: str = "latest",
+    explicit_url: str = "",
+) -> tuple[bool, bool, str]:
+    """Check/download/stage agent self-update (mirrors native C++ updater)."""
+    import re
+    import tempfile
+    import urllib.request
+    from pathlib import Path
+
+    def _parse_ver(v: str) -> tuple[int, int, int] | None:
+        clean = (v or "").strip().lstrip("vV")
+        m = re.match(r"^(\d+)\.(\d+)\.(\d+)", clean)
+        if m:
+            return int(m.group(1)), int(m.group(2)), int(m.group(3))
+        m_dev = re.match(r"^(\d+)\.(\d+)\.devel(?:\+|$)", clean)
+        if m_dev:
+            return int(m_dev.group(1)), int(m_dev.group(2)), -1
+        return None
+
+    def _fetch_url_bytes(url: str, headers: dict[str, str], req_timeout: int) -> bytes:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=req_timeout) as resp:  # nosec: B310
+            return bytes(resp.read())
+
+    current_ver = get_version()
+    resolved_ver = "" if target_version in ("", "latest") else target_version
+    download_url = explicit_url.strip()
+
+    if not download_url:
+        api_url = "https://api.github.com/repos/lhotakj/cmdiqo/releases/latest"
+        if resolved_ver:
+            tag = resolved_ver if resolved_ver.lower().startswith("v") else f"v{resolved_ver}"
+            api_url = f"https://api.github.com/repos/lhotakj/cmdiqo/releases/tags/{tag}"
+        raw_rel = await asyncio.to_thread(
+            _fetch_url_bytes,
+            api_url,
+            {"Accept": "application/vnd.github+json", "User-Agent": "cmdiqo-agent-updater"},
+            20,
+        )
+        rel = json.loads(raw_rel.decode("utf-8"))
+        tag_name = str(rel.get("tag_name", "")).strip()
+        if not resolved_ver and tag_name:
+            resolved_ver = tag_name
+        arch = get_agent_arch()
+        asset_name = {
+            "win64": "cmdiqo-agent-windows-x64-setup.exe",
+            "arm64": "cmdiqo-agent-linux-arm64",
+            "armv6": "cmdiqo-agent-linux-armv6",
+        }.get(arch, "cmdiqo-agent")
+        for a in rel.get("assets", []):
+            if isinstance(a, dict) and a.get("name") == asset_name:
+                download_url = str(a.get("browser_download_url", ""))
+                break
+
+    if not download_url.startswith("https://"):
+        return False, False, "Missing or invalid HTTPS release download URL."
+
+    cur_t = _parse_ver(current_ver)
+    tgt_t = _parse_ver(resolved_ver)
+    if target_version in ("", "latest") and cur_t and tgt_t and tgt_t <= cur_t:
+        return True, False, f"ALREADY_UP_TO_DATE: Running v{current_ver} (latest is {resolved_ver})."
+
+    data = await asyncio.to_thread(
+        _fetch_url_bytes,
+        download_url,
+        {"User-Agent": "cmdiqo-agent-updater"},
+        120,
+    )
+    if len(data) < 102400:
+        return False, False, f"Downloaded binary too small ({len(data)} bytes)."
+
+    if IS_WINDOWS:
+        if data[:2] != b"MZ":
+            return False, False, "Downloaded setup executable failed MZ header check."
+        tmp_dir = Path(tempfile.gettempdir())
+        setup_exe = tmp_dir / "cmdiqo-agent-self-update.exe"
+        helper_cmd = tmp_dir / "cmdiqo-agent-self-update.cmd"
+        setup_exe.write_bytes(data)
+        extra = " --no-tamper-protect" if not config.tamper_protect else ""
+        if config.auto_update:
+            extra += " --auto-update"
+        helper_cmd.write_text(
+            f'@echo off\r\nping -n 3 127.0.0.1 >nul\r\n"{setup_exe}" --cli --upgrade{extra}\r\n'
+            f'del /f /q "{setup_exe}" "{helper_cmd}"\r\n',
+            encoding="utf-8",
+        )
+        task_name = f"CmdiqoAgentSelfUpdate-{os.getpid()}"
+        ps = (
+            "$ErrorActionPreference = 'Stop'; "
+            f"$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument '/c \"{helper_cmd}\"'; "
+            "$principal = New-ScheduledTaskPrincipal -UserId 'NT AUTHORITY\\SYSTEM' -LogonType ServiceAccount -RunLevel Highest; "
+            "$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; "
+            f"Register-ScheduledTask -TaskName '{task_name}' -Action $action -Principal $principal -Settings $settings -Force | Out-Null; "
+            f"Start-ScheduledTask -TaskName '{task_name}'"
+        )
+        ok, code, out, err = await execute({"kind": "ps1", "cmd": ps, "timeout": 30})
+        if not ok:
+            return False, False, f"Failed scheduling upgrade task: {err or out} (code={code})"
+        return True, False, f"UPDATE_SCHEDULED: Windows upgrade ({current_ver} -> {resolved_ver or target_version}) queued."
+
+    if data[:4] != b"\x7fELF":
+        return False, False, "Downloaded Linux binary failed ELF header check."
+    bin_dest = Path(sys.executable if getattr(sys, "frozen", False) else "/usr/local/bin/cmdiqo-agent")
+    tmp_bin = Path(f"{bin_dest}.new.{os.getpid()}")
+    tmp_bin.write_bytes(data)
+    os.chmod(tmp_bin, 0o755)
+    ok, _code, out, err = await execute({"kind": "shell", "cmd": f"'{tmp_bin}' --version", "timeout": 10})
+    if not ok:
+        tmp_bin.unlink(missing_ok=True)
+        return False, False, f"Downloaded binary failed --version check: {err or out}"
+    os.replace(tmp_bin, bin_dest)
+    return True, True, f"UPDATE_APPLIED: Replaced binary ({current_ver} -> {resolved_ver or target_version}); restarting."
+
+
+async def handle(
+    ws: Any,
+    raw: str,
+    config: AgentConfig | None = None,
+    stop_event: threading.Event | None = None,
+) -> None:
     """Handle a raw message received from the hub."""
     try:
         msg = json.loads(raw)
     except (ValueError, TypeError):
         return
-    if not isinstance(msg, dict) or msg.get("type") != "exec":
+    if not isinstance(msg, dict):
+        return
+
+    msg_type = msg.get("type")
+    if msg_type == "update":
+        req_id = str(msg.get("id", "?"))
+        ver = str(msg.get("version", "latest"))
+        url = str(msg.get("url", ""))
+        cfg = config or AgentConfig(hub_url="", token="", name="")
+        try:
+            ok, restart_needed, out_msg = await perform_self_update_py(cfg, ver, url)
+        except Exception as exc:  # noqa: BLE001
+            ok, restart_needed, out_msg = False, False, f"Update error: {exc}"
+        await ws.send(
+            json.dumps(
+                {
+                    "id": req_id,
+                    "type": "result",
+                    "ok": ok,
+                    "code": 0 if ok else 1,
+                    "output": out_msg,
+                    "error": None if ok else out_msg,
+                }
+            )
+        )
+        if ok and restart_needed and stop_event is not None:
+            await asyncio.sleep(1.0)
+            stop_event.set()
+        return
+
+    if msg_type != "exec":
         return
 
     req_id = str(msg.get("id", "?"))
@@ -427,68 +610,100 @@ async def run_agent(
         config.name,
     )
 
-    delay = config.reconnect_delay
-    while not (stop_event and stop_event.is_set()):
-        try:
-            async with connect(config.hub_url, config.token) as ws:
-                execution_tasks: set[asyncio.Task[None]] = set()
-
-                def _log_task_failure(
-                    task: asyncio.Task[None],
-                    tasks: set[asyncio.Task[None]] = execution_tasks,
-                ) -> None:
-                    tasks.discard(task)
-                    if task.cancelled():
-                        return
-                    exc = task.exception()
-                    if exc is not None:
-                        log.error(
-                            "Execution request handler failed",
-                            exc_info=(type(exc), exc, exc.__traceback__),
-                        )
-
-                await ws.send(
-                    json.dumps(
-                        {
-                            "type": "hello",
-                            "name": config.name,
-                            "version": get_version(),
-                            "platform": f"{platform.system()}/{platform.release()}",
-                            "arch": get_agent_arch(),
-                            "agent_connection_notify": config.agent_connection_notify,
-                            "tamper_protect": config.tamper_protect,
-                        }
-                    )
-                )
-                log.info(
-                    "Connected to %s as '%s' (v%s)",
-                    config.hub_url,
-                    config.name,
-                    get_version(),
-                )
-                delay = config.reconnect_delay  # reset delay on successful connection
-                try:
-                    while not (stop_event and stop_event.is_set()):
-                        try:
-                            raw = await asyncio.wait_for(ws.recv(), timeout=1.0)
-                            task = asyncio.create_task(handle(ws, raw))
-                            execution_tasks.add(task)
-                            task.add_done_callback(_log_task_failure)
-                        except TimeoutError:
-                            continue
-                finally:
-                    for task in tuple(execution_tasks):
-                        task.cancel()
-                    await asyncio.gather(*execution_tasks, return_exceptions=True)
-        except (websockets.ConnectionClosed, OSError, TimeoutError) as exc:
+    async def _auto_update_loop() -> None:
+        initial_delay = 30.0
+        interval = 6 * 3600.0
+        wait = initial_delay
+        while not (stop_event and stop_event.is_set()):
+            slept = 0.0
+            while slept < wait and not (stop_event and stop_event.is_set()):
+                await asyncio.sleep(min(1.0, wait - slept))
+                slept += 1.0
             if stop_event and stop_event.is_set():
                 break
-            log.warning("Connection lost: %s; retrying in %.1fs", exc, delay)
-            slept = 0.0
-            while slept < delay and not (stop_event and stop_event.is_set()):
-                await asyncio.sleep(min(0.5, delay - slept))
-                slept += 0.5
-            delay = min(60.0, delay * 1.5)  # exponential backoff with ceiling
+            try:
+                ok, restart_needed, out_msg = await perform_self_update_py(config, "latest", "")
+                log.info("Auto-update check result: %s", out_msg)
+                if ok and restart_needed and stop_event is not None:
+                    stop_event.set()
+                    break
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Auto-update check failed: %s", exc)
+            wait = interval
+
+    auto_update_task = asyncio.create_task(_auto_update_loop()) if config.auto_update else None
+
+    try:
+        delay = config.reconnect_delay
+        while not (stop_event and stop_event.is_set()):
+            try:
+                async with connect(config.hub_url, config.token) as ws:
+                    execution_tasks: set[asyncio.Task[None]] = set()
+
+                    def _log_task_failure(
+                        task: asyncio.Task[None],
+                        tasks: set[asyncio.Task[None]] = execution_tasks,
+                    ) -> None:
+                        tasks.discard(task)
+                        if task.cancelled():
+                            return
+                        exc = task.exception()
+                        if exc is not None:
+                            log.error(
+                                "Execution request handler failed",
+                                exc_info=(type(exc), exc, exc.__traceback__),
+                            )
+
+                    await ws.send(
+                        json.dumps(
+                            {
+                                "type": "hello",
+                                "name": config.name,
+                                "version": get_version(),
+                                "platform": f"{platform.system()}/{platform.release()}",
+                                "arch": get_agent_arch(),
+                                "agent_connection_notify": config.agent_connection_notify,
+                                "tamper_protect": config.tamper_protect,
+                                "auto_update": config.auto_update,
+                                "update_capable": True,
+                            }
+                        )
+                    )
+                    log.info(
+                        "Connected to %s as '%s' (v%s)",
+                        config.hub_url,
+                        config.name,
+                        get_version(),
+                    )
+                    delay = config.reconnect_delay  # reset delay on successful connection
+                    try:
+                        while not (stop_event and stop_event.is_set()):
+                            try:
+                                raw = await asyncio.wait_for(ws.recv(), timeout=1.0)
+                                task = asyncio.create_task(
+                                    handle(ws, raw, config=config, stop_event=stop_event)
+                                )
+                                execution_tasks.add(task)
+                                task.add_done_callback(_log_task_failure)
+                            except TimeoutError:
+                                continue
+                    finally:
+                        for task in tuple(execution_tasks):
+                            task.cancel()
+                        await asyncio.gather(*execution_tasks, return_exceptions=True)
+            except (websockets.ConnectionClosed, OSError, TimeoutError) as exc:
+                if stop_event and stop_event.is_set():
+                    break
+                log.warning("Connection lost: %s; retrying in %.1fs", exc, delay)
+                slept = 0.0
+                while slept < delay and not (stop_event and stop_event.is_set()):
+                    await asyncio.sleep(min(0.5, delay - slept))
+                    slept += 0.5
+                delay = min(60.0, delay * 1.5)  # exponential backoff with ceiling
+    finally:
+        if auto_update_task is not None:
+            auto_update_task.cancel()
+            await asyncio.gather(auto_update_task, return_exceptions=True)
 
 
 def format_preflight_error(issues: list[tuple[str, str, str]]) -> str:

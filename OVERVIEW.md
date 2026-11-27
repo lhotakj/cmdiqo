@@ -106,12 +106,26 @@ sequenceDiagram
      "platform": "windows",
      "arch": "x86_64",
      "agent_connection_notify": false,
-     "tamper_protect": true
+     "tamper_protect": true,
+     "auto_update": false,
+     "update_capable": true
    }
    ```
    *(If `"tamper_protect"` is omitted in a legacy `< 0.34` `config.json`, the agent reports `false`.)*
 4. **Registration**:
-   - Hub stores the WebSocket reference, version, platform, arch, `tamper_protect`, remote IP, and connection timestamp in `self.agents["PC-OLO"]`. Slack `/lan agents list` renders `🛡️` next to protected hosts.
+   - Hub stores the WebSocket reference, version, platform, arch, `tamper_protect`, `auto_update`, `update_capable`, remote IP, and connection timestamp in `self.agents["PC-OLO"]`. Slack `/lan agents list` renders `🛡️` next to protected hosts.
+
+### Remote Update Message Schema (`Hub` $\rightarrow$ `Agent`)
+```json
+{
+  "id": "a1b2c3d4e5f67890123456789abcdef0",
+  "type": "update",
+  "version": "0.37.0",
+  "url": "https://github.com/lhotakj/cmdiqo/releases/download/v0.37.0/cmdiqo-agent-windows-x64-setup.exe",
+  "timeout": 180
+}
+```
+> **Direct Host Download & Future Tunneling:** Agents download release assets directly from GitHub Releases (verifying binary headers and `--cli --upgrade` / `--version` without requiring `CHECKSUMS.txt`). On Windows, upgrades execute via a detached `NT AUTHORITY\SYSTEM` Scheduled Task so `cmdiqo-agent-windows-x64-setup.exe --cli --upgrade` escapes the Win32 Job Object and cleanly handles Tamper-Protect (`kControlAuthorizedStop = 135`). *Future planned option:* tunneled downloads through the Hub container for agents without direct internet access.
 
 ### Execution Message Schema (`Hub` $\rightarrow$ `Agent`)
 ```json
@@ -163,6 +177,8 @@ Commands defined in `config/commands.yaml` (under `aliases:` and `commands:`) ar
 | `/lan wake {target}` | `python` | Local | Bot Container | UDP Broadcast Magic Packet (`commands.devices:send_wake_on_lan`) |
 | `/lan ping {host}` | `python` | Local | Bot Container | Local ping utility (`commands.devices:ping_host`) |
 | `/lan agents list` | `internal` | Local | Hub Registry | Lists connected agents, OS platform, and remote addresses |
+| `/lan agents update [{action}]` | `python` | All Connected | Hub / Agents | Checks or updates all connected agents directly from GitHub Releases (`commands.update:manage_update`) |
+| `/host {host} update [{action}]` | `python` | `{host}` | Host / Agent | Remote check (`status`/`check`) or self-update via native `update` message or legacy script fallback |
 | `/host {host} users` | `python` | `{host}` | Host / Agent | Local user accounts & status inspection (Win & Linux) |
 | `/host {host} user {user} {action}` | `python` | `{host}` | Host / Agent | User account status / enable / disable (auto-refreshes Windows `LogonUI.exe` on lock screen) |
 | `/host {host} poweruser {user} {action}` | `python` | `{host}` | Host / Agent | Surgical Linux `/etc/sudoers` or Windows `Administrators` grant/revoke (`sudo` / `administrator` aliases; `enable`/`add`, `disable`/`remove`, `status`) |

@@ -2145,6 +2145,17 @@
               inputPlaceholder: 'e.g. nginx, smbd, Spooler',
               inputPrefix: 'service restart',
               submitLabel: 'Restart'
+            },
+            {
+              cmd: 'update status',
+              label: 'Check Agent Update',
+              desc: 'Compare installed agent version against latest GitHub release'
+            },
+            {
+              cmd: 'update',
+              label: 'Update Agent (Latest)',
+              desc: 'Download and install latest Cmdiqo agent release on host',
+              danger: true
             }
           ]
         },

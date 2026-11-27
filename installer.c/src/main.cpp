@@ -43,6 +43,7 @@ struct Options {
     bool notify_specified{false};
     bool notify{false};
     bool no_tamper_protect{false};
+    std::optional<bool> auto_update;
     bool help{false};
     std::optional<std::string> hub_url;
     std::optional<std::string> token;
@@ -71,6 +72,8 @@ void print_usage(std::ostream& output) {
         << "Configuration options:\n"
         << "  --hub URL (or --hub-url) --token TOKEN --name NAME --notify | --no-notify\n"
         << "  --no-tamper-protect       Allow local Windows SCM stop/disable/delete controls (opt-out)\n"
+        << "  --auto-update | --no-auto-update\n"
+        << "                            Enable or disable automatic agent updates from GitHub Releases\n"
         << "  --config PATH             Read JSON configuration instead of placing a token on the command line\n"
         << "  --payload PATH            Must be the exact platform payload filename\n\n"
         << "System-changing actions require Administrator/root privileges. The GUI requests Windows UAC\n"
@@ -134,6 +137,10 @@ std::optional<Options> parse_options(int argc, char** argv, std::string& error) 
             options.notify = false;
         } else if (option == "--no-tamper-protect" || option == "--allow-service-stop") {
             options.no_tamper_protect = true;
+        } else if (option == "--auto-update") {
+            options.auto_update = true;
+        } else if (option == "--no-auto-update") {
+            options.auto_update = false;
         } else if ((option == "--hub" || option == "--hub-url") && needs_value(index, argc, option.c_str(), error)) {
             options.hub_url = argv[++index];
         } else if ((option == "--token" || option == "--agent-token") && needs_value(index, argc, option.c_str(), error)) {
@@ -202,6 +209,9 @@ Config configured_values(const Options& options, const InstallerPaths& paths, st
     }
     if (options.notify_specified) {
         config.agent_connection_notify = options.notify;
+    }
+    if (options.auto_update.has_value()) {
+        config.auto_update = *options.auto_update;
     }
     return config;
 }
@@ -305,6 +315,9 @@ int run_cli(const Options& options) {
         if (options.notify_specified) {
             config.agent_connection_notify = options.notify;
         }
+        if (options.auto_update.has_value()) {
+            config.auto_update = *options.auto_update;
+        }
 
         if (config.token.empty()) {
             constexpr const char* msg = "AGENT_TOKEN cannot be empty.";
@@ -344,7 +357,7 @@ int run_cli(const Options& options) {
     };
     OperationResult result;
     if (options.upgrade) {
-        result = service.upgrade(options.payload, progress, options.config, !options.no_tamper_protect);
+        result = service.upgrade(options.payload, progress, options.config, !options.no_tamper_protect, options.auto_update);
     } else if (options.install) {
         std::string error;
         Config config;
@@ -369,6 +382,7 @@ int run_cli(const Options& options) {
             if (options.token) config.token = *options.token;
             if (options.agent_name) config.agent_name = *options.agent_name;
             if (options.notify_specified) config.agent_connection_notify = options.notify;
+            if (options.auto_update.has_value()) config.auto_update = *options.auto_update;
         } else {
             config = configured_values(options, service.paths(), error);
             if (!error.empty()) {
@@ -388,7 +402,7 @@ int run_cli(const Options& options) {
             write_result_file(OperationResult::failure(err));
             return 2;
         }
-        result = service.install_or_upgrade(config, options.payload, progress, !options.no_tamper_protect);
+        result = service.install_or_upgrade(config, options.payload, progress, !options.no_tamper_protect, options.auto_update);
     } else if (options.uninstall) {
         result = service.uninstall(options.purge, progress);
     } else if (options.start) {

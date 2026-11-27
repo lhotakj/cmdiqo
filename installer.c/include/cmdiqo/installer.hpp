@@ -38,6 +38,7 @@ struct Config {
 #else
     bool tamper_protect{false};
 #endif
+    bool auto_update{false};
 };
 
 struct Endpoint {
@@ -136,12 +137,14 @@ public:
         const Config& config,
         const std::optional<std::filesystem::path>& explicit_payload = std::nullopt,
         const ProgressCallback& progress = {},
-        bool tamper_protect = true);
+        bool tamper_protect = true,
+        std::optional<bool> auto_update_override = std::nullopt);
     OperationResult upgrade(
         const std::optional<std::filesystem::path>& explicit_payload = std::nullopt,
         const ProgressCallback& progress = {},
         const std::optional<std::filesystem::path>& custom_config = std::nullopt,
-        bool tamper_protect = true);
+        bool tamper_protect = true,
+        std::optional<bool> auto_update_override = std::nullopt);
     OperationResult uninstall(bool purge_config, const ProgressCallback& progress = {});
 
 private:

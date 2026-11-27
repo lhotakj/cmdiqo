@@ -172,6 +172,14 @@ def test_load_commands_valid_file():
     assert "direct-blockapp-query" in specs_by_name
     assert "direct-blockapp-all" in specs_by_name
 
+    # Verify remote agent update commands
+    assert "host-agent-update-arg" in specs_by_name
+    assert "host-agent-update" in specs_by_name
+    assert "lan-agents-update-arg" in specs_by_name
+    assert "lan-agents-update" in specs_by_name
+    assert specs_by_name["host-agent-update"]["command"]["python"] == "commands.update:manage_update"
+    assert specs_by_name["lan-agents-update"]["command"]["python"] == "commands.update:manage_update"
+
 
 def test_load_commands_nonexistent_file():
     commands = load_commands("config/nonexistent_commands.yaml")

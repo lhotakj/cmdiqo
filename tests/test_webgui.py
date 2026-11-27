@@ -444,6 +444,8 @@ class TestWebGui(unittest.TestCase):
         self.assertIn("poweruser-status-btn", html)
         self.assertIn("poweruser-enable-btn", html)
         self.assertIn("poweruser-disable-btn", html)
+        self.assertIn("Check Agent Update", html)
+        self.assertIn("Update Agent (Latest)", html)
 
         # 5. Verify Terminal rich formatting & emoji styling
         self.assertIn("formatSlackToHtml", html)

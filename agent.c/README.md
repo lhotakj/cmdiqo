@@ -74,6 +74,8 @@ $$\text{CLI Flags} > \text{Environment Variables} > \text{JSON Configuration Fil
 | `--agent-connection-notify` | — | Notify Slack when agent connects/disconnects | `false` |
 | `--service` | — | Run as Windows Service under SCM (Windows only) | `false` |
 | `--no-tamper-protect` | — | Opt out of Windows Service stop/DACL tamper protection (`--allow-service-stop` alias) | `false` |
+| `--auto-update` | — | Periodically check and install newer GitHub Releases automatically | `false` |
+| `--no-auto-update` | — | Disable automatic agent updates | — |
 
 ### 3.3 Environment Variables
 - `HUB_URL`: WebSocket endpoint (e.g. `ws://192.168.1.10:8765`).
@@ -82,6 +84,7 @@ $$\text{CLI Flags} > \text{Environment Variables} > \text{JSON Configuration Fil
 - `AGENT_CONFIG`: Path to JSON configuration file.
 - `RECONNECT_DELAY`: Float reconnect delay in seconds (e.g. `5.0`).
 - `AGENT_CONNECTION_NOTIFY`: Boolean (`true`, `1`, `yes`, `on`).
+- `AUTO_UPDATE`: Boolean (`true`, `1`, `yes`, `on`; opt-in periodic self-update).
 - `LOG_LEVEL`: Verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`).
 
 ### 3.4 JSON Configuration File (`agent.json` / `config.json`)
@@ -92,7 +95,8 @@ $$\text{CLI Flags} > \text{Environment Variables} > \text{JSON Configuration Fil
   "name": "AMD-Desktop",
   "reconnect_delay": 5.0,
   "agent_connection_notify": true,
-  "tamper_protect": true
+  "tamper_protect": true,
+  "auto_update": false
 }
 ```
 *(Legacy `< 0.34` configs omitting `"tamper_protect"` default telemetry to `false`.)*
@@ -110,7 +114,21 @@ Sent immediately after WebSocket handshake:
   "version": "1.0.0",
   "platform": "Windows/10.0",
   "agent_connection_notify": true,
-  "tamper_protect": true
+  "tamper_protect": true,
+  "auto_update": false,
+  "update_capable": true
+}
+```
+
+### 4.1b Remote Update Request (`type: "update"`)
+Dispatched by the Hub to `update_capable` agents for direct host download from GitHub Releases (future releases may also support tunneled downloads proxied through the Hub):
+```json
+{
+  "id": "c1f7b880-994b-486a-bc12-f470a1a09d3b",
+  "type": "update",
+  "version": "0.37.0",
+  "url": "https://github.com/lhotakj/cmdiqo/releases/download/v0.37.0/cmdiqo-agent-windows-x64-setup.exe",
+  "timeout": 180
 }
 ```
 

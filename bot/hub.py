@@ -208,6 +208,8 @@ class Hub:
             "platform": str(hello.get("platform", "?")),
             "arch": arch,
             "tamper_protect": bool(hello.get("tamper_protect", False)),
+            "auto_update": bool(hello.get("auto_update", False)),
+            "update_capable": bool(hello.get("update_capable", False)),
             "since": time.strftime("%Y-%m-%d %H:%M:%S"),
             "addr": addr,
             "hello": hello,
@@ -263,6 +265,8 @@ class Hub:
                     "platform": str(i.get("platform", "?")),
                     "arch": str(i.get("arch") or (i.get("hello", {}).get("arch", "?") if isinstance(i.get("hello"), dict) else "?")),
                     "tamper_protect": bool(i.get("tamper_protect", False)),
+                    "auto_update": bool(i.get("auto_update", False)),
+                    "update_capable": bool(i.get("update_capable", False)),
                     "since": str(i.get("since", "")),
                     "addr": str(i.get("addr", "")),
                 }
@@ -289,6 +293,38 @@ class Hub:
             try:
                 output = await self.exec(
                     name=name, kind=kind, cmd=cmd, cwd=cwd, timeout=timeout
+                )
+                await ws.send(
+                    json.dumps(
+                        {
+                            "id": req_id,
+                            "type": "exec_result",
+                            "ok": True,
+                            "output": output,
+                        }
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001
+                await ws.send(
+                    json.dumps(
+                        {
+                            "id": req_id,
+                            "type": "exec_result",
+                            "ok": False,
+                            "error": str(exc),
+                        }
+                    )
+                )
+            return
+
+        if msg_type == "update_agent":
+            name = str(msg.get("name", ""))
+            version = str(msg.get("version", "latest"))
+            url = str(msg.get("url", ""))
+            timeout = int(msg.get("timeout") or 180)
+            try:
+                output = await self.update_agent(
+                    name=name, version=version, url=url, timeout=timeout
                 )
                 await ws.send(
                     json.dumps(
@@ -362,55 +398,8 @@ class Hub:
         return f"{preview} ({len(lines)} lines)"
 
     # ------------------------------------------------------------------ exec
-    async def exec(
-        self,
-        name: str,
-        kind: str,
-        cmd: str,
-        cwd: str | None = None,
-        timeout: int = 120,
-    ) -> str:
-        """Send an execution request to an agent and await the response."""
-        agent = self.agents.get(name)
-        if agent is None:
-            connected = ", ".join(sorted(self.agents)) or "(none)"
-            raise RuntimeError(
-                f"agent '{name}' is not connected. Connected agents: {connected}"
-            )
-
-        req_id = uuid.uuid4().hex
-        fut = asyncio.get_running_loop().create_future()
-        self.pending[req_id] = fut
-        self.pending_agents[req_id] = name
-
-        log.info(
-            "[%s] Dispatching %s command to agent '%s': %s (timeout=%ds, cwd=%s)",
-            req_id[:8],
-            kind,
-            name,
-            self._summarize_cmd_for_log(cmd),
-            timeout,
-            cwd or "(default)",
-        )
-
-        try:
-            await agent["ws"].send(
-                json.dumps(
-                    {
-                        "id": req_id,
-                        "type": "exec",
-                        "kind": kind,
-                        "cmd": cmd,
-                        "cwd": cwd,
-                        "timeout": timeout,
-                    }
-                )
-            )
-            msg = await asyncio.wait_for(fut, timeout=timeout + 30)
-        finally:
-            self.pending.pop(req_id, None)
-            self.pending_agents.pop(req_id, None)
-
+    @staticmethod
+    def _format_agent_response(msg: dict[str, Any]) -> str:
         output = (msg.get("output") or "").strip()
         code = msg.get("code")
         if not output:
@@ -422,6 +411,90 @@ class Hub:
                 err = msg.get("error") or "command returned failure"
                 output = f"(failed: {err})"
         return output
+
+    async def _dispatch_agent_request(
+        self, name: str, payload: dict[str, Any], timeout: int
+    ) -> str:
+        """Dispatch a request frame to a connected agent and await its ResultResponse."""
+        agent = self.agents.get(name)
+        if agent is None:
+            connected = ", ".join(sorted(self.agents)) or "(none)"
+            raise RuntimeError(
+                f"agent '{name}' is not connected. Connected agents: {connected}"
+            )
+
+        req_id = str(payload["id"])
+        fut = asyncio.get_running_loop().create_future()
+        self.pending[req_id] = fut
+        self.pending_agents[req_id] = name
+
+        try:
+            await agent["ws"].send(json.dumps(payload))
+            msg = await asyncio.wait_for(fut, timeout=timeout + 30)
+        finally:
+            self.pending.pop(req_id, None)
+            self.pending_agents.pop(req_id, None)
+
+        return self._format_agent_response(msg)
+
+    async def exec(
+        self,
+        name: str,
+        kind: str,
+        cmd: str,
+        cwd: str | None = None,
+        timeout: int = 120,
+    ) -> str:
+        """Send an execution request to an agent and await the response."""
+        req_id = uuid.uuid4().hex
+        log.info(
+            "[%s] Dispatching %s command to agent '%s': %s (timeout=%ds, cwd=%s)",
+            req_id[:8],
+            kind,
+            name,
+            self._summarize_cmd_for_log(cmd),
+            timeout,
+            cwd or "(default)",
+        )
+        return await self._dispatch_agent_request(
+            name,
+            {
+                "id": req_id,
+                "type": "exec",
+                "kind": kind,
+                "cmd": cmd,
+                "cwd": cwd,
+                "timeout": timeout,
+            },
+            timeout=timeout,
+        )
+
+    async def update_agent(
+        self,
+        name: str,
+        version: str = "latest",
+        url: str = "",
+        timeout: int = 180,
+    ) -> str:
+        """Send a native remote-update request to a capable agent."""
+        req_id = uuid.uuid4().hex
+        log.info(
+            "[%s] Dispatching native update to agent '%s' (version=%s)",
+            req_id[:8],
+            name,
+            version,
+        )
+        return await self._dispatch_agent_request(
+            name,
+            {
+                "id": req_id,
+                "type": "update",
+                "version": version,
+                "url": url,
+                "timeout": timeout,
+            },
+            timeout=timeout,
+        )
 
     def agents_table(self) -> str:
         """Format connected agents as a clean ASCII table."""
@@ -582,27 +655,48 @@ class RemoteHubClient:
         timeout: int = 120,
     ) -> str:
         """Send an execution request through Hub to target agent."""
+        return await self._send_client_request(
+            {
+                "type": "exec",
+                "name": name,
+                "kind": kind,
+                "cmd": cmd,
+                "cwd": cwd,
+                "timeout": timeout,
+            },
+            timeout=timeout,
+        )
+
+    async def update_agent(
+        self,
+        name: str,
+        version: str = "latest",
+        url: str = "",
+        timeout: int = 180,
+    ) -> str:
+        """Send a native remote-update request through Hub to target agent."""
+        return await self._send_client_request(
+            {
+                "type": "update_agent",
+                "name": name,
+                "version": version,
+                "url": url,
+                "timeout": timeout,
+            },
+            timeout=timeout,
+        )
+
+    async def _send_client_request(self, payload: dict[str, Any], timeout: int) -> str:
         if not self._running or self._ws is None:
             raise RuntimeError("Not connected to Hub server.")
 
         req_id = uuid.uuid4().hex
+        payload["id"] = req_id
         fut = asyncio.get_running_loop().create_future()
         self._pending[req_id] = fut
 
         try:
-            await self._ws.send(
-                json.dumps(
-                    {
-                        "id": req_id,
-                        "type": "exec",
-                        "name": name,
-                        "kind": kind,
-                        "cmd": cmd,
-                        "cwd": cwd,
-                        "timeout": timeout,
-                    }
-                )
-            )
+            await self._ws.send(json.dumps(payload))
             resp = await asyncio.wait_for(fut, timeout=timeout + 30)
         finally:
             self._pending.pop(req_id, None)

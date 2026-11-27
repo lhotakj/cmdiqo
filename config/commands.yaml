@@ -1459,3 +1459,48 @@ commands:
     config:
       apps: *apps_config
 
+  # ---- Remote Agent Self-Update --------------------------------------------
+  - name: host-agent-update-arg
+    trigger: "/host {host} update {action}"
+    description: "Check or remotely update Cmdiqo agent on {host}"
+    details: "Checks GitHub Releases or downloads/installs latest (or tagged) Cmdiqo agent directly on the target host, preserving tamper-protection settings."
+    examples:
+      - "/host AMD update status"
+      - "/host home update latest"
+      - "/host AMD update v0.37.0"
+    command:
+      python: "commands.update:manage_update"
+    timeout: 180
+
+  - name: host-agent-update
+    trigger: "/host {host} update"
+    description: "Update Cmdiqo agent on {host} to latest release"
+    details: "Downloads and installs the latest GitHub Release build directly on the remote host."
+    examples:
+      - "/host AMD update"
+      - "/host home update"
+    command:
+      python: "commands.update:manage_update"
+    timeout: 180
+
+  - name: lan-agents-update-arg
+    trigger: "/lan agents update {action}"
+    description: "Check or update all connected Cmdiqo agents"
+    details: "Checks version currency or triggers remote updates across every connected agent."
+    examples:
+      - "/lan agents update status"
+      - "/lan agents update latest"
+    command:
+      python: "commands.update:manage_update"
+    timeout: 240
+
+  - name: lan-agents-update
+    trigger: "/lan agents update"
+    description: "Update all connected Cmdiqo agents to latest release"
+    details: "Updates every connected outdated agent directly from the latest GitHub Release."
+    examples:
+      - "/lan agents update"
+    command:
+      python: "commands.update:manage_update"
+    timeout: 240
+

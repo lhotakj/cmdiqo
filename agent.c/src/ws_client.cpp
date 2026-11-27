@@ -2,6 +2,7 @@
 #include "cmdiqo/agent/logger.hpp"
 #include "cmdiqo/agent/process.hpp"
 #include "cmdiqo/agent/protocol.hpp"
+#include "cmdiqo/agent/updater.hpp"
 #include "cmdiqo/agent/version.hpp"
 
 #include <ixwebsocket/IXNetSystem.h>
@@ -26,6 +27,36 @@ AgentRunner::AgentRunner(AgentConfig config) : config_(std::move(config)) {
 void AgentRunner::run(std::atomic<bool>& stop_signal) {
     double delay = config_.reconnect_delay;
 
+    std::thread auto_update_thread;
+    if (config_.auto_update) {
+        auto_update_thread = std::thread([cfg = config_, &stop_signal]() {
+            constexpr auto initial_delay = std::chrono::seconds(30);
+            constexpr auto check_interval = std::chrono::hours(6);
+            auto wait_interruptibly = [&](std::chrono::seconds duration) -> bool {
+                const auto deadline = std::chrono::steady_clock::now() + duration;
+                while (!stop_signal.load() && std::chrono::steady_clock::now() < deadline) {
+                    std::this_thread::sleep_for(std::chrono::seconds(1));
+                }
+                return !stop_signal.load();
+            };
+            if (!wait_interruptibly(initial_delay)) {
+                return;
+            }
+            while (!stop_signal.load()) {
+                Logger::instance().info("Auto-update check: querying GitHub Releases...");
+                const UpdateOutcome outcome = perform_self_update(cfg, "latest", "", 180);
+                Logger::instance().info("Auto-update result: ", outcome.message);
+                if (outcome.ok && outcome.restart_scheduled) {
+                    trigger_post_update_restart(stop_signal);
+                    break;
+                }
+                if (!wait_interruptibly(check_interval)) {
+                    break;
+                }
+            }
+        });
+    }
+
     while (!stop_signal.load()) {
         auto ws = std::make_shared<ix::WebSocket>();
         ws->setUrl(config_.hub_url);
@@ -44,7 +75,7 @@ void AgentRunner::run(std::atomic<bool>& stop_signal) {
 
         std::weak_ptr<ix::WebSocket> weak_ws = ws;
 
-        ws->setOnMessageCallback([weak_ws, &config = this->config_, &is_connected, &delay, &close_reason, &connection_closed](const ix::WebSocketMessagePtr& msg) {
+        ws->setOnMessageCallback([weak_ws, &config = this->config_, &stop_signal, &is_connected, &delay, &close_reason, &connection_closed](const ix::WebSocketMessagePtr& msg) {
             auto ws_ptr = weak_ws.lock();
             if (!ws_ptr) {
                 return;
@@ -60,7 +91,9 @@ void AgentRunner::run(std::atomic<bool>& stop_signal) {
                     .platform = get_platform_string(),
                     .arch = get_arch_string(),
                     .agent_connection_notify = config.agent_connection_notify,
-                    .tamper_protect = config.tamper_protect
+                    .tamper_protect = config.tamper_protect,
+                    .auto_update = config.auto_update,
+                    .update_capable = true
                 };
 
                 std::string hello_json = hello.to_json().dump();
@@ -73,6 +106,26 @@ void AgentRunner::run(std::atomic<bool>& stop_signal) {
             } else if (msg->type == ix::WebSocketMessageType::Message) {
                 try {
                     auto j = nlohmann::json::parse(msg->str);
+                    if (auto upd = UpdateRequest::from_json(j); upd.has_value()) {
+                        std::thread([upd = *upd, weak_ws, &config, &stop_signal]() {
+                            const UpdateOutcome outcome = perform_self_update(
+                                config, upd.version, upd.url, upd.timeout);
+                            ResultResponse resp{
+                                .id = upd.id,
+                                .ok = outcome.ok,
+                                .code = outcome.ok ? 0 : 1,
+                                .output = outcome.message,
+                                .error = outcome.ok ? std::nullopt : std::optional<std::string>(outcome.message)
+                            };
+                            if (auto target_ws = weak_ws.lock()) {
+                                target_ws->send(resp.to_json().dump());
+                            }
+                            if (outcome.ok && outcome.restart_scheduled) {
+                                trigger_post_update_restart(stop_signal);
+                            }
+                        }).detach();
+                        return;
+                    }
                     auto req = ExecRequest::from_json(j);
                     if (!req.has_value()) {
                         return;
@@ -156,6 +209,10 @@ void AgentRunner::run(std::atomic<bool>& stop_signal) {
 
         // Exponential backoff
         delay = std::min(60.0, delay * 1.5);
+    }
+
+    if (auto_update_thread.joinable()) {
+        auto_update_thread.join();
     }
 }
 

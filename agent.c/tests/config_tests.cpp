@@ -269,3 +269,42 @@ TEST_CASE("Config: Platform string and system hostname helpers", "[config]") {
     std::string platform = cmdiqo::agent::get_platform_string();
     REQUIRE(!platform.empty());
 }
+
+TEST_CASE("Config: Auto-update default false, JSON, ENV, and CLI overrides", "[config]") {
+    ScopedEnvVar env_hub("HUB_URL", "ws://127.0.0.1:8765");
+    ScopedEnvVar env_tok("AGENT_TOKEN", "secret");
+    unset_test_env("AUTO_UPDATE");
+
+    auto cfg_default = cmdiqo::agent::AgentConfig::load_from_args({"cmdiqo-agent"});
+    REQUIRE(cfg_default.auto_update == false);
+
+    {
+        ScopedEnvVar env_au("AUTO_UPDATE", "true");
+        auto cfg_env = cmdiqo::agent::AgentConfig::load_from_args({"cmdiqo-agent"});
+        REQUIRE(cfg_env.auto_update == true);
+    }
+
+    std::filesystem::path temp_cfg = std::filesystem::temp_directory_path() / "test_auto_update_agent.json";
+    {
+        std::ofstream ofs(temp_cfg);
+        ofs << R"({
+            "hub_url": "ws://json-hub:8765",
+            "token": "json-token",
+            "auto_update": true
+        })";
+    }
+
+    auto cfg_json = cmdiqo::agent::AgentConfig::load_from_args(
+        {"cmdiqo-agent", "--config", temp_cfg.string()});
+    REQUIRE(cfg_json.auto_update == true);
+
+    auto cfg_cli_off = cmdiqo::agent::AgentConfig::load_from_args(
+        {"cmdiqo-agent", "--config", temp_cfg.string(), "--no-auto-update"});
+    REQUIRE(cfg_cli_off.auto_update == false);
+
+    std::filesystem::remove(temp_cfg);
+
+    auto cfg_cli_on = cmdiqo::agent::AgentConfig::load_from_args(
+        {"cmdiqo-agent", "--auto-update"});
+    REQUIRE(cfg_cli_on.auto_update == true);
+}

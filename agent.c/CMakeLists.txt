@@ -78,6 +78,7 @@ endif()
 add_library(cmdiqo_agent_core STATIC
     src/config.cpp
     src/logger.cpp
+    src/updater.cpp
     src/ws_client.cpp
 )
 
@@ -222,6 +223,7 @@ if(BUILD_TESTING)
         tests/protocol_tests.cpp
         tests/process_tests.cpp
         tests/logger_tests.cpp
+        tests/updater_tests.cpp
         tests/version_tests.cpp
     )
     target_link_libraries(cmdiqo-agent-tests PRIVATE cmdiqo_agent_core Catch2::Catch2WithMain)

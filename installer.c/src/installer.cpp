@@ -371,7 +371,8 @@ OperationResult InstallerService::install_or_upgrade(
     const Config& config,
     const std::optional<std::filesystem::path>& explicit_payload,
     const ProgressCallback& progress,
-    bool tamper_protect) {
+    bool tamper_protect,
+    std::optional<bool> auto_update_override) {
     if (!PlatformOperations::is_elevated()) {
         return OperationResult::failure("Installation requires Administrator/root privileges.");
     }
@@ -382,6 +383,9 @@ OperationResult InstallerService::install_or_upgrade(
     report(progress, "Saving configuration.");
     Config persisted_config = config;
     persisted_config.tamper_protect = (current_platform() == Platform::windows) ? tamper_protect : false;
+    if (auto_update_override.has_value()) {
+        persisted_config.auto_update = *auto_update_override;
+    }
     if (const OperationResult saved = save_config(paths_, persisted_config); !saved.ok) {
         logger_.error(saved.message);
         return saved;
@@ -426,7 +430,8 @@ OperationResult InstallerService::upgrade(
     const std::optional<std::filesystem::path>& explicit_payload,
     const ProgressCallback& progress,
     const std::optional<std::filesystem::path>& custom_config,
-    bool tamper_protect) {
+    bool tamper_protect,
+    std::optional<bool> auto_update_override) {
     if (!PlatformOperations::is_elevated()) {
         return OperationResult::failure("Upgrade requires Administrator/root privileges.");
     }
@@ -474,8 +479,11 @@ OperationResult InstallerService::upgrade(
     if (std::filesystem::is_regular_file(paths_.config_file, cfg_ec)) {
         Config upgraded_config = load_config(paths_);
         upgraded_config.tamper_protect = (current_platform() == Platform::windows) ? tamper_protect : false;
+        if (auto_update_override.has_value()) {
+            upgraded_config.auto_update = *auto_update_override;
+        }
         if (const OperationResult saved = save_config(paths_, upgraded_config); !saved.ok) {
-            logger_.error("Could not persist tamper_protect setting during upgrade: " + saved.message);
+            logger_.error("Could not persist tamper_protect/auto_update setting during upgrade: " + saved.message);
         }
     }
     report(progress, "Starting system service.");

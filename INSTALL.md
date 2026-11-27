@@ -517,7 +517,7 @@ To verify and ensure the `.exe` is authentic and safe:
 - **Real Windows Service (`CmdiqoAgent`)**: Registered directly in Windows Service Control Manager (SCM). Visible in `services.msc`.
 - **Tamper Protection (Default On)**: Omits `SERVICE_ACCEPT_STOP` (grays out Stop/Pause/Restart in `services.msc`) and hardens the SCM service DACL so local users and elevated admins cannot disable or delete the service via `services.msc`, `sc.exe`, or `Stop-Service`. Persists `"tamper_protect": true` in `config.json` (showing a shield icon in WebGUI and `🛡️` in `/lan agents list`). Local upgrades, stops, and uninstalls via `cmdiqo-agent-windows-x64-setup.exe` or `install-service.ps1` / `uninstall-service.ps1` retain full access automatically. Pass `-NoTamperProtect` / `--no-tamper-protect` to opt out.
 - **Native C++ Execution Engine**: High-performance native service dispatcher invoked via `cmdiqo-agent.exe --service` (super-lightweight background memory footprint of only **~3.3 MB RAM**, Win32 Job Objects for instant process tree isolation).
-- **Accessible Config in `C:\ProgramData\Cmdiqo\Agent\config.json`**: Stores Hub connection parameters and `"tamper_protect"` (legacy `< 0.34` configs without `"tamper_protect"` default to `false`).
+- **Accessible Config in `C:\ProgramData\Cmdiqo\Agent\config.json`**: Stores Hub connection parameters, `"tamper_protect"`, and optional `"auto_update"` (legacy `< 0.34` configs without `"tamper_protect"` default to `false`). Pass `-AutoUpdate` / `--auto-update` (or check **Auto Update** in the GUI) to opt in to periodic automatic background updates from GitHub Releases.
 - **Automatic Self-Healing**: Configures SCM failure recovery to automatically restart the service if it ever terminates.
 - **Log Redirection**: Redirects stdout/stderr to `C:\ProgramData\Cmdiqo\Agent\logs\service.log`.
 - **Strips Mark-of-the-Web & Trusts Certificate**: Removes download flags and imports the Authenticode certificate into machine stores.
@@ -618,6 +618,7 @@ Once the bot and agents are running, test everything directly inside Slack:
      - Remote machine reboot: `/host MY-WINDOWS-PC reboot` or `/host nas reboot`
      - Active system services: `/host MY-WINDOWS-PC services` or `/host nas services`
      - Service status & restart: `/host MY-WINDOWS-PC service status Spooler` or `/host nas service restart nginx`
+     - Remote agent update check & upgrade (direct GitHub Release download on the agent host; Hub-tunneled download planned for a future release): `/host MY-WINDOWS-PC update status`, `/host nas update`, or `/lan agents update`
      - User & Power User Privilege Control (Windows `Administrators` / Linux `/etc/sudoers`):
        - `/host MY-WINDOWS-PC user jonas enable` (or `disable` — unlocks/locks user account and automatically refreshes Windows `LogonUI.exe` on an active lock/sign-in screen so newly enabled users appear immediately without rebooting).
        - `/host MY-WINDOWS-PC poweruser jonas enable` (or `add`, `sudo`, `administrator` — adds `jonas` to Windows `Administrators` group).

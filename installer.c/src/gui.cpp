@@ -869,6 +869,15 @@ public:
         form->Add(tamper_protect_, 0, wxALIGN_CENTER_VERTICAL);
 #endif
 
+        auto* auto_update_label = new wxStaticText(glass_card, wxID_ANY, "Auto Update");
+        auto_update_label->SetForegroundColour(theme::text_muted);
+        form->Add(auto_update_label, 0, wxALIGN_CENTER_VERTICAL);
+
+        auto_update_ = new wxCheckBox(glass_card, wxID_ANY, "Automatically check and install new agent releases from GitHub");
+        auto_update_->SetForegroundColour(theme::text_white);
+        auto_update_->SetValue(false);
+        form->Add(auto_update_, 0, wxALIGN_CENTER_VERTICAL);
+
         card_sizer->Add(form, 1, wxALL | wxEXPAND, FromDIP(12));
         glass_card->SetSizer(card_sizer);
         layout->Add(glass_card, 0, wxLEFT | wxRIGHT | wxTOP | wxEXPAND, FromDIP(14));
@@ -1024,6 +1033,7 @@ private:
 #else
             .tamper_protect = false,
 #endif
+            .auto_update = (auto_update_ != nullptr) ? auto_update_->GetValue() : false,
         };
     }
 
@@ -1073,6 +1083,9 @@ private:
                 tamper_protect_->SetValue(PlatformOperations::is_service_tamper_protected(service_.paths()));
             }
 #endif
+            if (auto_update_ != nullptr) {
+                auto_update_->SetValue(config.auto_update);
+            }
         }
 
         const std::string bundled = service_.bundled_version(payload_);
@@ -1207,6 +1220,7 @@ private:
             if (!tamper_protect) {
                 args.push_back("--no-tamper-protect");
             }
+            args.push_back(config.auto_update ? "--auto-update" : "--no-auto-update");
             if (payload_) {
                 args.push_back("--payload");
                 args.push_back(std::filesystem::absolute(*payload_).string());
@@ -1333,6 +1347,7 @@ private:
     ModernTextInputCtrl* agent_name_{};
     wxCheckBox* notify_{};
     wxCheckBox* tamper_protect_{};
+    wxCheckBox* auto_update_{};
     ModernTerminalPanel* terminal_{};
     wxTextCtrl* log_{};
     ModernStatusBarPanel* status_bar_{};

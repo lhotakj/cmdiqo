@@ -154,6 +154,8 @@ AgentConfig AgentConfig::load_from_args(const std::vector<std::string>& args) {
     bool cli_agent_notify{false};
     bool cli_service{false};
     bool cli_allow_service_stop{false};
+    bool cli_auto_update{false};
+    bool cli_no_auto_update{false};
 
     app.add_option("-u,--hub-url", cli_hub_url, "Hub WebSocket URL (e.g. ws://192.168.1.10:8765)");
     app.add_option("-t,--token", cli_token, "Shared AGENT_TOKEN secret");
@@ -164,6 +166,8 @@ AgentConfig AgentConfig::load_from_args(const std::vector<std::string>& args) {
     app.add_flag("--agent-connection-notify", cli_agent_notify, "Enable Slack notification on agent connect/disconnect");
     app.add_flag("--service", cli_service, "Run as native Windows Service under SCM");
     app.add_flag("--no-tamper-protect,--allow-service-stop", cli_allow_service_stop, "Allow local SCM STOP controls (opt out of service tamper protection)");
+    app.add_flag("--auto-update", cli_auto_update, "Automatically check and install agent updates from GitHub Releases");
+    app.add_flag("--no-auto-update", cli_no_auto_update, "Disable automatic agent updates");
 
     // Allow unrecognized flags to match python parse_known_args
     app.allow_extras();
@@ -326,6 +330,28 @@ AgentConfig AgentConfig::load_from_args(const std::vector<std::string>& args) {
         }
     }
 
+    // 5c. Opt-in automatic self-update (defaults to false)
+    bool auto_update = false;
+    if (cli_no_auto_update) {
+        auto_update = false;
+    } else if (cli_auto_update) {
+        auto_update = true;
+    } else if (auto env_au = get_env_var("AUTO_UPDATE"); env_au.has_value()) {
+        std::string v = *env_au;
+        std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+        auto_update = (v == "true" || v == "1" || v == "yes" || v == "on");
+    } else if (file_cfg.contains("auto_update")) {
+        if (file_cfg["auto_update"].is_boolean()) {
+            auto_update = file_cfg["auto_update"].get<bool>();
+        } else if (file_cfg["auto_update"].is_string()) {
+            std::string v = file_cfg["auto_update"].get<std::string>();
+            std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+            auto_update = (v == "true" || v == "1" || v == "yes" || v == "on");
+        } else if (file_cfg["auto_update"].is_number_integer()) {
+            auto_update = (file_cfg["auto_update"].get<int>() != 0);
+        }
+    }
+
     // 6. Name
     std::string name;
     if (cli_name.has_value() && !cli_name->empty()) {
@@ -358,7 +384,8 @@ AgentConfig AgentConfig::load_from_args(const std::vector<std::string>& args) {
         .log_level = log_lvl,
         .is_service = cli_service,
         .allow_service_stop = cli_allow_service_stop,
-        .tamper_protect = tamper_protect
+        .tamper_protect = tamper_protect,
+        .auto_update = auto_update
     };
 }
 

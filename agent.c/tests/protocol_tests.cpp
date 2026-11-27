@@ -17,14 +17,19 @@ TEST_CASE("Protocol: HelloMessage serialization", "[protocol]") {
     REQUIRE(j["platform"] == "Linux/6.8");
     REQUIRE(j["agent_connection_notify"] == true);
     REQUIRE(j["tamper_protect"] == false);
+    REQUIRE(j["auto_update"] == false);
+    REQUIRE(j["update_capable"] == true);
 
     hello.agent_connection_notify = false;
     hello.arch = "x86_64";
     hello.tamper_protect = true;
+    hello.auto_update = true;
     auto j_with_arch = hello.to_json();
     REQUIRE(j_with_arch["agent_connection_notify"] == false);
     REQUIRE(j_with_arch["arch"] == "x86_64");
     REQUIRE(j_with_arch["tamper_protect"] == true);
+    REQUIRE(j_with_arch["auto_update"] == true);
+    REQUIRE(j_with_arch["update_capable"] == true);
 }
 
 TEST_CASE("Protocol: ExecRequest deserialization valid", "[protocol]") {
@@ -128,4 +133,35 @@ TEST_CASE("Protocol: ResultResponse serialization success and error states", "[p
     REQUIRE(j_timeout["ok"] == false);
     REQUIRE(j_timeout["code"].is_null());
     REQUIRE(j_timeout["error"] == "timed out after 10s");
+}
+
+TEST_CASE("Protocol: UpdateRequest parsing and timeout bounds", "[protocol]") {
+    auto req = cmdiqo::agent::UpdateRequest::from_json(nlohmann::json{
+        {"id", "upd-1"},
+        {"type", "update"},
+        {"version", "v0.37.0"},
+        {"url", "https://github.com/lhotakj/cmdiqo/releases/download/v0.37.0/cmdiqo-agent-windows-x64-setup.exe"},
+        {"timeout", 240}
+    });
+    REQUIRE(req.has_value());
+    REQUIRE(req->id == "upd-1");
+    REQUIRE(req->type == "update");
+    REQUIRE(req->version == "v0.37.0");
+    REQUIRE(req->url.find("https://github.com/") == 0);
+    REQUIRE(req->timeout == 240);
+
+    // Defaults and minimum timeout clamp
+    auto req_min = cmdiqo::agent::UpdateRequest::from_json(nlohmann::json{
+        {"id", "upd-2"},
+        {"type", "update"},
+        {"timeout", 2}
+    });
+    REQUIRE(req_min.has_value());
+    REQUIRE(req_min->version == "latest");
+    REQUIRE(req_min->url.empty());
+    REQUIRE(req_min->timeout >= 10);
+
+    // Invalid frames rejected
+    REQUIRE(!cmdiqo::agent::UpdateRequest::from_json(nlohmann::json{{"type", "exec"}}).has_value());
+    REQUIRE(!cmdiqo::agent::UpdateRequest::from_json(nlohmann::json::array()).has_value());
 }

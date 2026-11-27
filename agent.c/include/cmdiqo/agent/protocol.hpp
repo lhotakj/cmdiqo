@@ -19,6 +19,8 @@ struct HelloMessage {
     std::string arch;                     ///< Machine architecture (e.g. "x86_64", "aarch64", "ARM64").
     bool agent_connection_notify{false};  ///< Whether to dispatch connection notifications to Slack.
     bool tamper_protect{false};           ///< Whether local Windows service tamper protection is enabled.
+    bool auto_update{false};              ///< Whether automatic agent updates are enabled.
+    bool update_capable{true};            ///< Whether this agent natively supports "type": "update" frames.
 
     /**
      * @brief Serializes the HelloMessage instance into a JSON object.
@@ -31,7 +33,9 @@ struct HelloMessage {
             {"version", version},
             {"platform", platform},
             {"agent_connection_notify", agent_connection_notify},
-            {"tamper_protect", tamper_protect}
+            {"tamper_protect", tamper_protect},
+            {"auto_update", auto_update},
+            {"update_capable", update_capable}
         };
         if (!arch.empty()) {
             j["arch"] = arch;
@@ -76,6 +80,43 @@ struct ExecRequest {
                 }
             }
 
+            return req;
+        } catch (...) {
+            return std::nullopt;
+        }
+    }
+};
+
+/**
+ * @brief Inbound self-update request dispatched by the Hub to the Agent.
+ */
+struct UpdateRequest {
+    std::string id;                   ///< Unique request UUID string.
+    std::string type;                 ///< Message type discriminator (must be "update").
+    std::string version{"latest"};    ///< Target version/tag ("latest" or e.g. "v0.37.0").
+    std::string url;                  ///< Optional direct download URL resolved by Hub.
+    int timeout{180};                 ///< Download/update timeout in seconds.
+
+    /**
+     * @brief Deserializes and validates an UpdateRequest from a JSON object.
+     */
+    static std::optional<UpdateRequest> from_json(const nlohmann::json& j) {
+        try {
+            if (!j.is_object()) return std::nullopt;
+            if (j.value("type", "") != "update") return std::nullopt;
+
+            UpdateRequest req;
+            req.id = j.value("id", "");
+            req.type = "update";
+            if (j.contains("version") && j["version"].is_string()) {
+                std::string ver = j["version"].get<std::string>();
+                if (!ver.empty()) req.version = std::move(ver);
+            }
+            if (j.contains("url") && j["url"].is_string()) {
+                req.url = j["url"].get<std::string>();
+            }
+            int raw_timeout = j.value("timeout", 180);
+            req.timeout = std::max(10, raw_timeout);
             return req;
         } catch (...) {
             return std::nullopt;

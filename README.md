@@ -154,6 +154,7 @@ Edit `config/commands.yaml` to define your commands and aliases (see **Adding yo
 | `/lan wake <target>`               | Local container         | Sends Wake-on-LAN magic packet to boot a device (MAC/IP) |
 | `/lan ping <host>`                 | Local container         | Pings a device or IP from the Hub container              |
 | `/lan agents list`                 | Hub registry            | Lists connected agents, operating systems, and IPs       |
+| `/lan agents update [status]`      | Fleet (All Agents)      | Checks or updates all connected remote agents from GitHub Releases |
 | `/lan version`                     | Local container         | Displays bot version                                     |
 | `/host <host> users`               | Remote host (All OS)    | Lists all local OS users (active ✔️ or locked 🚫)         |
 | `/host <host> user <user> status`  | Remote host (All OS)    | Shows user profile info, status, and active session time |
@@ -169,6 +170,7 @@ Edit `config/commands.yaml` to define your commands and aliases (see **Adding yo
 | `/host <host> services`            | Remote host (Linux/Win) | Lists active running system services                     |
 | `/host <host> service status <svc>`| Remote host (Linux/Win) | Queries service status (systemd / Windows SCM)           |
 | `/host <host> service restart <svc>`| Remote host (Linux/Win)| Restarts system service (systemd / Windows SCM)          |
+| `/host <host> update [status\|<tag>]`| Remote host (Linux/Win)| Checks or remotely updates the agent directly from GitHub Releases (preserves Tamper-Protect) |
 | `/host <host> docker ps`           | Remote host (Linux)     | Lists running docker containers                          |
 | `/host <host> docker logs <svc>`   | Remote host (Linux)     | Tails last 50 log lines of a docker container            |
 | `/host <host> docker restart <svc>`| Remote host (Linux)     | Restarts docker compose project in `/docker/<svc>`       |
@@ -695,7 +697,9 @@ Typing `/host PC-OLO win updates` executes the PowerShell query on the Windows a
 Typing `/home docker ps` translates via alias to `/host home docker ps` and queries Docker containers on host `home`.
 
 ### Built-in System Commands
-- `/lan agents list` (or `/host agents list`) in Slack at any time to see every connected agent, its operating system, version, connection uptime, and LAN IP address.
+- `/lan agents list` (or `/host agents list`) in Slack at any time to see every connected agent, its operating system, version, connection uptime, and LAN IP address (shows `🛡️` next to tamper-protected hosts).
+- `/host <host> update [status|latest|<tag>]` (and `/lan agents update` for the whole fleet) triggers a remote agent self-update directly from GitHub Releases on the target host, preserving Tamper-Protect settings (using native `"type": "update"` messages on `0.37+` agents and OS script fallback on older `< 0.37` agents). Pass `--auto-update` / `-AutoUpdate` (or `"auto_update": true` in `config.json`) to opt in to periodic automatic updates.
+  *(Planned enhancement: Hub-tunneled / proxied update downloads for firewalled or air-gapped LAN hosts without direct GitHub internet access.)*
 - `/lan version` (or `/host version`) to display the running version of `cmdiqo-bot`.
 
 ### Parental Controls & Access Guards
@@ -751,7 +755,7 @@ Set `WEB_PORT` in your `.env` or container environment (e.g. `WEB_PORT=8080`). T
   - Click the terminal action icon (`>_`) in any host row to open a categorized context menu:
     - **System Metrics**: Uptime, Memory (`free -m`), Storage (`disk`), Top CPU (`top`).
     - **Docker Control**: Containers (`docker ps`), Resource Stats (`docker stats`), Tail Logs, Restart Service.
-    - **Services & Windows**: System Services list, Query Service Status, Restart Service, Windows Hotfix Updates.
+    - **Services & Windows**: System Services list, Query Service Status, Restart Service, Check Agent Update, Update Agent (Latest), Windows Hotfix Updates.
     - **User Management**: List Users, Screentime & Sessions, User Account Control (Status, Enable, Disable), Power User Privileges (Status, Enable/Disable Linux `/etc/sudoers` or Windows `Administrators`).
     - **Parental Controls**: Domain Blocking (Status, Enable, Disable), Logon Hours Restriction (Status, Set Schedule, Disable), Application Blocking (Status, Block, Unblock).
     - **Power**: Remote Reboot, Remote Shutdown.
