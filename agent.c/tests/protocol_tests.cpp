@@ -16,12 +16,15 @@ TEST_CASE("Protocol: HelloMessage serialization", "[protocol]") {
     REQUIRE(j["version"] == "1.0.0");
     REQUIRE(j["platform"] == "Linux/6.8");
     REQUIRE(j["agent_connection_notify"] == true);
+    REQUIRE(j["tamper_protect"] == false);
 
     hello.agent_connection_notify = false;
     hello.arch = "x86_64";
+    hello.tamper_protect = true;
     auto j_with_arch = hello.to_json();
     REQUIRE(j_with_arch["agent_connection_notify"] == false);
     REQUIRE(j_with_arch["arch"] == "x86_64");
+    REQUIRE(j_with_arch["tamper_protect"] == true);
 }
 
 TEST_CASE("Protocol: ExecRequest deserialization valid", "[protocol]") {

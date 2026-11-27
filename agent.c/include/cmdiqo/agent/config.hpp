@@ -66,6 +66,7 @@ struct AgentConfig {
     LogLevel log_level{LogLevel::Info};   ///< Logging verbosity level.
     bool is_service{false};               ///< Whether the agent was invoked to run as a Windows Service.
     bool allow_service_stop{false};       ///< Whether SCM STOP controls are accepted (opt-out of tamper protection).
+    bool tamper_protect{false};           ///< Persistent tamper-protection flag read from config.json (false if omitted).
 
     /**
      * @brief Loads and validates configuration from standard command-line arguments.

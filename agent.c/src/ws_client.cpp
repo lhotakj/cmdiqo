@@ -59,7 +59,8 @@ void AgentRunner::run(std::atomic<bool>& stop_signal) {
                     .version = std::string(get_version()),
                     .platform = get_platform_string(),
                     .arch = get_arch_string(),
-                    .agent_connection_notify = config.agent_connection_notify
+                    .agent_connection_notify = config.agent_connection_notify,
+                    .tamper_protect = config.tamper_protect
                 };
 
                 std::string hello_json = hello.to_json().dump();

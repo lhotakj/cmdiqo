@@ -393,6 +393,7 @@ std::string config_to_json(const Config& config) {
         {"name", config.agent_name},
         {"reconnect_delay", 5.0},
         {"agent_connection_notify", config.agent_connection_notify},
+        {"tamper_protect", config.tamper_protect},
     };
     return document.dump(2) + "\n";
 }
@@ -450,6 +451,24 @@ std::optional<Config> config_from_json(std::string_view document, std::string& e
             }
         }
 
+        for (const char* key : {"tamper_protect", "tamperProtect", "TAMPER_PROTECT"}) {
+            if (parsed.contains(key)) {
+                if (parsed[key].is_boolean()) {
+                    config.tamper_protect = parsed[key].get<bool>();
+                    break;
+                }
+                if (parsed[key].is_string()) {
+                    const std::string s = parsed[key].get<std::string>();
+                    config.tamper_protect = (s == "true" || s == "1" || s == "yes");
+                    break;
+                }
+                if (parsed[key].is_number_integer()) {
+                    config.tamper_protect = (parsed[key].get<int>() != 0);
+                    break;
+                }
+            }
+        }
+
         if (!config.hub_url.empty() && !parse_hub_endpoint(config.hub_url)) {
             error = "Configuration contains an invalid Hub URL.";
             return std::nullopt;
@@ -482,6 +501,7 @@ Config load_config(const InstallerPaths& paths) {
             if (!parsed->token.empty()) config.token = parsed->token;
             if (!parsed->agent_name.empty()) config.agent_name = parsed->agent_name;
             config.agent_connection_notify = parsed->agent_connection_notify;
+            config.tamper_protect = parsed->tamper_protect;
             return true;
         }
         return false;

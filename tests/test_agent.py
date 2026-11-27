@@ -376,3 +376,35 @@ def test_windows_service_tamper_protect_controls(monkeypatch):
     agent_mod.main(["--service", "--no-tamper-protect", "--config", "cfg.json"])
     assert captured_calls == [("CmdiqoAgent", False), ("CmdiqoAgent", True)]
 
+
+def test_agent_config_tamper_protect_persistence(tmp_path, monkeypatch):
+    monkeypatch.delenv("HUB_URL", raising=False)
+    monkeypatch.delenv("AGENT_TOKEN", raising=False)
+
+    legacy_cfg = tmp_path / "legacy.json"
+    legacy_cfg.write_text(
+        json.dumps({"hub_url": "ws://127.0.0.1:8765", "token": "tok", "name": "pc1"}),
+        encoding="utf-8",
+    )
+    assert AgentConfig.load(args=["--config", str(legacy_cfg)]).tamper_protect is False
+
+    protected_cfg = tmp_path / "protected.json"
+    protected_cfg.write_text(
+        json.dumps(
+            {
+                "hub_url": "ws://127.0.0.1:8765",
+                "token": "tok",
+                "name": "pc1",
+                "tamper_protect": True,
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert AgentConfig.load(args=["--config", str(protected_cfg)]).tamper_protect is True
+    assert (
+        AgentConfig.load(
+            args=["--config", str(protected_cfg), "--no-tamper-protect"]
+        ).tamper_protect
+        is False
+    )
+

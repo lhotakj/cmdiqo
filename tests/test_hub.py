@@ -53,9 +53,17 @@ def test_agents_table_populated():
         "since": "2026-09-23 12:00:00",
         "addr": "192.168.1.10:54321",
     }
+    hub.agents["winbox"] = {
+        "platform": "Windows/10.0",
+        "tamper_protect": True,
+        "since": "2026-09-23 12:01:00",
+        "addr": "192.168.1.20:54322",
+    }
     table = hub.agents_table()
     assert "AGENT" in table
-    assert "host1" in table
+    assert "host1  " in table
+    assert "host1 \U0001f6e1\ufe0f" not in table
+    assert "winbox \U0001f6e1\ufe0f" in table
     assert "Linux/6.1" in table
 
 

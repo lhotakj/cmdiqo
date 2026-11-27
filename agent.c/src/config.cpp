@@ -312,6 +312,20 @@ AgentConfig AgentConfig::load_from_args(const std::vector<std::string>& args) {
         }
     }
 
+    // 5b. Tamper protection status (stored in config.json; false if absent for pre-0.34 configs)
+    bool tamper_protect = false;
+    if (!cli_allow_service_stop && file_cfg.contains("tamper_protect")) {
+        if (file_cfg["tamper_protect"].is_boolean()) {
+            tamper_protect = file_cfg["tamper_protect"].get<bool>();
+        } else if (file_cfg["tamper_protect"].is_string()) {
+            std::string v = file_cfg["tamper_protect"].get<std::string>();
+            std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+            tamper_protect = (v == "true" || v == "1" || v == "yes" || v == "on");
+        } else if (file_cfg["tamper_protect"].is_number_integer()) {
+            tamper_protect = (file_cfg["tamper_protect"].get<int>() != 0);
+        }
+    }
+
     // 6. Name
     std::string name;
     if (cli_name.has_value() && !cli_name->empty()) {
@@ -343,7 +357,8 @@ AgentConfig AgentConfig::load_from_args(const std::vector<std::string>& args) {
         .config_path = config_path,
         .log_level = log_lvl,
         .is_service = cli_service,
-        .allow_service_stop = cli_allow_service_stop
+        .allow_service_stop = cli_allow_service_stop,
+        .tamper_protect = tamper_protect
     };
 }
 

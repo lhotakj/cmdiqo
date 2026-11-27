@@ -104,10 +104,22 @@ class TestWebGui(unittest.TestCase):
         state = WebGuiState()
         state.register_agent(
             name="winhost",
-            hello={"platform": "Windows/11.0", "arch": "AMD64", "version": "1.0.0"},
+            hello={
+                "platform": "Windows/11.0",
+                "arch": "AMD64",
+                "version": "1.0.0",
+                "tamper_protect": True,
+            },
             addr="192.168.1.100:8765",
             boot_time=100.0,
             uptime_str="00d 05h 10m 00s",
+        )
+        state.register_agent(
+            name="linuxhost",
+            hello={"platform": "Linux/6.6", "arch": "x86_64", "version": "1.0.0"},
+            addr="192.168.1.101:8766",
+            boot_time=100.0,
+            uptime_str="00d 01h 00m 00s",
         )
         state.add_log("info", "hub", "Agent connected: winhost")
 
@@ -119,13 +131,19 @@ class TestWebGui(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn(b"Cmdiqo Hub", res.data)
         self.assertIn(b"winhost", res.data)
+        self.assertIn(b'title="service protected"', res.data)
+        tbody_html = res.data.split(b'<tbody id="agents-tbody">', 1)[1].split(b"</tbody>", 1)[0]
+        self.assertEqual(tbody_html.count(b'class="protect-shield"'), 1)
         self.assertIn(b"00d 05h 10m 00s", res.data)
 
         # JSON endpoints
         res_agents = client.get("/api/agents")
         self.assertEqual(res_agents.status_code, 200)
         data_agents = json.loads(res_agents.data)
-        self.assertEqual(len(data_agents["agents"]), 1)
+        self.assertEqual(len(data_agents["agents"]), 2)
+        by_name = {a["name"]: a for a in data_agents["agents"]}
+        self.assertTrue(by_name["winhost"]["tamper_protect"])
+        self.assertFalse(by_name["linuxhost"]["tamper_protect"])
 
         res_logs = client.get("/api/logs")
         self.assertEqual(res_logs.status_code, 200)

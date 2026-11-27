@@ -153,6 +153,23 @@ TEST_CASE("Config: JSON configuration file loading", "[config]") {
     REQUIRE(cfg.name == "json-agent-node");
     REQUIRE(cfg.reconnect_delay == 4.0);
     REQUIRE(cfg.agent_connection_notify == true);
+    REQUIRE(cfg.tamper_protect == false);
+
+    {
+        std::ofstream ofs(temp_cfg);
+        ofs << R"({
+            "hub_url": "ws://10.0.0.99:8765",
+            "token": "json-token-99",
+            "name": "json-agent-node",
+            "tamper_protect": true
+        })";
+    }
+    auto cfg_tp = cmdiqo::agent::AgentConfig::load_from_args({"cmdiqo-agent", "--config", temp_cfg.string()});
+    REQUIRE(cfg_tp.tamper_protect == true);
+
+    auto cfg_opt_out = cmdiqo::agent::AgentConfig::load_from_args(
+        {"cmdiqo-agent", "--config", temp_cfg.string(), "--no-tamper-protect"});
+    REQUIRE(cfg_opt_out.tamper_protect == false);
 
     std::filesystem::remove(temp_cfg);
 }

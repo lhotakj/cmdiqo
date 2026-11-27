@@ -33,6 +33,11 @@ struct Config {
     std::string token;
     std::string agent_name;
     bool agent_connection_notify{false};
+#ifdef _WIN32
+    bool tamper_protect{true};
+#else
+    bool tamper_protect{false};
+#endif
 };
 
 struct Endpoint {

@@ -391,6 +391,22 @@
       gap: 8px;
     }
 
+    .protect-shield {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--cyan-neon);
+      opacity: 0.9;
+      cursor: help;
+      flex-shrink: 0;
+    }
+
+    .protect-shield svg {
+      width: 14px;
+      height: 14px;
+      filter: drop-shadow(0 0 6px rgba(0, 242, 254, 0.35));
+    }
+
     .host-meta {
       font-size: 0.75rem;
       font-family: var(--font-mono);
@@ -1475,7 +1491,17 @@
                 <img src="{{ a.arch_icon }}" alt="{{ a.arch }}" class="arch-icon" title="{{ a.arch }}">
               </td>
               <td>
-                <div class="host-name">{{ a.name }}</div>
+                <div class="host-name">
+                  <span>{{ a.name }}</span>
+                  {% if a.tamper_protect %}
+                  <span class="protect-shield" title="service protected" aria-label="service protected">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                      stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                    </svg>
+                  </span>
+                  {% endif %}
+                </div>
                 <div class="host-meta">v{{ a.version }} &bull; {{ a.addr }}</div>
               </td>
               <td>
@@ -1870,13 +1896,16 @@
         badge.textContent = `${sorted.length} Active`;
         let html = '';
         sorted.forEach(a => {
+          const shieldBadge = a.tamper_protect
+            ? `<span class="protect-shield" title="service protected" aria-label="service protected"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></span>`
+            : '';
           html += `
             <tr data-host="${escapeHtml(a.name)}">
               <td class="text-center">
                 <img src="${escapeHtml(a.arch_icon)}" alt="${escapeHtml(a.arch)}" class="arch-icon" title="${escapeHtml(a.arch)}">
               </td>
               <td>
-                <div class="host-name">${escapeHtml(a.name)}</div>
+                <div class="host-name"><span>${escapeHtml(a.name)}</span>${shieldBadge}</div>
                 <div class="host-meta">v${escapeHtml(a.version)} &bull; ${escapeHtml(a.addr || '')}</div>
               </td>
               <td>

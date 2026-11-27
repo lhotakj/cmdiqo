@@ -35,6 +35,7 @@ TEST_CASE("configuration JSON preserves agent settings") {
         .token = "test-token",
         .agent_name = "qa-agent",
         .agent_connection_notify = true,
+        .tamper_protect = true,
     };
     std::string error;
     const auto parsed = config_from_json(config_to_json(original), error);
@@ -45,6 +46,18 @@ TEST_CASE("configuration JSON preserves agent settings") {
     CHECK(parsed->token == original.token);
     CHECK(parsed->agent_name == original.agent_name);
     CHECK(parsed->agent_connection_notify);
+    CHECK(parsed->tamper_protect);
+
+    const Config disabled{
+        .hub_url = "wss://hub.example.test:9443/ws",
+        .token = "test-token",
+        .agent_name = "qa-agent",
+        .agent_connection_notify = false,
+        .tamper_protect = false,
+    };
+    const auto parsed_disabled = config_from_json(config_to_json(disabled), error);
+    REQUIRE(parsed_disabled);
+    CHECK_FALSE(parsed_disabled->tamper_protect);
 }
 
 TEST_CASE("configuration JSON supports alternate token and name keys") {

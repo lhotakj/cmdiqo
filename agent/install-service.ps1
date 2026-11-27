@@ -243,6 +243,7 @@ $ConfigData = @{
     name                    = $Name
     reconnect_delay         = 5.0
     agent_connection_notify = $AgentConnectionNotifyBool
+    tamper_protect          = (-not $NoTamperProtect)
 } | ConvertTo-Json -Depth 3
 
 [IO.File]::WriteAllText($ConfigFile, $ConfigData, (New-Object System.Text.UTF8Encoding($false)))

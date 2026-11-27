@@ -207,6 +207,7 @@ class Hub:
             "version": version,
             "platform": str(hello.get("platform", "?")),
             "arch": arch,
+            "tamper_protect": bool(hello.get("tamper_protect", False)),
             "since": time.strftime("%Y-%m-%d %H:%M:%S"),
             "addr": addr,
             "hello": hello,
@@ -261,6 +262,7 @@ class Hub:
                     "version": str(i.get("version", "?")),
                     "platform": str(i.get("platform", "?")),
                     "arch": str(i.get("arch") or (i.get("hello", {}).get("arch", "?") if isinstance(i.get("hello"), dict) else "?")),
+                    "tamper_protect": bool(i.get("tamper_protect", False)),
                     "since": str(i.get("since", "")),
                     "addr": str(i.get("addr", "")),
                 }
@@ -428,7 +430,7 @@ class Hub:
         header = ("AGENT", "VERSION", "PLATFORM", "ARCH", "CONNECTED SINCE", "ADDRESS")
         rows = [
             (
-                n,
+                f"{n} \U0001f6e1\ufe0f" if i.get("tamper_protect") else n,
                 str(i.get("version", "?")),
                 str(i.get("platform", "?")),
                 str(i.get("arch") or (i.get("hello", {}).get("arch", "?") if isinstance(i.get("hello"), dict) else "?")),

@@ -1019,6 +1019,11 @@ private:
             .token = token_->GetValue().ToStdString(),
             .agent_name = agent_name_->GetValue().ToStdString(),
             .agent_connection_notify = notify_->GetValue(),
+#ifdef _WIN32
+            .tamper_protect = (tamper_protect_ != nullptr) ? tamper_protect_->GetValue() : true,
+#else
+            .tamper_protect = false,
+#endif
         };
     }
 

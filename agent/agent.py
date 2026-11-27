@@ -115,6 +115,7 @@ class AgentConfig:
     name: str
     reconnect_delay: float = 5.0
     agent_connection_notify: bool = True
+    tamper_protect: bool = False
 
     @classmethod
     def from_env(cls) -> AgentConfig:
@@ -268,6 +269,19 @@ class AgentConfig:
         else:
             agent_notify = bool(parsed.agent_connection_notify)
 
+        if parsed.allow_service_stop:
+            tamper_protect = False
+        elif "tamper_protect" in file_cfg:
+            raw_tp = file_cfg["tamper_protect"]
+            if isinstance(raw_tp, bool):
+                tamper_protect = raw_tp
+            elif isinstance(raw_tp, int):
+                tamper_protect = raw_tp != 0
+            else:
+                tamper_protect = str(raw_tp).strip().lower() in ("true", "1", "yes", "on")
+        else:
+            tamper_protect = False
+
         name = (
             parsed.name
             or os.environ.get("AGENT_NAME")
@@ -280,6 +294,7 @@ class AgentConfig:
             name=name,
             reconnect_delay=reconnect_delay,
             agent_connection_notify=agent_notify,
+            tamper_protect=tamper_protect,
         )
 
 
@@ -441,6 +456,7 @@ async def run_agent(
                             "platform": f"{platform.system()}/{platform.release()}",
                             "arch": get_agent_arch(),
                             "agent_connection_notify": config.agent_connection_notify,
+                            "tamper_protect": config.tamper_protect,
                         }
                     )
                 )

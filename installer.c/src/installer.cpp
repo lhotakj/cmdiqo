@@ -380,7 +380,9 @@ OperationResult InstallerService::install_or_upgrade(
     }
     report(progress, "Installer elevation check passed.");
     report(progress, "Saving configuration.");
-    if (const OperationResult saved = save_config(paths_, config); !saved.ok) {
+    Config persisted_config = config;
+    persisted_config.tamper_protect = (current_platform() == Platform::windows) ? tamper_protect : false;
+    if (const OperationResult saved = save_config(paths_, persisted_config); !saved.ok) {
         logger_.error(saved.message);
         return saved;
     }
@@ -467,6 +469,14 @@ OperationResult InstallerService::upgrade(
     if (const OperationResult registered = PlatformOperations::register_service(paths_, logger_, tamper_protect); !registered.ok) {
         logger_.error(registered.message);
         return registered;
+    }
+    std::error_code cfg_ec;
+    if (std::filesystem::is_regular_file(paths_.config_file, cfg_ec)) {
+        Config upgraded_config = load_config(paths_);
+        upgraded_config.tamper_protect = (current_platform() == Platform::windows) ? tamper_protect : false;
+        if (const OperationResult saved = save_config(paths_, upgraded_config); !saved.ok) {
+            logger_.error("Could not persist tamper_protect setting during upgrade: " + saved.message);
+        }
     }
     report(progress, "Starting system service.");
     if (const OperationResult started = PlatformOperations::start_service(paths_); !started.ok) {

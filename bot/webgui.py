@@ -222,6 +222,7 @@ class WebGuiState:
             "platform": platform_str,
             "arch": normalized_arch,
             "arch_icon": f"/static/img/arch/{normalized_arch}.webp",
+            "tamper_protect": bool(hello.get("tamper_protect", False)),
             "boot_time": boot_time,
             "uptime_str": uptime_str,
             "connected_since": time.strftime("%Y-%m-%d %H:%M:%S"),

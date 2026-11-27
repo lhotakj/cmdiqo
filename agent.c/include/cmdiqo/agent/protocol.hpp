@@ -18,6 +18,7 @@ struct HelloMessage {
     std::string platform;                 ///< OS platform identifier (e.g. "Windows/10.0" or "Linux/6.8").
     std::string arch;                     ///< Machine architecture (e.g. "x86_64", "aarch64", "ARM64").
     bool agent_connection_notify{false};  ///< Whether to dispatch connection notifications to Slack.
+    bool tamper_protect{false};           ///< Whether local Windows service tamper protection is enabled.
 
     /**
      * @brief Serializes the HelloMessage instance into a JSON object.
@@ -29,7 +30,8 @@ struct HelloMessage {
             {"name", name},
             {"version", version},
             {"platform", platform},
-            {"agent_connection_notify", agent_connection_notify}
+            {"agent_connection_notify", agent_connection_notify},
+            {"tamper_protect", tamper_protect}
         };
         if (!arch.empty()) {
             j["arch"] = arch;
