@@ -15,16 +15,25 @@ namespace cmdiqo::agent {
 
 static SERVICE_STATUS_HANDLE g_status_handle = nullptr;
 static std::atomic<bool> g_service_stop_requested{false};
+static std::atomic<bool> g_allow_service_stop{false};
 static ServiceWorkerFn g_worker_fn;
 static std::wstring g_service_name_str;
+
+// User-defined SCM control code used by SYSTEM-elevated upgrades/uninstalls when
+// SERVICE_ACCEPT_STOP is disabled to prevent local tampering.
+static constexpr DWORD kControlAuthorizedStop = 135;
 
 static void set_service_status(DWORD state, DWORD win32_exit_code = NO_ERROR, DWORD wait_hint = 0) {
     if (!g_status_handle) return;
 
+    const DWORD accepted = g_allow_service_stop.load()
+        ? (SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN)
+        : SERVICE_ACCEPT_SHUTDOWN;
+
     SERVICE_STATUS status{};
     status.dwServiceType = SERVICE_WIN32_OWN_PROCESS;
     status.dwCurrentState = state;
-    status.dwControlsAccepted = (state == SERVICE_RUNNING) ? (SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN) : 0;
+    status.dwControlsAccepted = (state == SERVICE_RUNNING) ? accepted : 0;
     status.dwWin32ExitCode = win32_exit_code;
     status.dwServiceSpecificExitCode = 0;
     status.dwCheckPoint = 0;
@@ -38,8 +47,15 @@ static DWORD WINAPI service_ctrl_handler(DWORD dwControl, DWORD dwEventType, LPV
     (void)lpEventData;
     (void)lpContext;
 
-    if (dwControl == SERVICE_CONTROL_STOP || dwControl == SERVICE_CONTROL_SHUTDOWN) {
-        Logger::instance().info("Received stop/shutdown signal from Windows Service Control Manager.");
+    const bool is_shutdown = (dwControl == SERVICE_CONTROL_SHUTDOWN);
+    const bool is_authorized_stop = (dwControl == kControlAuthorizedStop);
+    const bool is_standard_stop = (dwControl == SERVICE_CONTROL_STOP && g_allow_service_stop.load());
+
+    if (is_shutdown || is_authorized_stop || is_standard_stop) {
+        Logger::instance().info(
+            is_authorized_stop
+                ? "Received authorized stop signal from Windows Service Control Manager."
+                : "Received stop/shutdown signal from Windows Service Control Manager.");
         set_service_status(SERVICE_STOP_PENDING, NO_ERROR, 5000);
         g_service_stop_requested.store(true);
         return NO_ERROR;
@@ -76,9 +92,10 @@ static void WINAPI service_main(DWORD argc, LPWSTR* argv) {
     set_service_status(SERVICE_STOPPED);
 }
 
-void run_as_windows_service(std::wstring_view service_name, const ServiceWorkerFn& worker) {
+void run_as_windows_service(std::wstring_view service_name, const ServiceWorkerFn& worker, bool allow_service_stop) {
     g_service_name_str = service_name;
     g_worker_fn = worker;
+    g_allow_service_stop.store(allow_service_stop);
 
     char program_data[MAX_PATH];
     std::filesystem::path log_path = "C:\\ProgramData\\Cmdiqo\\Agent\\logs\\service.log";

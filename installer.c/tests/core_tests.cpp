@@ -263,3 +263,13 @@ TEST_CASE("platform_name includes OS platform and architecture") {
     CHECK(name.find("Linux") != std::string::npos);
 #endif
 }
+
+TEST_CASE("is_service_tamper_protected defaults safely for non-existent service") {
+    InstallerPaths paths = PlatformOperations::paths();
+    paths.service_name = "CmdiqoNonExistentServiceTest";
+#if defined(_WIN32)
+    CHECK(PlatformOperations::is_service_tamper_protected(paths));
+#else
+    CHECK_FALSE(PlatformOperations::is_service_tamper_protected(paths));
+#endif
+}

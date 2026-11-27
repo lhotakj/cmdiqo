@@ -333,3 +333,46 @@ def test_agent_get_agent_arch(monkeypatch):
 
     monkeypatch.setenv("CMDIQO_AGENT_ARCH", "arm64")
     assert get_agent_arch() == "arm64"
+
+
+def test_windows_service_tamper_protect_controls(monkeypatch):
+    import ctypes
+    from types import SimpleNamespace
+
+    from agent import agent as agent_mod
+    from agent import service_windows as sw
+
+    recorded_controls = []
+
+    def fake_set_service_status(_handle, status_ptr):
+        status = ctypes.cast(status_ptr, ctypes.POINTER(sw.SERVICE_STATUS)).contents
+        recorded_controls.append(status.dwControlsAccepted)
+        return 1
+
+    fake_windll = SimpleNamespace(advapi32=SimpleNamespace(SetServiceStatus=fake_set_service_status))
+    monkeypatch.setattr(ctypes, "windll", fake_windll, raising=False)
+    monkeypatch.setattr(sw, "_h_status", 1234)
+
+    monkeypatch.setattr(sw, "_allow_service_stop", False)
+    sw._set_status(sw.SERVICE_RUNNING)
+    assert recorded_controls[-1] == sw.SERVICE_ACCEPT_SHUTDOWN
+    assert (recorded_controls[-1] & sw.SERVICE_ACCEPT_STOP) == 0
+
+    monkeypatch.setattr(sw, "_allow_service_stop", True)
+    sw._set_status(sw.SERVICE_RUNNING)
+    assert recorded_controls[-1] == (sw.SERVICE_ACCEPT_STOP | sw.SERVICE_ACCEPT_SHUTDOWN)
+
+    captured_calls = []
+    monkeypatch.setattr(agent_mod, "IS_WINDOWS", True)
+    monkeypatch.setattr(
+        sw,
+        "run_as_windows_service",
+        lambda name, fn, log_path=None, allow_service_stop=False: captured_calls.append(
+            (name, allow_service_stop)
+        ),
+    )
+
+    agent_mod.main(["--service", "--config", "cfg.json"])
+    agent_mod.main(["--service", "--no-tamper-protect", "--config", "cfg.json"])
+    assert captured_calls == [("CmdiqoAgent", False), ("CmdiqoAgent", True)]
+

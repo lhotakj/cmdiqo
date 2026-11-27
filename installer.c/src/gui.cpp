@@ -858,6 +858,17 @@ public:
         notify_->SetForegroundColour(theme::text_white);
         form->Add(notify_, 0, wxALIGN_CENTER_VERTICAL);
 
+#ifdef _WIN32
+        auto* protect_label = new wxStaticText(glass_card, wxID_ANY, "Service Protection");
+        protect_label->SetForegroundColour(theme::text_muted);
+        form->Add(protect_label, 0, wxALIGN_CENTER_VERTICAL);
+
+        tamper_protect_ = new wxCheckBox(glass_card, wxID_ANY, "Prevent local stop / disable in Windows Services (Tamper-Protect)");
+        tamper_protect_->SetForegroundColour(theme::text_white);
+        tamper_protect_->SetValue(true);
+        form->Add(tamper_protect_, 0, wxALIGN_CENTER_VERTICAL);
+#endif
+
         card_sizer->Add(form, 1, wxALL | wxEXPAND, FromDIP(12));
         glass_card->SetSizer(card_sizer);
         layout->Add(glass_card, 0, wxLEFT | wxRIGHT | wxTOP | wxEXPAND, FromDIP(14));
@@ -1052,6 +1063,11 @@ private:
                 agent_name_->SetValue(wxString::FromUTF8(config.agent_name));
             }
             notify_->SetValue(config.agent_connection_notify);
+#ifdef _WIN32
+            if (tamper_protect_ != nullptr) {
+                tamper_protect_->SetValue(PlatformOperations::is_service_tamper_protected(service_.paths()));
+            }
+#endif
         }
 
         const std::string bundled = service_.bundled_version(payload_);
@@ -1165,13 +1181,14 @@ private:
                 "Cmdiqo Agent Setup", wxOK | wxICON_ERROR, this);
             return;
         }
+        const bool tamper_protect = (tamper_protect_ != nullptr) ? tamper_protect_->GetValue() : true;
         show_starting_service_status();
-        run_background([this, config] {
+        run_background([this, config, tamper_protect] {
             if (PlatformOperations::is_elevated()) {
                 return service_.install_or_upgrade(config, payload_, [this](std::string_view message) {
                     const std::string copy(message);
                     wxTheApp->CallAfter([this, copy] { append_log(copy); });
-                });
+                }, tamper_protect);
             }
             std::string staging_error;
             const auto staged = stage_elevation_config(staging_error);
@@ -1182,6 +1199,9 @@ private:
                 "--cli", "--install",
                 "--config", staged->string()
             };
+            if (!tamper_protect) {
+                args.push_back("--no-tamper-protect");
+            }
             if (payload_) {
                 args.push_back("--payload");
                 args.push_back(std::filesystem::absolute(*payload_).string());
@@ -1307,6 +1327,7 @@ private:
     ModernTextInputCtrl* token_{};
     ModernTextInputCtrl* agent_name_{};
     wxCheckBox* notify_{};
+    wxCheckBox* tamper_protect_{};
     ModernTerminalPanel* terminal_{};
     wxTextCtrl* log_{};
     ModernStatusBarPanel* status_bar_{};

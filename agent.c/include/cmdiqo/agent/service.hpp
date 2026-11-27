@@ -25,8 +25,12 @@ using ServiceWorkerFn = std::function<void(std::atomic<bool>& stop_signal)>;
  *
  * @param service_name Wide string service name registered in SCM (e.g., L"CmdiqoAgent").
  * @param worker Worker function containing the main agent execution loop.
+ * @param allow_service_stop When true, advertises SERVICE_ACCEPT_STOP to SCM (tamper-protection opt-out).
  */
-void run_as_windows_service(std::wstring_view service_name, const ServiceWorkerFn& worker);
+void run_as_windows_service(
+    std::wstring_view service_name,
+    const ServiceWorkerFn& worker,
+    bool allow_service_stop = false);
 #endif
 
 /**

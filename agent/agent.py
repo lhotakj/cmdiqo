@@ -166,6 +166,13 @@ class AgentConfig:
             action="store_true",
             help="Run as native Windows Service under SCM",
         )
+        parser.add_argument(
+            "--no-tamper-protect",
+            "--allow-service-stop",
+            action="store_true",
+            dest="allow_service_stop",
+            help="Allow local SCM STOP controls (opt out of Windows service tamper protection)",
+        )
 
         parsed, _ = parser.parse_known_args(args if args is not None else sys.argv[1:])
 
@@ -514,7 +521,15 @@ def main(argv: list[str] | None = None) -> None:
             cfg = AgentConfig.load(args=argv)
             await run_agent(cfg, stop_event=stop_evt)
 
-        run_as_windows_service("CmdiqoAgent", _service_worker)
+        allow_service_stop = (
+            "--no-tamper-protect" in effective_args
+            or "--allow-service-stop" in effective_args
+        )
+        run_as_windows_service(
+            "CmdiqoAgent",
+            _service_worker,
+            allow_service_stop=allow_service_stop,
+        )
         return
 
     try:

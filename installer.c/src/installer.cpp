@@ -370,7 +370,8 @@ OperationResult InstallerService::extract_payload(
 OperationResult InstallerService::install_or_upgrade(
     const Config& config,
     const std::optional<std::filesystem::path>& explicit_payload,
-    const ProgressCallback& progress) {
+    const ProgressCallback& progress,
+    bool tamper_protect) {
     if (!PlatformOperations::is_elevated()) {
         return OperationResult::failure("Installation requires Administrator/root privileges.");
     }
@@ -406,7 +407,7 @@ OperationResult InstallerService::install_or_upgrade(
         return extracted;
     }
     report(progress, "Registering system service.");
-    if (const OperationResult registered = PlatformOperations::register_service(paths_, logger_); !registered.ok) {
+    if (const OperationResult registered = PlatformOperations::register_service(paths_, logger_, tamper_protect); !registered.ok) {
         logger_.error(registered.message);
         return registered;
     }
@@ -422,7 +423,8 @@ OperationResult InstallerService::install_or_upgrade(
 OperationResult InstallerService::upgrade(
     const std::optional<std::filesystem::path>& explicit_payload,
     const ProgressCallback& progress,
-    const std::optional<std::filesystem::path>& custom_config) {
+    const std::optional<std::filesystem::path>& custom_config,
+    bool tamper_protect) {
     if (!PlatformOperations::is_elevated()) {
         return OperationResult::failure("Upgrade requires Administrator/root privileges.");
     }
@@ -462,7 +464,7 @@ OperationResult InstallerService::upgrade(
         return extracted;
     }
     report(progress, "Updating system service registration.");
-    if (const OperationResult registered = PlatformOperations::register_service(paths_, logger_); !registered.ok) {
+    if (const OperationResult registered = PlatformOperations::register_service(paths_, logger_, tamper_protect); !registered.ok) {
         logger_.error(registered.message);
         return registered;
     }

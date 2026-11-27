@@ -42,6 +42,7 @@ struct Options {
     bool stop{false};
     bool notify_specified{false};
     bool notify{false};
+    bool no_tamper_protect{false};
     bool help{false};
     std::optional<std::string> hub_url;
     std::optional<std::string> token;
@@ -69,6 +70,7 @@ void print_usage(std::ostream& output) {
         << "  --start | --restart | --stop\n\n"
         << "Configuration options:\n"
         << "  --hub URL (or --hub-url) --token TOKEN --name NAME --notify | --no-notify\n"
+        << "  --no-tamper-protect       Allow local Windows SCM stop/disable/delete controls (opt-out)\n"
         << "  --config PATH             Read JSON configuration instead of placing a token on the command line\n"
         << "  --payload PATH            Must be the exact platform payload filename\n\n"
         << "System-changing actions require Administrator/root privileges. The GUI requests Windows UAC\n"
@@ -130,6 +132,8 @@ std::optional<Options> parse_options(int argc, char** argv, std::string& error) 
         } else if (option == "--no-notify") {
             options.notify_specified = true;
             options.notify = false;
+        } else if (option == "--no-tamper-protect" || option == "--allow-service-stop") {
+            options.no_tamper_protect = true;
         } else if ((option == "--hub" || option == "--hub-url") && needs_value(index, argc, option.c_str(), error)) {
             options.hub_url = argv[++index];
         } else if ((option == "--token" || option == "--agent-token") && needs_value(index, argc, option.c_str(), error)) {
@@ -340,7 +344,7 @@ int run_cli(const Options& options) {
     };
     OperationResult result;
     if (options.upgrade) {
-        result = service.upgrade(options.payload, progress, options.config);
+        result = service.upgrade(options.payload, progress, options.config, !options.no_tamper_protect);
     } else if (options.install) {
         std::string error;
         Config config;
@@ -384,7 +388,7 @@ int run_cli(const Options& options) {
             write_result_file(OperationResult::failure(err));
             return 2;
         }
-        result = service.install_or_upgrade(config, options.payload, progress);
+        result = service.install_or_upgrade(config, options.payload, progress, !options.no_tamper_protect);
     } else if (options.uninstall) {
         result = service.uninstall(options.purge, progress);
     } else if (options.start) {

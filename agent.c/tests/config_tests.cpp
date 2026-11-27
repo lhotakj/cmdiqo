@@ -75,6 +75,23 @@ TEST_CASE("Config: Valid CLI flags parse correctly", "[config]") {
     REQUIRE(cfg.agent_connection_notify == true);
     REQUIRE(cfg.log_level == cmdiqo::agent::LogLevel::Debug);
     REQUIRE(cfg.is_service == false);
+    REQUIRE(cfg.allow_service_stop == false);
+}
+
+TEST_CASE("Config: Service stop opt-out flags parse correctly", "[config]") {
+    ScopedEnvVar env_hub("HUB_URL", "ws://127.0.0.1:8765");
+    ScopedEnvVar env_tok("AGENT_TOKEN", "secret");
+
+    {
+        auto cfg = cmdiqo::agent::AgentConfig::load_from_args({"cmdiqo-agent", "--service", "--no-tamper-protect"});
+        REQUIRE(cfg.is_service == true);
+        REQUIRE(cfg.allow_service_stop == true);
+    }
+    {
+        auto cfg = cmdiqo::agent::AgentConfig::load_from_args({"cmdiqo-agent", "--service", "--allow-service-stop"});
+        REQUIRE(cfg.is_service == true);
+        REQUIRE(cfg.allow_service_stop == true);
+    }
 }
 
 TEST_CASE("Config: Invalid WebSocket scheme throws preflight error", "[config]") {

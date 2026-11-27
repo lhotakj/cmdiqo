@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cerrno>
 #include <cctype>
 #include <chrono>
@@ -90,6 +91,114 @@ std::wstring command_line(const std::vector<std::string>& argv) {
         result += quote_windows_argument(argument);
     }
     return result;
+}
+
+constexpr const char* kAuthorizedStopControl = "135";
+constexpr const char* kHardenedServiceSddl =
+    "D:(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;SY)(A;;CCLCSWRPLORC;;;BA)(A;;CCLCSWLORC;;;IU)(A;;CCLCSWLORC;;;SU)";
+constexpr const char* kDefaultServiceSddl =
+    "D:(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)(A;;CCLCSWLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)";
+
+std::filesystem::path system_helper_temp_dir() {
+    std::array<char, MAX_PATH> win_dir{};
+    const UINT len = GetWindowsDirectoryA(win_dir.data(), static_cast<DWORD>(win_dir.size()));
+    if (len > 0 && len < win_dir.size()) {
+        std::filesystem::path win_temp = std::filesystem::path(std::string(win_dir.data(), len)) / "Temp";
+        std::error_code ec;
+        if (std::filesystem::is_directory(win_temp, ec)) {
+            return win_temp;
+        }
+    }
+    std::error_code ec;
+    return std::filesystem::temp_directory_path(ec);
+}
+
+std::string short_windows_path(const std::filesystem::path& path) {
+    const std::string raw = path.string();
+    std::array<char, MAX_PATH> short_buf{};
+    const DWORD short_len = GetShortPathNameA(raw.c_str(), short_buf.data(), static_cast<DWORD>(short_buf.size()));
+    if (short_len > 0 && short_len < short_buf.size()) {
+        return std::string(short_buf.data(), short_len);
+    }
+    return raw;
+}
+
+bool run_as_system_script(const std::string& script_body, std::string& error_out) {
+    static std::atomic<unsigned long> seq{0};
+    const std::string id = std::to_string(GetCurrentProcessId()) + "-" + std::to_string(++seq);
+    const std::filesystem::path dir = system_helper_temp_dir();
+    const std::filesystem::path cmd_path = dir / ("cmdiqo-svc-" + id + ".cmd");
+    const std::filesystem::path done_path = dir / ("cmdiqo-svc-" + id + ".done");
+    const std::string task_name = "CmdiqoSvcHelper-" + id;
+
+    {
+        std::ofstream script(cmd_path, std::ios::binary | std::ios::trunc);
+        if (!script) {
+            error_out = "Could not write temporary SYSTEM helper script " + cmd_path.string() + ".";
+            return false;
+        }
+        script << "@echo off\r\n"
+               << script_body << "\r\n"
+               << "set \"CMDIQO_EC=%ERRORLEVEL%\"\r\n"
+               << "> \"" << done_path.string() << "\" echo %CMDIQO_EC%\r\n"
+               << "exit /b %CMDIQO_EC%\r\n";
+        if (!script) {
+            error_out = "Could not flush temporary SYSTEM helper script.";
+            return false;
+        }
+    }
+
+    const std::string short_cmd = short_windows_path(cmd_path);
+    const std::string tr = (short_cmd.find(' ') == std::string::npos)
+        ? ("cmd.exe /c " + short_cmd)
+        : ("cmd.exe /c \"" + short_cmd + "\"");
+
+    const CommandResult created = PlatformOperations::run({
+        "schtasks.exe", "/Create", "/TN", task_name, "/TR", tr,
+        "/SC", "ONCE", "/ST", "00:00", "/RU", "SYSTEM", "/RL", "HIGHEST", "/F"});
+    bool ok = false;
+    if (created.exit_code != 0) {
+        error_out = "Could not create SYSTEM helper task: " + created.output;
+    } else {
+        const CommandResult started = PlatformOperations::run({"schtasks.exe", "/Run", "/TN", task_name});
+        if (started.exit_code != 0) {
+            error_out = "Could not start SYSTEM helper task: " + started.output;
+        } else {
+            constexpr int max_wait_ticks = 200;  // 20 seconds
+            std::error_code ec;
+            for (int tick = 0; tick < max_wait_ticks; ++tick) {
+                if (std::filesystem::exists(done_path, ec)) {
+                    ok = true;
+                    break;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+            if (!ok) {
+                error_out = "Timed out waiting for SYSTEM helper task completion.";
+            } else {
+                std::ifstream done_in(done_path);
+                int script_exit = 1;
+                if (done_in >> script_exit) {
+                    if (script_exit != 0) {
+                        ok = false;
+                        error_out = "SYSTEM helper script exited with code " + std::to_string(script_exit) + ".";
+                    }
+                }
+            }
+        }
+        PlatformOperations::run({"schtasks.exe", "/Delete", "/TN", task_name, "/F"});
+    }
+
+    std::error_code ec;
+    std::filesystem::remove(cmd_path, ec);
+    std::filesystem::remove(done_path, ec);
+    return ok;
+}
+
+bool unprotect_service_via_system(const std::string& service_name, std::string& error_out) {
+    return run_as_system_script(
+        "sc.exe sdset " + service_name + " \"" + kDefaultServiceSddl + "\"",
+        error_out);
 }
 
 #endif
@@ -289,28 +398,41 @@ OperationResult PlatformOperations::start_service(const InstallerPaths& paths) {
 }
 
 OperationResult PlatformOperations::stop_service(const InstallerPaths& paths) {
-    const CommandResult result = current_platform() == Platform::windows
-        ? run({"sc.exe", "stop", paths.service_name})
-        : run({"systemctl", "stop", paths.service_name});
-    if (result.exit_code != 0 && !(current_platform() == Platform::windows && contains_case_insensitive(result.output, "1062"))) {
+#ifdef _WIN32
+    const CommandResult result = run({"sc.exe", "stop", paths.service_name});
+    if (result.exit_code != 0
+        && !contains_case_insensitive(result.output, "1062")
+        && !contains_case_insensitive(result.output, "1060")) {
+        std::string system_err;
+        const std::string stop_script =
+            "sc.exe control " + paths.service_name + " " + kAuthorizedStopControl + "\r\n"
+            "if errorlevel 1 sc.exe stop " + paths.service_name;
+        if (!run_as_system_script(stop_script, system_err)) {
+            return OperationResult::failure(
+                "Could not stop service " + paths.service_name + ": " + result.output
+                + " (SYSTEM fallback failed: " + system_err + ")");
+        }
+    }
+    constexpr int max_wait_seconds = 30;
+    for (int attempt = 0; attempt <= max_wait_seconds; ++attempt) {
+        const CommandResult status = run({"sc.exe", "query", paths.service_name});
+        if (contains_case_insensitive(status.output, "STOPPED")
+            || contains_case_insensitive(status.output, "FAILED 1060")) {
+            return OperationResult::success("Stopped service " + paths.service_name + ".");
+        }
+        if (attempt < max_wait_seconds) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+    }
+    return OperationResult::failure(
+        "Service did not respond to stop within 30 seconds: " + paths.service_name + ".");
+#else
+    const CommandResult result = run({"systemctl", "stop", paths.service_name});
+    if (result.exit_code != 0) {
         return OperationResult::failure("Could not stop service " + paths.service_name + ": " + result.output);
     }
-    if (current_platform() == Platform::windows) {
-        constexpr int max_wait_seconds = 30;
-        for (int attempt = 0; attempt <= max_wait_seconds; ++attempt) {
-            const CommandResult status = run({"sc.exe", "query", paths.service_name});
-            if (contains_case_insensitive(status.output, "STOPPED")
-                || contains_case_insensitive(status.output, "FAILED 1060")) {
-                return OperationResult::success("Stopped service " + paths.service_name + ".");
-            }
-            if (attempt < max_wait_seconds) {
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-            }
-        }
-        return OperationResult::failure(
-            "Service did not respond to stop within 30 seconds: " + paths.service_name + ".");
-    }
     return OperationResult::success("Stopped service " + paths.service_name + ".");
+#endif
 }
 
 OperationResult PlatformOperations::restart_service(const InstallerPaths& paths) {
@@ -330,31 +452,53 @@ OperationResult PlatformOperations::restart_service(const InstallerPaths& paths)
     return OperationResult::failure("Could not restart service " + paths.service_name + ": " + result.output);
 }
 
-OperationResult PlatformOperations::register_service(const InstallerPaths& paths, const Logger& logger) {
-    if (current_platform() == Platform::windows) {
-        const std::string service_command = "\"" + paths.binary_path.string() + "\" --service --config \"" + paths.config_file.string() + "\"";
-        CommandResult query = run({"sc.exe", "query", paths.service_name});
-        CommandResult result = contains_case_insensitive(query.output, "FAILED 1060")
-            ? run({"sc.exe", "create", paths.service_name, "binPath=", service_command, "start=", "auto", "DisplayName=", "Cmdiqo LAN Remote Agent"})
-            : run({"sc.exe", "config", paths.service_name, "binPath=", service_command, "start=", "auto", "DisplayName=", "Cmdiqo LAN Remote Agent"});
-        if (result.exit_code != 0) {
-            return OperationResult::failure("Could not register Windows service: " + result.output);
+OperationResult PlatformOperations::register_service(const InstallerPaths& paths, const Logger& logger, bool tamper_protect) {
+#ifdef _WIN32
+    const std::string stop_opt_flag = tamper_protect ? "" : " --no-tamper-protect";
+    const std::string service_command =
+        "\"" + paths.binary_path.string() + "\" --service" + stop_opt_flag
+        + " --config \"" + paths.config_file.string() + "\"";
+    const CommandResult query = run({"sc.exe", "query", paths.service_name});
+    const bool exists = !contains_case_insensitive(query.output, "FAILED 1060");
+    CommandResult result = exists
+        ? run({"sc.exe", "config", paths.service_name, "binPath=", service_command, "start=", "auto", "DisplayName=", "Cmdiqo LAN Remote Agent"})
+        : run({"sc.exe", "create", paths.service_name, "binPath=", service_command, "start=", "auto", "DisplayName=", "Cmdiqo LAN Remote Agent"});
+    if (exists && result.exit_code != 0) {
+        std::string system_err;
+        if (unprotect_service_via_system(paths.service_name, system_err)) {
+            result = run({"sc.exe", "config", paths.service_name, "binPath=", service_command, "start=", "auto", "DisplayName=", "Cmdiqo LAN Remote Agent"});
         }
-        const CommandResult description = run({
-            "sc.exe", "description", paths.service_name,
-            "Cmdiqo LAN Remote Agent reverse WebSocket connection service"});
-        if (description.exit_code != 0) {
-            logger.error("Windows service description update failed: " + description.output);
-        }
-        const CommandResult failure_actions = run({
-            "sc.exe", "failure", paths.service_name, "reset=", "86400",
-            "actions=", "restart/5000/restart/10000/restart/30000"});
-        if (failure_actions.exit_code != 0) {
-            logger.error("Windows service failure-action update failed: " + failure_actions.output);
-        }
-        return OperationResult::success("Registered Windows service " + paths.service_name + ".");
     }
-
+    if (result.exit_code != 0) {
+        return OperationResult::failure("Could not register Windows service: " + result.output);
+    }
+    const CommandResult description = run({
+        "sc.exe", "description", paths.service_name,
+        "Cmdiqo LAN Remote Agent reverse WebSocket connection service"});
+    if (description.exit_code != 0) {
+        logger.error("Windows service description update failed: " + description.output);
+    }
+    const CommandResult failure_actions = run({
+        "sc.exe", "failure", paths.service_name, "reset=", "86400",
+        "actions=", "restart/5000/restart/10000/restart/30000"});
+    if (failure_actions.exit_code != 0) {
+        logger.error("Windows service failure-action update failed: " + failure_actions.output);
+    }
+    const char* target_sddl = tamper_protect ? kHardenedServiceSddl : kDefaultServiceSddl;
+    const CommandResult sd_res = run({"sc.exe", "sdset", paths.service_name, target_sddl});
+    if (sd_res.exit_code != 0) {
+        std::string system_err;
+        if (!run_as_system_script(
+                "sc.exe sdset " + paths.service_name + " \"" + std::string(target_sddl) + "\"",
+                system_err)) {
+            return OperationResult::failure(
+                "Registered service, but failed to configure service permissions: "
+                + sd_res.output + " (" + system_err + ")");
+        }
+    }
+    return OperationResult::success("Registered Windows service " + paths.service_name + ".");
+#else
+    (void)tamper_protect;
     if (current_platform() == Platform::linux) {
         if (!std::filesystem::exists(paths.service_file)) {
             std::ofstream unit(paths.service_file, std::ios::binary | std::ios::trunc);
@@ -386,17 +530,26 @@ OperationResult PlatformOperations::register_service(const InstallerPaths& paths
         return OperationResult::success("Registered and enabled systemd service " + paths.service_name + ".");
     }
     return OperationResult::failure("This platform is not supported.");
+#endif
 }
 
 OperationResult PlatformOperations::unregister_service(const InstallerPaths& paths, const Logger& logger) {
     (void)logger;
-    if (current_platform() == Platform::windows) {
-        const CommandResult result = run({"sc.exe", "delete", paths.service_name});
-        if (result.exit_code != 0 && !contains_case_insensitive(result.output, "1060")) {
-            return OperationResult::failure("Could not remove Windows service: " + result.output);
+#ifdef _WIN32
+    const CommandResult result = run({"sc.exe", "delete", paths.service_name});
+    if (result.exit_code != 0 && !contains_case_insensitive(result.output, "1060")) {
+        std::string system_err;
+        const std::string delete_script =
+            "sc.exe sdset " + paths.service_name + " \"" + kDefaultServiceSddl + "\"\r\n"
+            "sc.exe delete " + paths.service_name;
+        if (!run_as_system_script(delete_script, system_err)) {
+            return OperationResult::failure(
+                "Could not remove Windows service: " + result.output
+                + " (SYSTEM fallback failed: " + system_err + ")");
         }
-        return OperationResult::success("Removed Windows service " + paths.service_name + ".");
     }
+    return OperationResult::success("Removed Windows service " + paths.service_name + ".");
+#else
     if (current_platform() == Platform::linux) {
         const bool service_file_exists = std::filesystem::exists(paths.service_file);
         const CommandResult disable = run({"systemctl", "disable", paths.service_name});
@@ -410,6 +563,24 @@ OperationResult PlatformOperations::unregister_service(const InstallerPaths& pat
         return OperationResult::success("Removed systemd service " + paths.service_name + ".");
     }
     return OperationResult::failure("This platform is not supported.");
+#endif
+}
+
+bool PlatformOperations::is_service_tamper_protected(const InstallerPaths& paths) {
+#ifdef _WIN32
+    const CommandResult result = run({"sc.exe", "qc", paths.service_name});
+    if (result.exit_code != 0 || contains_case_insensitive(result.output, "FAILED 1060")) {
+        return true;
+    }
+    if (contains_case_insensitive(result.output, "--no-tamper-protect")
+        || contains_case_insensitive(result.output, "--allow-service-stop")) {
+        return false;
+    }
+    return true;
+#else
+    (void)paths;
+    return false;
+#endif
 }
 
 OperationResult PlatformOperations::secure_config_file(const std::filesystem::path& config_file) {

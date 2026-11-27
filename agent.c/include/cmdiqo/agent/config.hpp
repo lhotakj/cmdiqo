@@ -65,6 +65,7 @@ struct AgentConfig {
     std::string config_path;              ///< Path to the loaded JSON configuration file (if specified).
     LogLevel log_level{LogLevel::Info};   ///< Logging verbosity level.
     bool is_service{false};               ///< Whether the agent was invoked to run as a Windows Service.
+    bool allow_service_stop{false};       ///< Whether SCM STOP controls are accepted (opt-out of tamper protection).
 
     /**
      * @brief Loads and validates configuration from standard command-line arguments.

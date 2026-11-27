@@ -29,6 +29,7 @@ SERVICE_STOPPED = 0x00000001
 SERVICE_CONTROL_STOP = 0x00000001
 SERVICE_CONTROL_SHUTDOWN = 0x00000005
 SERVICE_CONTROL_INTERROGATE = 0x00000004
+SERVICE_CONTROL_AUTHORIZED_STOP = 135
 
 SERVICE_ACCEPT_STOP = 0x00000001
 SERVICE_ACCEPT_SHUTDOWN = 0x00000004
@@ -70,12 +71,18 @@ _c_main_func: Any = None
 _c_handler_func: Any = None
 _h_status: wintypes.HANDLE | None = None
 _stop_event = threading.Event()
+_allow_service_stop = False
 
 
 def _set_status(state: int, win32_exit_code: int = NO_ERROR, wait_hint: int = 0) -> None:
     if not _h_status:
         return
-    controls = (SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN) if state == SERVICE_RUNNING else 0
+    accepted = (
+        (SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN)
+        if _allow_service_stop
+        else SERVICE_ACCEPT_SHUTDOWN
+    )
+    controls = accepted if state == SERVICE_RUNNING else 0
     status = SERVICE_STATUS(
         dwServiceType=SERVICE_WIN32_OWN_PROCESS,
         dwCurrentState=state,
@@ -109,9 +116,11 @@ def run_as_windows_service(
     service_name: str,
     run_coro_fn: Callable[[threading.Event], Coroutine[Any, Any, None]],
     log_path: Path | None = None,
+    allow_service_stop: bool = False,
 ) -> None:
     """Run the given async callable as a native Windows Service."""
-    global _c_main_func, _c_handler_func
+    global _c_main_func, _c_handler_func, _allow_service_stop
+    _allow_service_stop = allow_service_stop
 
     log_file = setup_service_logging(log_path)
     log.info("Starting CmdiqoAgent service dispatcher (logs: %s)...", log_file)
@@ -138,8 +147,15 @@ def run_as_windows_service(
     def service_handler(
         dw_control: int, dw_event_type: int, lp_event_data: int, lp_context: int
     ) -> int:
-        if dw_control in (SERVICE_CONTROL_STOP, SERVICE_CONTROL_SHUTDOWN):
-            log.info("Received stop/shutdown signal from Windows Service Control Manager.")
+        is_shutdown = dw_control == SERVICE_CONTROL_SHUTDOWN
+        is_authorized_stop = dw_control == SERVICE_CONTROL_AUTHORIZED_STOP
+        is_standard_stop = dw_control == SERVICE_CONTROL_STOP and _allow_service_stop
+        if is_shutdown or is_authorized_stop or is_standard_stop:
+            log.info(
+                "Received authorized stop signal from Windows Service Control Manager."
+                if is_authorized_stop
+                else "Received stop/shutdown signal from Windows Service Control Manager."
+            )
             _set_status(SERVICE_STOP_PENDING, wait_hint=5000)
             _stop_event.set()
             return NO_ERROR

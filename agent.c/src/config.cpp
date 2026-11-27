@@ -153,6 +153,7 @@ AgentConfig AgentConfig::load_from_args(const std::vector<std::string>& args) {
     std::optional<std::string> cli_log_level;
     bool cli_agent_notify{false};
     bool cli_service{false};
+    bool cli_allow_service_stop{false};
 
     app.add_option("-u,--hub-url", cli_hub_url, "Hub WebSocket URL (e.g. ws://192.168.1.10:8765)");
     app.add_option("-t,--token", cli_token, "Shared AGENT_TOKEN secret");
@@ -162,6 +163,7 @@ AgentConfig AgentConfig::load_from_args(const std::vector<std::string>& args) {
     app.add_option("--log-level", cli_log_level, "Logging level (DEBUG, INFO, WARNING, ERROR)");
     app.add_flag("--agent-connection-notify", cli_agent_notify, "Enable Slack notification on agent connect/disconnect");
     app.add_flag("--service", cli_service, "Run as native Windows Service under SCM");
+    app.add_flag("--no-tamper-protect,--allow-service-stop", cli_allow_service_stop, "Allow local SCM STOP controls (opt out of service tamper protection)");
 
     // Allow unrecognized flags to match python parse_known_args
     app.allow_extras();
@@ -340,7 +342,8 @@ AgentConfig AgentConfig::load_from_args(const std::vector<std::string>& args) {
         .agent_connection_notify = agent_notify,
         .config_path = config_path,
         .log_level = log_lvl,
-        .is_service = cli_service
+        .is_service = cli_service,
+        .allow_service_stop = cli_allow_service_stop
     };
 }
 

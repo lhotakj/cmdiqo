@@ -108,8 +108,9 @@ public:
     static OperationResult start_service(const InstallerPaths& paths);
     static OperationResult stop_service(const InstallerPaths& paths);
     static OperationResult restart_service(const InstallerPaths& paths);
-    static OperationResult register_service(const InstallerPaths& paths, const Logger& logger);
+    static OperationResult register_service(const InstallerPaths& paths, const Logger& logger, bool tamper_protect = true);
     static OperationResult unregister_service(const InstallerPaths& paths, const Logger& logger);
+    static bool is_service_tamper_protected(const InstallerPaths& paths);
     static OperationResult secure_config_file(const std::filesystem::path& config_file);
     static bool relaunch_elevated(const std::vector<std::string>& arguments, const Logger& logger);
     static OperationResult run_elevated(const std::vector<std::string>& arguments, const Logger& logger = Logger{});
@@ -129,11 +130,13 @@ public:
     OperationResult install_or_upgrade(
         const Config& config,
         const std::optional<std::filesystem::path>& explicit_payload = std::nullopt,
-        const ProgressCallback& progress = {});
+        const ProgressCallback& progress = {},
+        bool tamper_protect = true);
     OperationResult upgrade(
         const std::optional<std::filesystem::path>& explicit_payload = std::nullopt,
         const ProgressCallback& progress = {},
-        const std::optional<std::filesystem::path>& custom_config = std::nullopt);
+        const std::optional<std::filesystem::path>& custom_config = std::nullopt,
+        bool tamper_protect = true);
     OperationResult uninstall(bool purge_config, const ProgressCallback& progress = {});
 
 private:

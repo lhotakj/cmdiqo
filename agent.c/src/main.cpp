@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
             cmdiqo::agent::run_as_windows_service(L"CmdiqoAgent", [config](std::atomic<bool>& stop_signal) {
                 cmdiqo::agent::AgentRunner runner(config);
                 runner.run(stop_signal);
-            });
+            }, config.allow_service_stop);
             return 0;
 #else
             std::cerr << "[ERROR] The --service option is only supported on Windows.\n";
