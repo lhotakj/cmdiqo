@@ -51,10 +51,11 @@ class SERVICE_STATUS(ctypes.Structure):
     ]
 
 
-SERVICE_MAIN_FUNCTION = ctypes.WINFUNCTYPE(
+_FUNC_FACTORY = getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE)
+SERVICE_MAIN_FUNCTION = _FUNC_FACTORY(
     None, wintypes.DWORD, ctypes.POINTER(wintypes.LPWSTR)
 )
-HANDLER_FUNCTION_EX = ctypes.WINFUNCTYPE(
+HANDLER_FUNCTION_EX = _FUNC_FACTORY(
     wintypes.DWORD, wintypes.DWORD, wintypes.DWORD, wintypes.LPVOID, wintypes.LPVOID
 )
 

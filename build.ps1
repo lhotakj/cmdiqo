@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Builds Cmdiqo platform agents and the optional bot container.
 

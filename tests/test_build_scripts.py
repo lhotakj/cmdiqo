@@ -757,7 +757,10 @@ def test_bot_development_version_is_a_valid_docker_tag(build: BuildHarness) -> N
     )
     assert "--load" in docker_build
     assert "lhotakj/cmdiqo-bot:1.0.devel-6ABC1234" in docker_build
-    assert not any("devel+" in argument for argument in docker_build)
+    assert "CMDIQO_BUILD_VERSION=1.0.devel+6ABC1234" in docker_build
+    tags = [docker_build[idx + 1] for idx, arg in enumerate(docker_build) if arg == "-t"]
+    assert tags
+    assert not any("devel+" in tag for tag in tags)
 
 
 def test_bot_push_preserves_multiarchitecture_output(build: BuildHarness) -> None:
